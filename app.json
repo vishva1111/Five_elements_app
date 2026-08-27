@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "TreeApp",
+    "slug": "treeapp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.fiveelements.treeapp",
+      "infoPlist": {
+        "NSCameraUsageDescription": "TreeApp needs camera access to photograph trees in the field.",
+        "NSLocationWhenInUseUsageDescription": "TreeApp needs your location to tag the GPS coordinates of each tree.",
+        "NSPhotoLibraryUsageDescription": "TreeApp needs photo library access to save tree photos."
+      }
+    },
+    "android": {
+      "package": "com.fiveelements.treeapp",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "TreeApp needs camera access to photograph trees in the field."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "TreeApp needs your location to tag the GPS coordinates of each tree."
+        }
+      ]
+    ],
+    "scheme": "treeapp"
+  }
+}
