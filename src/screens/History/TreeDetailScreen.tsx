@@ -92,7 +92,7 @@ export default function TreeDetailScreen() {
           {tree.event_type ? <DetailRow icon="flag" label="Event Type" value={tree.event_type} /> : null}
           {tree.quantity ? <DetailRow icon="stats-chart" label="Quantity" value={`${tree.quantity} saplings`} /> : null}
           {tree.notes ? <DetailRow icon="document-text" label="Notes" value={tree.notes} /> : null}
-          {tree.project_name ? <DetailRow icon="folder" label="Project" value={tree.project_name} /> : null}
+          <DetailRow icon="folder" label="Project" value={tree.project_name ?? 'No project'} />
           {tree.submitted_by ? <DetailRow icon="person" label="Submitted by" value={tree.submitted_by} /> : null}
         </View>
 

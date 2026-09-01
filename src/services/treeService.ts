@@ -10,6 +10,38 @@ function mapTreeRecord(raw: any): TreeRecord {
   };
 }
 
+// ─── Fetch missing project names in one batched query ──────────────────────────
+// Guarantees every tree record carries project_name, even when the projects(name)
+// join was skipped (schema fallback) or the record came from a realtime payload.
+async function attachProjectNames(trees: TreeRecord[]): Promise<TreeRecord[]> {
+  const missing = trees.filter((t) => t?.project_id && !t.project_name);
+  if (missing.length === 0) return trees;
+
+  const ids = Array.from(new Set(missing.map((t) => t.project_id as string)));
+  const { data, error } = await supabase
+    .from('projects')
+    .select('id, name')
+    .in('id', ids);
+
+  if (error || !data) {
+    console.warn('[TreeApp] Could not fetch project names:', error ?? 'no data');
+    return trees;
+  }
+
+  const nameById = new Map<string, string>(data.map((p: any) => [p.id, p.name]));
+  return trees.map((t) =>
+    t?.project_id && !t.project_name
+      ? { ...t, project_name: nameById.get(t.project_id) ?? t.project_name }
+      : t
+  );
+}
+
+// Enrich a single record (inserts, realtime payloads)
+async function attachProjectName(tree: TreeRecord): Promise<TreeRecord> {
+  const [enriched] = await attachProjectNames([tree]);
+  return enriched;
+}
+
 // ─── Detect "column not found in the schema cache" errors from PostgREST ──────
 function isMissingColumnError(message?: string | null): boolean {
   return !!message && /Could not find the '(?:[^']*)' column of '(?:[^']*)' in the schema cache|column .*event_type.*does not exist|column .*quantity.*does not exist/i.test(message.trim());
@@ -63,7 +95,7 @@ export async function insertTreeRecord(
     return { data: null, error: error.message };
   }
 
-  return { data: mapTreeRecord(data), error: null };
+  return { data: await attachProjectName(mapTreeRecord(data)), error: null };
 }
 
 // ─── Fetch my tree records ─────────────────────────────────────────────────────
@@ -92,7 +124,7 @@ export async function fetchMyTrees(
     return { data: null, error: error.message };
   }
 
-  const trees = (data ?? []).map(mapTreeRecord);
+  const trees = await attachProjectNames((data ?? []).map(mapTreeRecord));
   return { data: trees, error: null };
 }
 
@@ -122,20 +154,33 @@ export async function fetchTreeById(
     return { data: null, error: error.message };
   }
 
-  return { data: mapTreeRecord(data), error: null };
+  return { data: await attachProjectName(mapTreeRecord(data)), error: null };
 }
 
 // ─── Fetch all trees (admin) ───────────────────────────────────────────────────
 export async function fetchAllTrees(): Promise<ApiResponse<TreeRecord[]>> {
-  const { data, error } = await supabase
+  // Try with project join first; fall back to plain select if join fails
+  let { data, error } = await supabase
     .from('tree_records')
-    .select('*')
+    .select('*, projects(name)')
     .order('submitted_at', { ascending: false });
 
-  return {
-    data: data as TreeRecord[] | null,
-    error: error?.message ?? null,
-  };
+  if (error) {
+    // Retry without the join (projects table may not exist yet)
+    const retry = await supabase
+      .from('tree_records')
+      .select('*')
+      .order('submitted_at', { ascending: false });
+    data = retry.data;
+    error = retry.error;
+  }
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  const trees = await attachProjectNames((data ?? []).map(mapTreeRecord));
+  return { data: trees, error: null };
 }
 
 // ─── Subscribe to realtime tree inserts ───────────────────────────────────────
@@ -148,7 +193,10 @@ export function subscribeToTrees(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'tree_records' },
       (payload) => {
-        onInsert(payload.new as TreeRecord);
+        const tree = mapTreeRecord(payload.new as any);
+        attachProjectName(tree)
+          .then(onInsert)
+          .catch(() => onInsert(tree));
       }
     )
     .subscribe();
@@ -236,6 +284,19 @@ export async function fetchUserCredits(
   }
 
   return { data: data?.credits ?? 10, error: null };
+}
+
+// ─── Sync earned credits (= total trees captured) into the profile row ───────────
+export async function syncUserCredits(
+  userId: string,
+  credits: number
+): Promise<ApiResponse<null>> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ credits })
+    .eq('id', userId);
+
+  return { data: null, error: error?.message ?? null };
 }
 
 // ─── Deduct user credit ───────────────────────────────────────────────────────

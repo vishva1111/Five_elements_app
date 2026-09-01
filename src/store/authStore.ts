@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { AuthState, User, Project } from '../types';
 import { supabase } from '../services/supabase';
-import { fetchUserCredits } from '../services/treeService';
+import { fetchMyTrees } from '../services/treeService';
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
@@ -18,14 +18,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       user: state.user ? { ...state.user, credits } : null,
     })),
 
-  // ─── Re-fetch credits from the database ─────────────────────────────────────
+  // ─── Credits = total trees captured — auto-compute from DB ─────────────────
   refreshCredits: async () => {
     const { user } = get();
     if (!user) return;
-    const { data, error } = await fetchUserCredits(user.id);
-    if (!error && data !== null) {
+    // 1 tree captured = 1 credit earned(so credits = total tree count)
+    const { data } = await fetchMyTrees(user.id);
+    if (data) {
+      const earned = Math.max(0, data.length);
       set((state) => ({
-        user: state.user ? { ...state.user, credits: data } : null,
+        user: state.user ? { ...state.user, credits: earned } : null,
       }));
     }
   },

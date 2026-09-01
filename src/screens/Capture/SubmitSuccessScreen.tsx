@@ -2,9 +2,12 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuthStore } from '../../store/authStore';
 
 export default function SubmitSuccessScreen() {
   const navigation = useNavigation<any>();
+  const { user } = useAuthStore();
+  const remainingCredits = user?.credits ?? 0;
 
   return (
     <View style={styles.container}>
@@ -17,6 +20,21 @@ export default function SubmitSuccessScreen() {
         <Text style={styles.subtitle}>
           Your tree record has been saved and synced with the admin panel in real-time.
         </Text>
+
+        {/* Updated credit balance — shown immediately after the 1-credit deduction */}
+        <View style={styles.creditCard}>
+          <View style={styles.creditRow}>
+            <View style={styles.creditIconWrap}>
+              <Ionicons name="wallet-outline" size={22} color="#1a5c2a" />
+            </View>
+            <View style={styles.creditInfo}>
+              <Text style={styles.creditLabel}>🎉 +1 credit earned for this tree</Text>
+              <Text style={styles.creditValue}>
+                Total Credits Earned: <Text style={styles.creditNumber}>{remainingCredits}</Text>
+              </Text>
+            </View>
+          </View>
+        </View>
 
         <View style={styles.infoBox}>
           <Text style={styles.infoItem}>✅ Photo uploaded to cloud</Text>
@@ -86,6 +104,33 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 24,
   },
+  creditCard: {
+    backgroundColor: '#f0fdf4',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    paddingVertical:  14,
+    paddingHorizontal:  16,
+    marginBottom:  16,
+    width: '100%',
+  },
+  creditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap:  12,
+  },
+  creditIconWrap: {
+    width:  42,
+    height:  42,
+    borderRadius:  21,
+    backgroundColor: '#E8F5E9',
+    alignItems: 'center',
+    justifyContent:'center',
+  },
+  creditInfo: { flex:  1 },
+  creditLabel: { fontSize:  12, color: '#666' },
+  creditValue: { fontSize:14, fontWeight: '600', color: '#333', marginTop: 2 },
+  creditNumber: { color: '#1a5c2a', fontWeight: 'bold', fontSize:17 },
   infoBox: {
     backgroundColor: '#f0fdf4',
     borderRadius: 12,

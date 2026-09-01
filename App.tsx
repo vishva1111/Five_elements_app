@@ -10,7 +10,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from './src/services/supabase';
 import { useAuthStore } from './src/store/authStore';
-import { fetchUserProfile, fetchUserCredits, fetchUserProjects, fetchAllProjects, buildUserFromProfile } from './src/services/treeService';
+import { fetchUserProfile, fetchMyTrees, fetchUserProjects, fetchAllProjects, buildUserFromProfile } from './src/services/treeService';
 
 // Screens
 import LoginScreen from './src/screens/Auth/LoginScreen';
@@ -95,8 +95,10 @@ function MainTabs() {
 // ─── Fetch full user data (profile + credits + projects) ──────────────────────
 async function loadUserData(userId: string, email: string) {
   const { data: profile, error: profileError } = await fetchUserProfile(userId);
-  const { data: credits, error: creditsError } = await fetchUserCredits(userId);
-
+  // Credits = total trees captured — 1 credit per tree
+  const { data: userTrees } = await fetchMyTrees(userId);
+  const earnedCredits = Math.max(0, userTrees ? userTrees.length : 0);
+ 
   let projects: any[] = [];
   try {
     const { data: userProjects } = await fetchUserProjects(userId);
@@ -114,7 +116,7 @@ async function loadUserData(userId: string, email: string) {
     userId,
     email,
     profileError ? null : profile,
-    creditsError ? null : credits
+    earnedCredits
   );
 
   return { user, projects };

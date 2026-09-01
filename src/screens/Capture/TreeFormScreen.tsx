@@ -26,7 +26,7 @@ import {
 } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
-import { insertTreeRecord, deductUserCredit } from '../../services/treeService';
+import { insertTreeRecord, syncUserCredits } from '../../services/treeService';
 import { uploadTreePhoto } from '../../services/storageService';
 import MapPreview from '../../components/MapPreview';
 
@@ -43,7 +43,7 @@ export default function TreeFormScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
   const { photoUri, coords } = route.params;
-  const { user, assignedProjects, setUserCredits, refreshCredits } = useAuthStore();
+  const { user, assignedProjects, setUserCredits } = useAuthStore();
   const { addTree } = useTreeStore();
 
   const [form, setForm] = useState<TreeFormData>({
@@ -66,15 +66,6 @@ export default function TreeFormScreen() {
       return;
     }
     if (!user) return;
-
-    // Check if user has credits
-    if (user.credits <= 0) {
-      Alert.alert(
-        'No Credits Available',
-        'You have no credits remaining. Please contact your administrator to get more credits.'
-      );
-      return;
-    }
 
     setSubmitting(true);
     try {
@@ -99,16 +90,13 @@ export default function TreeFormScreen() {
 
       if (error || !data) throw new Error(error ?? 'Failed to save tree record');
 
-      // 3. Deduct credit — re-fetch from DB to ensure consistency
-      const { data: newCredits, error: creditError } = await deductUserCredit(user.id);
-      if (!creditError && newCredits !== null) {
-        setUserCredits(newCredits);
-      } else {
-        // If RPC failed, re-fetch credits from DB as fallback
-        await refreshCredits();
-      }
-
+      // 3. Earn credit — 1 credit per tree captured (credits = total trees)
       addTree(data);
+      const earnedCredits = useTreeStore.getState().trees.length;
+      setUserCredits(earnedCredits);
+      // Keep the profile credits column in sync (best-effort, non-blocking)
+      syncUserCredits(user.id, earnedCredits);
+
       navigation.navigate('SubmitSuccess', { treeId: data.id });
     } catch (err: any) {
       const msg = err?.message ?? JSON.stringify(err) ?? 'Please try again.';
@@ -350,7 +338,7 @@ export default function TreeFormScreen() {
       {/* Save Button */}
       <View style={styles.saveSection}>
         <TouchableOpacity
-          style={[styles.saveBtn, (submitting || (user?.credits ?? 0) <= 0 || (projects.length > 0 && !form.project_id)) && styles.saveBtnDisabled]}
+          style={[styles.saveBtn, (submitting || (projects.length > 0 && !form.project_id)) && styles.saveBtnDisabled]}
           onPress={handleSubmit}
           disabled={submitting || (user?.credits ?? 0) <= 0 || (projects.length > 0 && !form.project_id)}
         >

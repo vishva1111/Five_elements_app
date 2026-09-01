@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { User } from '../types';
 import {
   fetchUserProjects,
-  fetchUserCredits,
+  fetchMyTrees,
   fetchAllProjects,
   fetchUserProfile,
   buildUserFromProfile,
@@ -70,9 +70,11 @@ export function useAuth() {
 
   const fetchProfile = async (userId: string, email: string) => {
     try {
-      // ─── Fetch profile, credits, and projects in parallel ──────────────────
+      // ─── Fetch profile, trees, and projects in parallel ──────────────────
       const { data: profile, error: profileError } = await fetchUserProfile(userId);
-      const { data: credits, error: creditsError } = await fetchUserCredits(userId);
+      // Credits = total trees captured — 1 credit per tree
+      const { data: userTrees } = await fetchMyTrees(userId);
+      const earnedCredits = Math.max(0, userTrees ? userTrees.length : 0);
 
       // Fetch assigned projects first
       let { data: projects } = await fetchUserProjects(userId);
@@ -88,7 +90,7 @@ export function useAuth() {
         userId,
         email,
         profileError ? null : profile,
-        creditsError ? null : credits
+        earnedCredits
       );
 
       setUser(user);

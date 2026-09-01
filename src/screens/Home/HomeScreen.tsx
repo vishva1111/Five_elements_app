@@ -71,16 +71,9 @@ export default function HomeScreen() {
         <View style={styles.creditRow}>
           <Ionicons name="wallet-outline" size={24} color="#1a5c2a" />
           <View style={styles.creditInfo}>
-            <Text style={styles.creditLabel}>Available Credits</Text>
+            <Text style={styles.creditLabel}>Credits Earned</Text>
             <Text style={styles.creditValue}>{user?.credits ?? 0}</Text>
           </View>
-          {user?.credits !== undefined && user.credits <= 3 && (
-            <View style={[styles.creditWarning, user.credits === 0 && styles.creditWarningCritical]}>
-              <Text style={[styles.creditWarningText, user.credits === 0 && styles.creditWarningTextCritical]}>
-                {user.credits === 0 ? 'No credits!' : 'Low credits'}
-              </Text>
-            </View>
-          )}
         </View>
       </View>
 
@@ -106,15 +99,9 @@ export default function HomeScreen() {
 
       {/* Capture CTA */}
       <TouchableOpacity
-        style={[styles.captureBtn, (user?.credits ?? 0) <= 0 && styles.captureBtnDisabled]}
-        onPress={() => {
-          if ((user?.credits ?? 0) <= 0) {
-            return;
-          }
-          navigation.navigate('Capture');
-        }}
+        style={styles.captureBtn}
+        onPress={() => navigation.navigate('Capture')}
         activeOpacity={0.85}
-        disabled={(user?.credits ?? 0) <= 0}
       >
         <Text style={styles.captureBtnIcon}>📸</Text>
         <View style={{ flex: 1 }}>
@@ -165,6 +152,15 @@ export default function HomeScreen() {
                 <Text style={styles.treeCoords}>
                   📍 {tree.latitude.toFixed(4)}, {tree.longitude.toFixed(4)}
                 </Text>
+                <View style={styles.treeProjectRow}>
+                  <Ionicons name="folder-outline" size={11} color={tree.project_name ? '#1a5c2a' : '#aaa'} />
+                  <Text
+                    style={[styles.treeProject, !tree.project_name && styles.treeProjectEmpty]}
+                    numberOfLines={1}
+                  >
+                    {tree.project_name ?? 'No project'}
+                  </Text>
+                </View>
               </View>
               <StatusBadge status={tree.health_status} />
             </TouchableOpacity>
@@ -306,6 +302,14 @@ const styles = StyleSheet.create({
   treeSpecies: { fontSize: 15, fontWeight: '600', color: '#222' },
   treeDate: { fontSize: 12, color: '#888', marginTop: 2 },
   treeCoords: { fontSize: 11, color: '#aaa', marginTop: 2 },
+  treeProjectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 3,
+  },
+  treeProject: { fontSize: 11, color: '#1a5c2a', fontWeight: '500', flexShrink: 1 },
+  treeProjectEmpty: { color: '#aaa', fontWeight: '400' },
   emptyState: { alignItems: 'center', paddingVertical: 40 },
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
   emptyText: { fontSize: 16, fontWeight: '600', color: '#555' },

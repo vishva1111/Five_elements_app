@@ -38,12 +38,15 @@ export default function TreeCard({ tree, onPress }: Props) {
           📍 {tree.latitude.toFixed(5)}, {tree.longitude.toFixed(5)}
         </Text>
 
-        {tree.project_name ? (
-          <View style={styles.projectRow}>
-            <Ionicons name="folder-outline" size={12} color="#1a5c2a" />
-            <Text style={styles.projectName} numberOfLines={1}>{tree.project_name}</Text>
-          </View>
-        ) : null}
+        <View style={styles.projectRow}>
+          <Ionicons name="folder-outline" size={12} color={tree.project_name ? '#1a5c2a' : '#aaa'} />
+          <Text
+            style={[styles.projectName, !tree.project_name && styles.projectNameEmpty]}
+            numberOfLines={1}
+          >
+            {tree.project_name ?? 'No project'}
+          </Text>
+        </View>
 
         {tree.notes ? (
           <Text style={styles.notes} numberOfLines={2}>{tree.notes}</Text>
@@ -92,6 +95,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   projectName: { fontSize: 12, color: '#1a5c2a', fontWeight: '500' },
+  projectNameEmpty: { color: '#aaa', fontWeight: '400' },
   notes: { fontSize: 13, color: '#555', marginBottom: 6, lineHeight: 18 },
   date: { fontSize: 11, color: '#aaa' },
 });
