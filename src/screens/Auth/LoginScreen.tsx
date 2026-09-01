@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList, Project } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
 import { useAuthStore } from '../../store/authStore';
-import { fetchAllProjects, saveUserProjects } from '../../services/treeService';
+import { fetchAllProjects, saveUserProjects, fetchUserProjects, getCachedUserProjects, cacheUserProjects } from '../../services/treeService';
 import { supabase } from '../../services/supabase';
 
 type Props = {
@@ -51,21 +51,46 @@ export default function LoginScreen({ navigation }: Props) {
 
   const handleLogin = async () => {
     if (!validate()) return;
-    const { error } = await signIn(email.trim(), password);
+    // Hold the app on the login screen while signing in + choosing projects.
+    // Must be set BEFORE signIn so the SIGNED_IN event can't navigate away first.
+    setProjectSelectionPending(true);
+    const { data: signInData, error } = await signIn(email.trim(), password);
     if (error) {
+      setProjectSelectionPending(false);
       Alert.alert('Login Failed', error.message ?? 'Invalid credentials. Please try again.');
       return;
     }
 
     // After successful login, fetch projects and show the multi-select dropdown
     // on the login page. Keep the user here until they confirm / skip.
+    const userId =
+      signInData?.session?.user?.id ??
+      (await supabase.auth.getUser()).data.user?.id;
+
     setFetchingProjects(true);
     try {
+      // ─── Projects already selected before? Go straight in — no dropdown ────
+      let existing: Project[] = [];
+      if (userId) {
+        const { data: saved } = await fetchUserProjects(userId);
+        existing = saved ?? [];
+        if (existing.length === 0) {
+          // Fall back to the last selection saved on this device
+          const cached = await getCachedUserProjects(userId);
+          if (cached && cached.length > 0) existing = cached;
+        }
+      }
+      if (existing.length > 0) {
+        setAssignedProjects(existing);
+        setProjectSelectionPending(false);
+        return;
+      }
+
+      // ─── First time: fetch projects and show the multi-select dropdown ─────
       const { data } = await fetchAllProjects();
       if (data && data.length > 0) {
         setProjects(data);
         setShowProjectDropdown(true);
-        setProjectSelectionPending(true);
       } else {
         // No projects exist — continue without any
         setProjectSelectionPending(false);
@@ -107,6 +132,9 @@ export default function LoginScreen({ navigation }: Props) {
         if (saveError) {
           console.warn('[TreeApp] Could not save project selection:', saveError);
         }
+        // Also cache on this device so the app opens with the same projects
+        // next time even if the DB write failed
+        await cacheUserProjects(userId, selected);
       }
     } catch (err) {
       console.warn('[TreeApp] Could not save project selection:', err);

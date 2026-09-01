@@ -1,5 +1,5 @@
 import 'react-native-url-polyfill/auto';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
@@ -10,7 +10,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from './src/services/supabase';
 import { useAuthStore } from './src/store/authStore';
-import { fetchUserProfile, fetchMyTrees, fetchUserProjects, buildUserFromProfile, computeCredits } from './src/services/treeService';
+import { useTreeStore } from './src/store/treeStore';
+import { fetchUserProfile, fetchMyTrees, fetchUserProjects, buildUserFromProfile, computeCredits, getCachedUserProjects, cacheUserProjects } from './src/services/treeService';
 
 // Screens
 import LoginScreen from './src/screens/Auth/LoginScreen';
@@ -104,6 +105,15 @@ async function loadUserData(userId: string, email: string) {
     const { data: userProjects } = await fetchUserProjects(userId);
     // Only the projects this user selected at login are visible — no fallback
     projects = userProjects ?? [];
+    if (projects.length === 0) {
+      // Fall back to the last selection saved on this device, so the app
+      // opens directly with the already-selected projects
+      const cached = await getCachedUserProjects(userId);
+      if (cached && cached.length > 0) projects = cached;
+    } else {
+      // Keep the device cache fresh for future fallbacks
+      await cacheUserProjects(userId, projects);
+    }
   } catch {
     projects = [];
   }
@@ -126,6 +136,8 @@ export default function App() {
   const { setUser, setSession: storeSetSession, setAssignedProjects } = useAuthStore();
   // While the user is choosing projects on the login page, keep them there
   const projectSelectionPending = useAuthStore((s) => s.projectSelectionPending);
+  // Remember which user we already loaded so one login never loads twice
+  const loadedUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Get initial session with 4s timeout
@@ -136,37 +148,51 @@ export default function App() {
       }
     }, 4000);
 
-    supabase.auth.getSession().then(async ({ data }) => {
-      clearTimeout(timer);
-      const s = data.session ?? null;
-      setSession(s);
-      storeSetSession(s);
-      if (s?.user) {
-        // ─── Fetch real user data from DB (profile, credits, projects) ────────
-        const { user, projects } = await loadUserData(s.user.id, s.user.email ?? '');
-        setUser(user);
-        setAssignedProjects(projects);
-      } else {
-        setUser(null);
+    // ─── Single owner of auth state ──────────────────────────────────────────
+    // IMPORTANT: never await inside the listener callback. supabase-js holds an
+    // internal auth lock while callbacks run — awaiting DB queries here deadlocks
+    // the sign-in that follows a logout (the "have to login twice" bug).
+    const handleAuthChange = (event: string, s: any) => {
+      // Only react to real session transitions — ignore TOKEN_REFRESHED etc.
+      if (event !== 'INITIAL_SESSION' && event !== 'SIGNED_IN' && event !== 'SIGNED_OUT') {
+        return;
       }
+
+      setSession(s ?? null);
+      storeSetSession(s ?? null);
+
+      if (s?.user) {
+        // Skip duplicate loads for the same login (repeated SIGNED_IN events)
+        if (loadedUserIdRef.current === s.user.id) return;
+        loadedUserIdRef.current = s.user.id;
+        // Fire and forget — a data-loading failure must NEVER log the user out
+        loadUserData(s.user.id, s.user.email ?? '')
+          .then(({ user, projects }) => {
+            setUser(user);
+            setAssignedProjects(projects);
+          })
+          .catch((err) => {
+            console.warn('[TreeApp] Failed to load user data:', err);
+          });
+      } else {
+        loadedUserIdRef.current = null;
+        setUser(null);
+        setAssignedProjects([]);
+        // Clear the previous user's trees from the store
+        useTreeStore.getState().setTrees([]);
+      }
+    };
+
+    supabase.auth.getSession().then(({ data }) => {
+      clearTimeout(timer);
+      handleAuthChange('INITIAL_SESSION', data.session ?? null);
     }).catch(() => {
       clearTimeout(timer);
       setSession(null);
       setUser(null);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, s) => {
-      setSession(s ?? null);
-      storeSetSession(s ?? null);
-      if (s?.user) {
-        // ─── Fetch real user data from DB on auth state change ────────────────
-        const { user, projects } = await loadUserData(s.user.id, s.user.email ?? '');
-        setUser(user);
-        setAssignedProjects(projects);
-      } else {
-        setUser(null);
-      }
-    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(handleAuthChange);
 
     return () => {
       clearTimeout(timer);

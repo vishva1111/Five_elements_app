@@ -107,7 +107,7 @@ export interface AuthState {
   setProjectSelectionPending: (pending: boolean) => void;
   setUserCredits: (credits: number) => void;
   refreshCredits: () => Promise<void>;
-  signOut: () => void;
+  signOut: () => Promise<void>;
 }
 
 // ─── User Project Assignment Types ─────────────────────────────────────────────

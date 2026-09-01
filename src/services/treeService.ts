@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TreeRecord, TreeRecordInsert, ApiResponse, Project, User } from '../types';
 
 // ─── Transform raw Supabase row into TreeRecord with joined project_name ───────
@@ -235,6 +236,36 @@ export function filterTreesByProjects(
 
 export function computeCredits(trees: TreeRecord[] | null, projects: Project[]): number {
   return Math.max(0, filterTreesByProjects(trees, projects).length);
+}
+
+// ─── Device-local cache of the user's project selection ────────────────────────
+// Used as a fallback so the app opens directly with the already-selected
+// projects even if the DB write/read fails (e.g. RLS migration not applied).
+const PROJECT_CACHE_PREFIX = 'treeapp_selected_projects_';
+
+export async function cacheUserProjects(
+  userId: string,
+  projects: Project[]
+): Promise<void> {
+  try {
+    await AsyncStorage.setItem(
+      PROJECT_CACHE_PREFIX + userId,
+      JSON.stringify(projects)
+    );
+  } catch {
+    // Cache is best-effort — ignore failures
+  }
+}
+
+export async function getCachedUserProjects(
+  userId: string
+): Promise<Project[] | null> {
+  try {
+    const raw = await AsyncStorage.getItem(PROJECT_CACHE_PREFIX + userId);
+    return raw ? (JSON.parse(raw) as Project[]) : null;
+  } catch {
+    return null;
+  }
 }
 
 // ─── Fetch all projects (for login selection or fallback) ─────────────────────

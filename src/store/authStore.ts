@@ -6,7 +6,7 @@ import { fetchMyTrees, computeCredits } from '../services/treeService';
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   session: null,
-  loading: true,
+  loading: false,
   assignedProjects: [],
   projectSelectionPending: false,
 
