@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,16 +7,17 @@ import {
   TouchableOpacity,
   RefreshControl,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { fetchMyTrees } from '../../services/treeService';
 import { TreeRecord } from '../../types';
 import StatusBadge from '../../components/StatusBadge';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
-  const { user } = useAuthStore();
+  const { user, refreshCredits } = useAuthStore();
   const { trees, setTrees } = useTreeStore();
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({ total: 0, healthy: 0, sick: 0, dead: 0 });
@@ -39,6 +40,13 @@ export default function HomeScreen() {
     loadTrees();
   }, [user]);
 
+  // ─── Refresh credits when screen is focused (e.g. after returning from capture) ─
+  useFocusEffect(
+    useCallback(() => {
+      refreshCredits();
+    }, [])
+  );
+
   const onRefresh = async () => {
     setRefreshing(true);
     await loadTrees();
@@ -54,8 +62,26 @@ export default function HomeScreen() {
     >
       {/* Welcome Banner */}
       <View style={styles.banner}>
-        <Text style={styles.greeting}>Hello, {user?.full_name?.split(' ')[0] ?? 'Field User'} 👋</Text>
+        <Text style={styles.greeting}>Hello, {user?.full_name?.split(' ')[0] ?? 'Field User'}</Text>
         <Text style={styles.bannerSub}>Ready to capture trees today?</Text>
+      </View>
+
+      {/* Credit Balance Card */}
+      <View style={styles.creditCard}>
+        <View style={styles.creditRow}>
+          <Ionicons name="wallet-outline" size={24} color="#1a5c2a" />
+          <View style={styles.creditInfo}>
+            <Text style={styles.creditLabel}>Available Credits</Text>
+            <Text style={styles.creditValue}>{user?.credits ?? 0}</Text>
+          </View>
+          {user?.credits !== undefined && user.credits <= 3 && (
+            <View style={[styles.creditWarning, user.credits === 0 && styles.creditWarningCritical]}>
+              <Text style={[styles.creditWarningText, user.credits === 0 && styles.creditWarningTextCritical]}>
+                {user.credits === 0 ? 'No credits!' : 'Low credits'}
+              </Text>
+            </View>
+          )}
+        </View>
       </View>
 
       {/* Stats Cards */}
@@ -80,15 +106,26 @@ export default function HomeScreen() {
 
       {/* Capture CTA */}
       <TouchableOpacity
-        style={styles.captureBtn}
-        onPress={() => navigation.navigate('Capture')}
+        style={[styles.captureBtn, (user?.credits ?? 0) <= 0 && styles.captureBtnDisabled]}
+        onPress={() => {
+          if ((user?.credits ?? 0) <= 0) {
+            return;
+          }
+          navigation.navigate('Capture');
+        }}
         activeOpacity={0.85}
+        disabled={(user?.credits ?? 0) <= 0}
       >
         <Text style={styles.captureBtnIcon}>📸</Text>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.captureBtnTitle}>Capture a Tree</Text>
           <Text style={styles.captureBtnSub}>Take photo + tag GPS location</Text>
         </View>
+        {(user?.credits ?? 0) > 0 && (
+          <View style={styles.creditBadge}>
+            <Text style={styles.creditBadgeText}>{user?.credits} credits</Text>
+          </View>
+        )}
       </TouchableOpacity>
 
       {/* Recent Submissions */}
@@ -148,10 +185,56 @@ const styles = StyleSheet.create({
   },
   greeting: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
   bannerSub: { fontSize: 14, color: '#a5d6a7', marginTop: 4 },
+  creditCard: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginTop: -16,
+    borderRadius: 12,
+    padding: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+  },
+  creditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  creditInfo: {
+    flex: 1,
+  },
+  creditLabel: {
+    fontSize: 12,
+    color: '#888',
+  },
+  creditValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1a5c2a',
+  },
+  creditWarning: {
+    backgroundColor: '#FEF0E3',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  creditWarningCritical: {
+    backgroundColor: '#FEE2E2',
+  },
+  creditWarningText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#8B3A00',
+  },
+  creditWarningTextCritical: {
+    color: '#EF4444',
+  },
   statsRow: {
     flexDirection: 'row',
     marginHorizontal: 16,
-    marginTop: -16,
+    marginTop: 12,
     gap: 8,
   },
   statCard: {
@@ -179,9 +262,23 @@ const styles = StyleSheet.create({
     gap: 16,
     elevation: 3,
   },
+  captureBtnDisabled: {
+    backgroundColor: '#6b7280',
+  },
   captureBtnIcon: { fontSize: 36 },
   captureBtnTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
   captureBtnSub: { fontSize: 12, color: '#a5d6a7', marginTop: 2 },
+  creditBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  creditBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+  },
   section: { margin: 16 },
   sectionHeader: {
     flexDirection: 'row',

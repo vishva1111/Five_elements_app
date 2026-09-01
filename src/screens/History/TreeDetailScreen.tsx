@@ -89,6 +89,8 @@ export default function TreeDetailScreen() {
           <DetailRow icon="calendar" label="Submitted" value={date} />
           <DetailRow icon="leaf" label="Species" value={tree.species} />
           <DetailRow icon="heart" label="Health" value={tree.health_status.charAt(0).toUpperCase() + tree.health_status.slice(1)} />
+          {tree.event_type ? <DetailRow icon="flag" label="Event Type" value={tree.event_type} /> : null}
+          {tree.quantity ? <DetailRow icon="stats-chart" label="Quantity" value={`${tree.quantity} saplings`} /> : null}
           {tree.notes ? <DetailRow icon="document-text" label="Notes" value={tree.notes} /> : null}
           {tree.project_name ? <DetailRow icon="folder" label="Project" value={tree.project_name} /> : null}
           {tree.submitted_by ? <DetailRow icon="person" label="Submitted by" value={tree.submitted_by} /> : null}

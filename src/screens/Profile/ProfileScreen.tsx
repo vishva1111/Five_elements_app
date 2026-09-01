@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,20 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 
 export default function ProfileScreen() {
-  const { user, signOut } = useAuthStore();
+  const { user, assignedProjects, signOut, refreshCredits } = useAuthStore();
   const { trees } = useTreeStore();
+
+  // ─── Refresh credits when screen is focused ─────────────────────────────────
+  useFocusEffect(
+    useCallback(() => {
+      refreshCredits();
+    }, [])
+  );
 
   const stats = {
     total: trees.length,
@@ -47,6 +55,52 @@ export default function ProfileScreen() {
         <View style={styles.roleBadge}>
           <Text style={styles.roleText}>{user?.role ?? 'field_user'}</Text>
         </View>
+      </View>
+
+      {/* Credits Section */}
+      <View style={styles.creditsSection}>
+        <Text style={styles.sectionTitle}>Credits</Text>
+        <View style={styles.creditsCard}>
+          <View style={styles.creditsRow}>
+            <Ionicons name="wallet-outline" size={28} color="#1a5c2a" />
+            <View style={styles.creditsInfo}>
+              <Text style={styles.creditsLabel}>Available Credits</Text>
+              <Text style={styles.creditsValue}>{user?.credits ?? 0}</Text>
+            </View>
+            {user?.credits !== undefined && user.credits <= 3 && (
+              <View style={[styles.creditsWarning, user.credits === 0 && styles.creditsWarningCritical]}>
+                <Text style={[styles.creditsWarningText, user.credits === 0 && styles.creditsWarningTextCritical]}>
+                  {user.credits === 0 ? 'No credits!' : 'Low credits'}
+                </Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.creditsNote}>
+            1 credit is used per tree photo upload
+          </Text>
+        </View>
+      </View>
+
+      {/* Assigned Projects */}
+      <View style={styles.projectsSection}>
+        <Text style={styles.sectionTitle}>Assigned Projects ({assignedProjects.length})</Text>
+        {assignedProjects.length === 0 ? (
+          <View style={styles.noProjectsCard}>
+            <Ionicons name="alert-circle-outline" size={20} color="#8B3A00" />
+            <Text style={styles.noProjectsText}>
+              No projects assigned. Contact your administrator.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.projectsCard}>
+            {assignedProjects.map((project) => (
+              <View key={project.id} style={styles.projectItem}>
+                <Ionicons name="folder-outline" size={18} color="#1a5c2a" />
+                <Text style={styles.projectName}>{project.name}</Text>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
 
       {/* Stats */}
@@ -180,8 +234,98 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   roleText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  statsSection: { padding: 16 },
+  creditsSection: { padding: 16 },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: '#333', marginBottom: 12 },
+  creditsCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  creditsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  creditsInfo: {
+    flex: 1,
+  },
+  creditsLabel: {
+    fontSize: 12,
+    color: '#888',
+  },
+  creditsValue: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1a5c2a',
+  },
+  creditsWarning: {
+    backgroundColor: '#FEF0E3',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  creditsWarningCritical: {
+    backgroundColor: '#FEE2E2',
+  },
+  creditsWarningText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8B3A00',
+  },
+  creditsWarningTextCritical: {
+    color: '#EF4444',
+  },
+  creditsNote: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 12,
+    fontStyle: 'italic',
+  },
+  projectsSection: { paddingHorizontal: 16, paddingBottom: 16 },
+  projectsCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  projectItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  projectName: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
+  noProjectsCard: {
+    backgroundColor: '#FEF0E3',
+    borderRadius: 14,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#EF9F27',
+  },
+  noProjectsText: {
+    fontSize: 13,
+    color: '#8B3A00',
+    flex: 1,
+  },
+  statsSection: { padding: 16 },
   statsGrid: { flexDirection: 'row', gap: 8 },
   infoSection: { paddingHorizontal: 16, paddingBottom: 16 },
   infoCard: {

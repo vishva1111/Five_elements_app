@@ -2,9 +2,25 @@ import { useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import { useAuthStore } from '../store/authStore';
 import { User } from '../types';
+import {
+  fetchUserProjects,
+  fetchUserCredits,
+  fetchAllProjects,
+  fetchUserProfile,
+  buildUserFromProfile,
+} from '../services/treeService';
 
 export function useAuth() {
-  const { user, session, loading, setUser, setSession, setLoading, signOut } = useAuthStore();
+  const {
+    user,
+    session,
+    loading,
+    setUser,
+    setSession,
+    setLoading,
+    setAssignedProjects,
+    signOut,
+  } = useAuthStore();
 
   useEffect(() => {
     let mounted = true;
@@ -54,33 +70,29 @@ export function useAuth() {
 
   const fetchProfile = async (userId: string, email: string) => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+      // ─── Fetch profile, credits, and projects in parallel ──────────────────
+      const { data: profile, error: profileError } = await fetchUserProfile(userId);
+      const { data: credits, error: creditsError } = await fetchUserCredits(userId);
 
-      if (data) {
-        // Profile found — use it
-        setUser({
-          id: userId,
-          email: data.email ?? email,
-          full_name: data.full_name ?? data.display_name ?? data.name ?? '',
-          role: data.role ?? 'field_user',
-          avatar_url: data.avatar_url ?? data.avatar ?? '',
-          created_at: data.created_at ?? new Date().toISOString(),
-        } as User);
-      } else {
-        // No profile row — use auth user data directly (still works for login)
-        setUser({
-          id: userId,
-          email: email,
-          full_name: '',
-          role: 'field_user',
-          avatar_url: '',
-          created_at: new Date().toISOString(),
-        } as User);
+      // Fetch assigned projects first
+      let { data: projects } = await fetchUserProjects(userId);
+
+      // If no assigned projects, fetch all projects as fallback
+      if (!projects || projects.length === 0) {
+        const { data: allProjects } = await fetchAllProjects();
+        projects = allProjects ?? [];
       }
+
+      // Build user object from profile data (handles missing columns gracefully)
+      const user = buildUserFromProfile(
+        userId,
+        email,
+        profileError ? null : profile,
+        creditsError ? null : credits
+      );
+
+      setUser(user);
+      setAssignedProjects(projects ?? []);
     } catch (err) {
       // Fallback — set minimal user so app doesn't get stuck
       setUser({
@@ -90,7 +102,16 @@ export function useAuth() {
         role: 'field_user',
         avatar_url: '',
         created_at: new Date().toISOString(),
+        credits: 10,
       } as User);
+
+      // Even on error, try to fetch all projects as fallback
+      try {
+        const { data: allProjects } = await fetchAllProjects();
+        setAssignedProjects(allProjects ?? []);
+      } catch {
+        setAssignedProjects([]);
+      }
     }
   };
 

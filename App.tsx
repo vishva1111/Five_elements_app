@@ -10,6 +10,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from './src/services/supabase';
 import { useAuthStore } from './src/store/authStore';
+import { fetchUserProfile, fetchUserCredits, fetchUserProjects, fetchAllProjects, buildUserFromProfile } from './src/services/treeService';
 
 // Screens
 import LoginScreen from './src/screens/Auth/LoginScreen';
@@ -91,9 +92,37 @@ function MainTabs() {
   );
 }
 
+// ─── Fetch full user data (profile + credits + projects) ──────────────────────
+async function loadUserData(userId: string, email: string) {
+  const { data: profile, error: profileError } = await fetchUserProfile(userId);
+  const { data: credits, error: creditsError } = await fetchUserCredits(userId);
+
+  let projects: any[] = [];
+  try {
+    const { data: userProjects } = await fetchUserProjects(userId);
+    if (userProjects && userProjects.length > 0) {
+      projects = userProjects;
+    } else {
+      const { data: allProjects } = await fetchAllProjects();
+      projects = allProjects ?? [];
+    }
+  } catch {
+    projects = [];
+  }
+
+  const user = buildUserFromProfile(
+    userId,
+    email,
+    profileError ? null : profile,
+    creditsError ? null : credits
+  );
+
+  return { user, projects };
+}
+
 export default function App() {
   const [session, setSession] = useState<any>(undefined); // undefined = loading, null = no session
-  const { setUser, setSession: storeSetSession } = useAuthStore();
+  const { setUser, setSession: storeSetSession, setAssignedProjects } = useAuthStore();
 
   useEffect(() => {
     // Get initial session with 4s timeout
@@ -104,13 +133,16 @@ export default function App() {
       }
     }, 4000);
 
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       clearTimeout(timer);
       const s = data.session ?? null;
       setSession(s);
       storeSetSession(s);
       if (s?.user) {
-        setUser({ id: s.user.id, email: s.user.email ?? '', role: 'field_user', created_at: s.user.created_at ?? '' });
+        // ─── Fetch real user data from DB (profile, credits, projects) ────────
+        const { user, projects } = await loadUserData(s.user.id, s.user.email ?? '');
+        setUser(user);
+        setAssignedProjects(projects);
       } else {
         setUser(null);
       }
@@ -120,11 +152,14 @@ export default function App() {
       setUser(null);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, s) => {
       setSession(s ?? null);
       storeSetSession(s ?? null);
       if (s?.user) {
-        setUser({ id: s.user.id, email: s.user.email ?? '', role: 'field_user', created_at: s.user.created_at ?? '' });
+        // ─── Fetch real user data from DB on auth state change ────────────────
+        const { user, projects } = await loadUserData(s.user.id, s.user.email ?? '');
+        setUser(user);
+        setAssignedProjects(projects);
       } else {
         setUser(null);
       }

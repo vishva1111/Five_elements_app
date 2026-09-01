@@ -11,7 +11,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
-import { fetchMyTrees, fetchProjects } from '../../services/treeService';
+import { fetchMyTrees } from '../../services/treeService';
 import { HealthStatus } from '../../types';
 import TreeCard from '../../components/TreeCard';
 
@@ -24,12 +24,11 @@ const FILTERS: { label: string; value: HealthStatus | 'all' }[] = [
 
 export default function HistoryScreen() {
   const navigation = useNavigation<any>();
-  const { user } = useAuthStore();
+  const { user, assignedProjects } = useAuthStore();
   const { trees, setTrees } = useTreeStore();
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<HealthStatus | 'all'>('all');
   const [projectFilter, setProjectFilter] = useState<string>('all');
-  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
 
   const loadTrees = async () => {
     if (!user) return;
@@ -39,9 +38,6 @@ export default function HistoryScreen() {
 
   useEffect(() => {
     loadTrees();
-    fetchProjects().then(({ data }) => {
-      if (data) setProjects(data as { id: string; name: string }[]);
-    });
   }, [user]);
 
   const onRefresh = async () => {
@@ -50,8 +46,8 @@ export default function HistoryScreen() {
     setRefreshing(false);
   };
 
-  // Show all loaded projects (no filtering needed — project bar shows all)
-  const visibleProjects = projects;
+  // Use assigned projects from auth store (project-level access control)
+  const visibleProjects = assignedProjects;
 
   const filtered = trees.filter((t) => {
     const healthMatch = filter === 'all' || t.health_status === filter;
@@ -79,7 +75,7 @@ export default function HistoryScreen() {
         ))}
       </View>
 
-      {/* Project Filter Bar — same style as health filter */}
+      {/* Project Filter Bar — shows only assigned projects */}
       <View style={styles.filterBar}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.projectScrollContent}>
           <TouchableOpacity
@@ -110,7 +106,7 @@ export default function HistoryScreen() {
                 style={[styles.filterBtnText, projectFilter === p.id && styles.filterBtnTextActive]}
                 numberOfLines={1}
               >
-                📁 {p.name}
+                {p.name}
               </Text>
             </TouchableOpacity>
           ))}

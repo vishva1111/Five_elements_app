@@ -7,6 +7,7 @@ export interface User {
   role: 'admin' | 'field_user' | 'partner';
   avatar_url?: string;
   created_at: string;
+  credits: number;
 }
 
 // ─── Tree Record Types ─────────────────────────────────────────────────────────
@@ -25,6 +26,8 @@ export interface TreeRecord {
   notes?: string;
   submitted_at: string;
   synced: boolean;
+  event_type?: EventType;
+  quantity?: number;
   // Joined fields
   submitted_by?: string;
   project_name?: string;
@@ -40,6 +43,8 @@ export interface TreeRecordInsert {
   health_status: HealthStatus;
   notes?: string;
   synced?: boolean;
+  event_type?: EventType;
+  quantity?: number;
 }
 
 // ─── Location Types ────────────────────────────────────────────────────────────
@@ -92,10 +97,23 @@ export interface AuthState {
   user: User | null;
   session: any | null;
   loading: boolean;
+  assignedProjects: Project[];
   setUser: (user: User | null) => void;
   setSession: (session: any | null) => void;
   setLoading: (loading: boolean) => void;
+  setAssignedProjects: (projects: Project[]) => void;
+  setUserCredits: (credits: number) => void;
+  refreshCredits: () => Promise<void>;
   signOut: () => void;
+}
+
+// ─── User Project Assignment Types ─────────────────────────────────────────────
+
+export interface UserProject {
+  id: string;
+  user_id: string;
+  project_id: string;
+  assigned_at: string;
 }
 
 export interface TreeState {
@@ -115,11 +133,24 @@ export interface ApiResponse<T> {
 
 // ─── Form Types ────────────────────────────────────────────────────────────────
 
+export type EventType = 'Planting' | 'Installation' | 'Restoration' | 'Measurement' | 'Survey' | 'Other';
+
+export const EVENT_TYPES: EventType[] = [
+  'Planting',
+  'Installation',
+  'Restoration',
+  'Measurement',
+  'Survey',
+  'Other',
+];
+
 export interface TreeFormData {
   species: string;
   health_status: HealthStatus;
   notes: string;
   project_id: string;
+  event_type: EventType;
+  quantity: number;
 }
 
 export const TREE_SPECIES = [
