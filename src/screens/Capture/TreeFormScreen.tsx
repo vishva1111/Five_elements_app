@@ -26,7 +26,7 @@ import {
 } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
-import { insertTreeRecord, syncUserCredits } from '../../services/treeService';
+import { insertTreeRecord, syncUserCredits, computeCredits } from '../../services/treeService';
 import { uploadTreePhoto } from '../../services/storageService';
 import MapPreview from '../../components/MapPreview';
 
@@ -90,9 +90,14 @@ export default function TreeFormScreen() {
 
       if (error || !data) throw new Error(error ?? 'Failed to save tree record');
 
-      // 3. Earn credit — 1 credit per tree captured (credits = total trees)
+      // 3. Earn credit — 1 credit per tree captured within the selected projects
       addTree(data);
-      const earnedCredits = useTreeStore.getState().trees.length;
+      // Credits are calculated according to the projects selected at login
+      const { assignedProjects } = useAuthStore.getState();
+      const earnedCredits = computeCredits(
+        useTreeStore.getState().trees,
+        assignedProjects
+      );
       setUserCredits(earnedCredits);
       // Keep the profile credits column in sync (best-effort, non-blocking)
       syncUserCredits(user.id, earnedCredits);

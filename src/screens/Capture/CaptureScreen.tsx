@@ -145,8 +145,13 @@ export default function CaptureScreen() {
     return `${date} · ${time}`;
   };
 
-  // Get assigned project name
-  const projectName = assignedProjects.length > 0 ? assignedProjects[0].name : 'No project assigned';
+  // Get assigned project name(s) — user may have selected multiple projects
+  const projectName =
+    assignedProjects.length === 0
+      ? 'No project assigned'
+      : assignedProjects.length === 1
+        ? assignedProjects[0].name
+        : `${assignedProjects[0].name} +${assignedProjects.length - 1} more`;
 
   return (
     <View style={styles.container}>

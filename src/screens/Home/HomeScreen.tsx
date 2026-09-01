@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
-  const { user, refreshCredits } = useAuthStore();
+  const { user, assignedProjects, refreshCredits } = useAuthStore();
   const { trees, setTrees } = useTreeStore();
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({ total: 0, healthy: 0, sick: 0, dead: 0 });
@@ -26,12 +26,18 @@ export default function HomeScreen() {
     if (!user) return;
     const { data } = await fetchMyTrees(user.id);
     if (data) {
-      setTrees(data);
+      // Only show trees from the user's selected projects (no-project records stay visible)
+      const assignedIds = new Set(assignedProjects.map((p) => p.id));
+      const visibleTrees =
+        assignedProjects.length > 0
+          ? data.filter((t) => !t.project_id || assignedIds.has(t.project_id))
+          : data;
+      setTrees(visibleTrees);
       setStats({
-        total: data.length,
-        healthy: data.filter((t) => t.health_status === 'healthy').length,
-        sick: data.filter((t) => t.health_status === 'sick').length,
-        dead: data.filter((t) => t.health_status === 'dead').length,
+        total: visibleTrees.length,
+        healthy: visibleTrees.filter((t) => t.health_status === 'healthy').length,
+        sick: visibleTrees.filter((t) => t.health_status === 'sick').length,
+        dead: visibleTrees.filter((t) => t.health_status === 'dead').length,
       });
     }
   };

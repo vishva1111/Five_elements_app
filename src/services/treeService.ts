@@ -219,6 +219,24 @@ export async function createTreeRecord(
   return insertTreeRecord(record);
 }
 
+// ─── Credit calculation helpers ─────────────────────────────────────────────────
+// Credits are counted according to the projects the user selected at login:
+// - projects selected → only trees inside those projects count
+// - no projects selected → all of the user's trees count
+export function filterTreesByProjects(
+  trees: TreeRecord[] | null,
+  projects: Project[]
+): TreeRecord[] {
+  if (!trees) return [];
+  if (!projects || projects.length === 0) return trees;
+  const ids = new Set(projects.map((p) => p.id));
+  return trees.filter((t) => !t.project_id || ids.has(t.project_id));
+}
+
+export function computeCredits(trees: TreeRecord[] | null, projects: Project[]): number {
+  return Math.max(0, filterTreesByProjects(trees, projects).length);
+}
+
 // ─── Fetch all projects (for login selection or fallback) ─────────────────────
 export async function fetchAllProjects(): Promise<ApiResponse<Project[]>> {
   const { data, error } = await supabase
@@ -248,6 +266,34 @@ export async function fetchUserProjects(
 
   const projects = data?.map((up: any) => up.projects as Project).filter(Boolean) ?? [];
   return { data: projects, error: null };
+}
+
+// ─── Save the user's project selection (from the login-page dropdown) ──────────
+// Replaces any previous assignments so only the selected projects are visible.
+export async function saveUserProjects(
+  userId: string,
+  projectIds: string[]
+): Promise<ApiResponse<null>> {
+  // Remove old assignments first
+  const del = await supabase
+    .from('user_projects')
+    .delete()
+    .eq('user_id', userId);
+
+  if (del.error) {
+    return { data: null, error: del.error.message };
+  }
+
+  if (projectIds.length === 0) {
+    return { data: null, error: null };
+  }
+
+  const rows = projectIds.map((projectId) => ({ user_id: userId, project_id: projectId }));
+  const { error } = await supabase
+    .from('user_projects')
+    .upsert(rows, { onConflict: 'user_id,project_id' });
+
+  return { data: null, error: error?.message ?? null };
 }
 
 // ─── Fetch user profile (full profile including credits) ──────────────────────

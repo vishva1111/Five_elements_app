@@ -48,6 +48,10 @@ export default function HistoryScreen() {
 
   // Use assigned projects from auth store (project-level access control)
   const visibleProjects = assignedProjects;
+  // Only show trees from the user's selected projects (records with no project stay visible)
+  const assignedIds = new Set(visibleProjects.map((p) => p.id));
+  const assignedMatch = (projectId?: string) =>
+    assignedIds.size === 0 || !projectId || assignedIds.has(projectId);
 
   const filtered = trees.filter((t) => {
     const healthMatch = filter === 'all' || t.health_status === filter;
@@ -55,7 +59,7 @@ export default function HistoryScreen() {
       projectFilter === 'all' ||
       t.project_id === projectFilter ||
       (projectFilter === 'none' && !t.project_id);
-    return healthMatch && projectMatch;
+    return healthMatch && projectMatch && assignedMatch(t.project_id);
   });
 
   return (

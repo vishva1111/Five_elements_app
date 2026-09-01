@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,6 @@ import {
   Alert,
   TouchableOpacity,
   ActivityIndicator,
-  FlatList,
 } from 'react-native';
 import { TextInput, Button, HelperText } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -17,7 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList, Project } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
 import { useAuthStore } from '../../store/authStore';
-import { fetchAllProjects } from '../../services/treeService';
+import { fetchAllProjects, saveUserProjects } from '../../services/treeService';
+import { supabase } from '../../services/supabase';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Login'>;
@@ -25,17 +25,18 @@ type Props = {
 
 export default function LoginScreen({ navigation }: Props) {
   const { signIn, loading } = useAuth();
-  const { setAssignedProjects } = useAuthStore();
+  const { setAssignedProjects, setProjectSelectionPending } = useAuthStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({ email: '', password: '' });
 
-  // Project selection state
-  const [loginStep, setLoginStep] = useState<'credentials' | 'projectSelection'>('credentials');
+  // Project selection state — multi-select dropdown shown on the login page
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
-  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const [savingProjects, setSavingProjects] = useState(false);
   const [fetchingProjects, setFetchingProjects] = useState(false);
 
   const validate = () => {
@@ -56,19 +57,22 @@ export default function LoginScreen({ navigation }: Props) {
       return;
     }
 
-    // After successful login, fetch projects for selection
+    // After successful login, fetch projects and show the multi-select dropdown
+    // on the login page. Keep the user here until they confirm / skip.
     setFetchingProjects(true);
     try {
-      const { data, error: fetchError } = await fetchAllProjects();
-      if (fetchError) {
-        console.error('Failed to fetch projects:', fetchError);
-      }
+      const { data } = await fetchAllProjects();
       if (data && data.length > 0) {
         setProjects(data);
-        setLoginStep('projectSelection');
+        setShowProjectDropdown(true);
+        setProjectSelectionPending(true);
+      } else {
+        // No projects exist — continue without any
+        setProjectSelectionPending(false);
       }
     } catch (err) {
       console.error('Error fetching projects:', err);
+      setProjectSelectionPending(false);
     } finally {
       setFetchingProjects(false);
     }
@@ -86,119 +90,38 @@ export default function LoginScreen({ navigation }: Props) {
     });
   };
 
-  const handleProjectConfirm = () => {
-    // Get selected project objects
+  const handleProjectConfirm = async () => {
+    // Get selected project objects — only these will be visible to this user
     const selected = projects.filter((p) => selectedProjects.has(p.id));
+    setSavingProjects(true);
+
+    // Persist the selection so it is restored on every future login
+    try {
+      const { data } = await supabase.auth.getUser();
+      const userId = data.user?.id;
+      if (userId) {
+        const { error: saveError } = await saveUserProjects(
+          userId,
+          Array.from(selectedProjects)
+        );
+        if (saveError) {
+          console.warn('[TreeApp] Could not save project selection:', saveError);
+        }
+      }
+    } catch (err) {
+      console.warn('[TreeApp] Could not save project selection:', err);
+    }
+
     setAssignedProjects(selected);
-    // Navigation will happen automatically via App.tsx session check
+    setProjectSelectionPending(false);
+    setSavingProjects(false);
   };
 
   const handleSkipProjects = () => {
-    // Allow user to continue without selecting projects
+    // No projects selected — nothing will show for this user
     setAssignedProjects([]);
+    setProjectSelectionPending(false);
   };
-
-  const renderProjectItem = ({ item }: { item: Project }) => {
-    const isSelected = selectedProjects.has(item.id);
-    return (
-      <TouchableOpacity
-        style={[styles.projectItem, isSelected && styles.projectItemActive]}
-        onPress={() => toggleProjectSelection(item.id)}
-        activeOpacity={0.7}
-      >
-        <View style={[styles.checkbox, isSelected && styles.checkboxActive]}>
-          {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
-        </View>
-        <View style={styles.projectInfo}>
-          <Text style={[styles.projectName, isSelected && styles.projectNameActive]}>
-            {item.name}
-          </Text>
-          {item.description && (
-            <Text style={styles.projectDesc} numberOfLines={1}>
-              {item.description}
-            </Text>
-          )}
-        </View>
-        {item.status && (
-          <View style={[styles.statusBadge, item.status === 'active' && styles.statusBadgeActive]}>
-            <Text style={[styles.statusText, item.status === 'active' && styles.statusTextActive]}>
-              {item.status}
-            </Text>
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  };
-
-  // Show project selection screen
-  if (loginStep === 'projectSelection') {
-    return (
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.emoji}>🌳</Text>
-          <Text style={styles.title}>Select Projects</Text>
-          <Text style={styles.subtitle}>Choose projects you want to work in</Text>
-        </View>
-
-        {/* Project List */}
-        <View style={styles.projectContainer}>
-          <Text style={styles.projectHint}>
-            Select one or more projects to capture trees in
-          </Text>
-
-          {fetchingProjects ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#1a5c2a" />
-              <Text style={styles.loadingText}>Loading projects...</Text>
-            </View>
-          ) : projects.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Ionicons name="folder-open-outline" size={48} color="#ccc" />
-              <Text style={styles.emptyText}>No projects available</Text>
-              <Text style={styles.emptySubText}>Contact your administrator</Text>
-            </View>
-          ) : (
-            <>
-              <FlatList
-                data={projects}
-                keyExtractor={(item) => item.id}
-                renderItem={renderProjectItem}
-                contentContainerStyle={styles.projectList}
-                showsVerticalScrollIndicator={false}
-              />
-
-              <View style={styles.selectedInfo}>
-                <Text style={styles.selectedText}>
-                  {selectedProjects.size} project{selectedProjects.size !== 1 ? 's' : ''} selected
-                </Text>
-              </View>
-            </>
-          )}
-
-          {/* Action Buttons */}
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={styles.confirmBtn}
-              onPress={handleProjectConfirm}
-            >
-              <Ionicons name="checkmark-circle" size={20} color="#fff" />
-              <Text style={styles.confirmBtnText}>
-                {selectedProjects.size > 0 ? 'Start Working' : 'Continue Without Selection'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.skipBtn}
-              onPress={handleSkipProjects}
-            >
-              <Text style={styles.skipBtnText}>Skip for now</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    );
-  }
 
   // Show login form
   return (
@@ -269,6 +192,120 @@ export default function LoginScreen({ navigation }: Props) {
           >
             {loading ? 'Signing in...' : fetchingProjects ? 'Loading projects...' : 'Sign In'}
           </Button>
+
+          {/* ── Multi-select project dropdown (shown after successful sign-in) ── */}
+          {showProjectDropdown && (
+            <View style={styles.dropdownSection}>
+              <Text style={styles.dropdownLabel}>Select your projects</Text>
+              <Text style={styles.dropdownHint}>
+                You can work in the projects you choose. Other projects won't be visible to you.
+              </Text>
+
+              {/* Dropdown trigger */}
+              <TouchableOpacity
+                style={styles.dropdownTrigger}
+                onPress={() => setDropdownOpen(!dropdownOpen)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.dropdownTriggerText,
+                    selectedProjects.size === 0 && styles.dropdownPlaceholder,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {selectedProjects.size === 0
+                    ? 'Select projects'
+                    : projects
+                        .filter((p) => selectedProjects.has(p.id))
+                        .map((p) => p.name)
+                        .join(', ')}
+                </Text>
+                <Ionicons
+                  name={dropdownOpen ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color="#666"
+                />
+              </TouchableOpacity>
+
+              {/* Dropdown options */}
+              {dropdownOpen && (
+                <View style={styles.dropdownList}>
+                  <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
+                    {projects.map((item) => {
+                      const isSelected = selectedProjects.has(item.id);
+                      return (
+                        <TouchableOpacity
+                          key={item.id}
+                          style={[styles.dropdownItem, isSelected && styles.dropdownItemActive]}
+                          onPress={() => toggleProjectSelection(item.id)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={[styles.checkbox, isSelected && styles.checkboxActive]}>
+                            {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
+                          </View>
+                          <Text
+                            style={[
+                              styles.dropdownItemText,
+                              isSelected && styles.dropdownItemTextActive,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {item.name}
+                          </Text>
+                          {item.status && (
+                            <View
+                              style={[
+                                styles.statusBadge,
+                                item.status === 'active' && styles.statusBadgeActive,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.statusText,
+                                  item.status === 'active' && styles.statusTextActive,
+                                ]}
+                              >
+                                {item.status}
+                              </Text>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
+
+              <Text style={styles.selectedCount}>
+                {selectedProjects.size} project{selectedProjects.size !== 1 ? 's' : ''} selected
+              </Text>
+
+              {/* Action buttons */}
+              <TouchableOpacity
+                style={styles.confirmBtn}
+                onPress={handleProjectConfirm}
+                disabled={savingProjects}
+              >
+                {savingProjects ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                )}
+                <Text style={styles.confirmBtnText}>
+                  {selectedProjects.size > 0 ? 'Start Working' : 'Continue Without Projects'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.skipBtn}
+                onPress={handleSkipProjects}
+                disabled={savingProjects}
+              >
+                <Text style={styles.skipBtnText}>Skip for now</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           <Text style={styles.hint}>
             Use your Five Elements CARM account credentials
@@ -347,64 +384,80 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 16,
   },
-  // Project Selection Styles
-  projectContainer: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+  // ── Project Multi-Select Dropdown Styles ──
+  dropdownSection: {
+    marginTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    paddingTop: 16,
   },
-  projectHint: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 16,
-    textAlign: 'center',
+  dropdownLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#333',
   },
-  loadingContainer: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#666',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#555',
-    marginTop: 12,
-  },
-  emptySubText: {
-    fontSize: 13,
+  dropdownHint: {
+    fontSize: 12,
     color: '#888',
-    marginTop: 4,
+    marginTop: 2,
+    marginBottom: 10,
   },
-  projectList: {
-    paddingBottom: 16,
-  },
-  projectItem: {
+  dropdownTrigger: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    marginBottom: 10,
-    borderRadius: 12,
+    justifyContent: 'space-between',
     borderWidth: 1.5,
     borderColor: '#E5E5E5',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
     backgroundColor: '#fff',
   },
-  projectItemActive: {
-    borderColor: '#1a5c2a',
+  dropdownTriggerText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1a5c2a',
+    marginRight: 8,
+  },
+  dropdownPlaceholder: {
+    color: '#999',
+    fontWeight: '400',
+  },
+  dropdownList: {
+    borderWidth: 1.5,
+    borderColor: '#E5E5E5',
+    borderRadius: 10,
+    marginTop: 6,
+    backgroundColor: '#fff',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+  },
+  dropdownScroll: {
+    maxHeight: 220,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f5f5f5',
+  },
+  dropdownItemActive: {
     backgroundColor: '#E8F5E9',
+  },
+  dropdownItemText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#333',
+    marginRight: 8,
+  },
+  dropdownItemTextActive: {
+    color: '#1a5c2a',
+    fontWeight: '600',
   },
   checkbox: {
     width: 22,
@@ -419,22 +472,6 @@ const styles = StyleSheet.create({
   checkboxActive: {
     backgroundColor: '#1a5c2a',
     borderColor: '#1a5c2a',
-  },
-  projectInfo: {
-    flex: 1,
-  },
-  projectName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
-  },
-  projectNameActive: {
-    color: '#1a5c2a',
-  },
-  projectDesc: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 2,
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -454,44 +491,38 @@ const styles = StyleSheet.create({
   statusTextActive: {
     color: '#2E7D32',
   },
-  selectedInfo: {
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-  selectedText: {
-    fontSize: 14,
+  selectedCount: {
+    textAlign: 'center',
+    fontSize: 13,
     fontWeight: '600',
     color: '#1a5c2a',
-  },
-  actionButtons: {
-    gap: 10,
-    marginTop: 8,
+    marginTop: 10,
   },
   confirmBtn: {
-    height: 56,
-    borderRadius: 12,
+    height: 50,
+    borderRadius: 10,
     backgroundColor: '#1a5c2a',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    marginTop: 8,
   },
   confirmBtnText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#fff',
   },
   skipBtn: {
-    height: 48,
-    borderRadius: 12,
+    height: 42,
+    borderRadius: 10,
     backgroundColor: '#f5f5f5',
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 8,
   },
   skipBtnText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#666',
   },

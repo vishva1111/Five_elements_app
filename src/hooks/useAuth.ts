@@ -5,9 +5,9 @@ import { User } from '../types';
 import {
   fetchUserProjects,
   fetchMyTrees,
-  fetchAllProjects,
   fetchUserProfile,
   buildUserFromProfile,
+  computeCredits,
 } from '../services/treeService';
 
 export function useAuth() {
@@ -72,18 +72,15 @@ export function useAuth() {
     try {
       // ─── Fetch profile, trees, and projects in parallel ──────────────────
       const { data: profile, error: profileError } = await fetchUserProfile(userId);
-      // Credits = total trees captured — 1 credit per tree
+      // Credits = trees captured within the user's selected projects
       const { data: userTrees } = await fetchMyTrees(userId);
-      const earnedCredits = Math.max(0, userTrees ? userTrees.length : 0);
 
-      // Fetch assigned projects first
+      // Fetch assigned projects first (projects selected by the user at login)
       let { data: projects } = await fetchUserProjects(userId);
+      // No fallback to all projects — users only see their selected projects
 
-      // If no assigned projects, fetch all projects as fallback
-      if (!projects || projects.length === 0) {
-        const { data: allProjects } = await fetchAllProjects();
-        projects = allProjects ?? [];
-      }
+      // Credits are calculated according to the selected projects
+      const earnedCredits = computeCredits(userTrees, projects ?? []);
 
       // Build user object from profile data (handles missing columns gracefully)
       const user = buildUserFromProfile(
@@ -107,13 +104,7 @@ export function useAuth() {
         credits: 10,
       } as User);
 
-      // Even on error, try to fetch all projects as fallback
-      try {
-        const { data: allProjects } = await fetchAllProjects();
-        setAssignedProjects(allProjects ?? []);
-      } catch {
-        setAssignedProjects([]);
-      }
+      setAssignedProjects([]);
     }
   };
 

@@ -10,7 +10,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from './src/services/supabase';
 import { useAuthStore } from './src/store/authStore';
-import { fetchUserProfile, fetchMyTrees, fetchUserProjects, fetchAllProjects, buildUserFromProfile } from './src/services/treeService';
+import { fetchUserProfile, fetchMyTrees, fetchUserProjects, buildUserFromProfile, computeCredits } from './src/services/treeService';
 
 // Screens
 import LoginScreen from './src/screens/Auth/LoginScreen';
@@ -95,22 +95,21 @@ function MainTabs() {
 // ─── Fetch full user data (profile + credits + projects) ──────────────────────
 async function loadUserData(userId: string, email: string) {
   const { data: profile, error: profileError } = await fetchUserProfile(userId);
-  // Credits = total trees captured — 1 credit per tree
+  // Fetch the user's trees — credits are computed from the selected projects below
   const { data: userTrees } = await fetchMyTrees(userId);
-  const earnedCredits = Math.max(0, userTrees ? userTrees.length : 0);
+  let earnedCredits = 0;
  
   let projects: any[] = [];
   try {
     const { data: userProjects } = await fetchUserProjects(userId);
-    if (userProjects && userProjects.length > 0) {
-      projects = userProjects;
-    } else {
-      const { data: allProjects } = await fetchAllProjects();
-      projects = allProjects ?? [];
-    }
+    // Only the projects this user selected at login are visible — no fallback
+    projects = userProjects ?? [];
   } catch {
     projects = [];
   }
+
+  // Credits are calculated according to the selected projects
+  earnedCredits = computeCredits(userTrees, projects);
 
   const user = buildUserFromProfile(
     userId,
@@ -125,6 +124,8 @@ async function loadUserData(userId: string, email: string) {
 export default function App() {
   const [session, setSession] = useState<any>(undefined); // undefined = loading, null = no session
   const { setUser, setSession: storeSetSession, setAssignedProjects } = useAuthStore();
+  // While the user is choosing projects on the login page, keep them there
+  const projectSelectionPending = useAuthStore((s) => s.projectSelectionPending);
 
   useEffect(() => {
     // Get initial session with 4s timeout
@@ -189,7 +190,7 @@ export default function App() {
         <NavigationContainer>
           <StatusBar style="light" backgroundColor="#1a5c2a" />
           <RootStack.Navigator screenOptions={{ headerShown: false }}>
-            {!session ? (
+            {!session || projectSelectionPending ? (
               <RootStack.Screen name="Login" component={LoginScreen} />
             ) : (
               <RootStack.Screen name="Main" component={MainTabs} />
