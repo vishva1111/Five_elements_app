@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -33,12 +34,6 @@ import MapPreview from '../../components/MapPreview';
 type Nav = NativeStackNavigationProp<CaptureStackParamList, 'TreeForm'>;
 type Route = RouteProp<CaptureStackParamList, 'TreeForm'>;
 
-const SPECIES_SUGGESTIONS = [
-  'Rhizophora mucronata',
-  'Avicennia marina',
-  'Ceriops tagal',
-];
-
 export default function TreeFormScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
@@ -57,8 +52,55 @@ export default function TreeFormScreen() {
   const [showSpeciesPicker, setShowSpeciesPicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Use assigned projects from auth store (project-level access control)
+  // Refs used to keep the NOTE field visible above the keyboard while typing
+  const scrollRef = useRef<ScrollView>(null);
+  const notesFieldRef = useRef<TextInput>(null);
+  const scrollOffsetRef = useRef(0);
+  const windowHRef = useRef(Dimensions.get('window').height);
+
+  // Scroll the page so the NOTE field sits fully above the keyboard.
+  // Works whether or not the OS resizes the window when the keyboard opens.
+  const bringNotesAboveKeyboard = (kbHeight?: number) => {
+    const scroll = scrollRef.current;
+    const input = notesFieldRef.current;
+    if (!scroll || !input) return;
+    input.measureInWindow((_x: number, y: number, _w: number, h: number) => {
+      const winH = Dimensions.get('window').height;
+      // If the OS already shrank the window (adjustResize), the keyboard is
+      // excluded from winH; otherwise subtract the keyboard height ourselves
+      const resized = winH < windowHRef.current - 20;
+      const visibleBottom = resized ? winH : winH - (kbHeight ?? 300);
+      const overflow = y + h + 16 - visibleBottom;
+      if (overflow > 0) {
+        scroll.scrollTo({ y: scrollOffsetRef.current + overflow, animated: true });
+      }
+    });
+  };
+
+  const handleNotesFocus = () => {
+    // Close the species dropdown so it never sits over the keyboard
+    setShowSpeciesPicker(false);
+    // Scroll twice: once early, once after the keyboard has fully opened,
+    // so the NOTE field ends up visible on every device
+    setTimeout(() => bringNotesAboveKeyboard(), 150);
+    setTimeout(() => bringNotesAboveKeyboard(), 500);
+  };
+
+  // Whenever the keyboard opens while the NOTE field is focused, re-scroll
+  // so the field (and what you type) stays visible
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => {
+      setTimeout(() => bringNotesAboveKeyboard(), 150);
+      setTimeout(() => bringNotesAboveKeyboard(), 450);
+    });
+    return () => showSub.remove();
+  }, []);
+
+  // ─── PROJECT dropdown shows only the projects selected at login ────────────
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+
   const projects = assignedProjects;
+  const selectedProject = projects.find((p) => p.id === form.project_id);
 
   const handleSubmit = async () => {
     if (!form.species.trim()) {
@@ -140,7 +182,16 @@ export default function TreeFormScreen() {
         )}
       </View>
 
-      <ScrollView style={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        onScroll={(e: any) => {
+          scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={32}
+      >
         {/* Photo Preview */}
         <View style={styles.photoSection}>
           <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
@@ -209,7 +260,10 @@ export default function TreeFormScreen() {
             <Text style={styles.fieldLabel}>SPECIES <Text style={styles.required}>· required</Text></Text>
             <TouchableOpacity
               style={styles.speciesInput}
-              onPress={() => setShowSpeciesPicker(!showSpeciesPicker)}
+              onPress={() => {
+                Keyboard.dismiss(); // keep the keyboard from covering the list
+                setShowSpeciesPicker(!showSpeciesPicker);
+              }}
             >
               <Text style={[styles.speciesInputText, !form.species && styles.speciesPlaceholder]}>
                 {form.species || 'Type a species — free text works offline'}
@@ -217,41 +271,29 @@ export default function TreeFormScreen() {
               <Ionicons name={showSpeciesPicker ? 'chevron-up' : 'chevron-down'} size={18} color="#888" />
             </TouchableOpacity>
 
-            {/* Species Suggestions */}
-            <View style={styles.speciesSuggestions}>
-              {SPECIES_SUGGESTIONS.map((sp) => (
-                <TouchableOpacity
-                  key={sp}
-                  style={[styles.speciesChip, form.species === sp && styles.speciesChipActive]}
-                  onPress={() => {
-                    setForm({ ...form, species: sp });
-                    setShowSpeciesPicker(false);
-                  }}
-                >
-                  <Text style={[styles.speciesChipText, form.species === sp && styles.speciesChipTextActive]}>
-                    {sp}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Species Picker List */}
+            {/* Species Picker List — internally scrollable so every name is reachable */}
             {showSpeciesPicker && (
               <View style={styles.speciesList}>
-                {TREE_SPECIES.map((sp) => (
-                  <TouchableOpacity
-                    key={sp}
-                    style={[styles.speciesItem, form.species === sp && styles.speciesItemActive]}
-                    onPress={() => {
-                      setForm({ ...form, species: sp });
-                      setShowSpeciesPicker(false);
-                    }}
-                  >
-                    <Text style={[styles.speciesItemText, form.species === sp && styles.speciesItemTextActive]}>
-                      {sp}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                <ScrollView
+                  style={styles.speciesListScroll}
+                  nestedScrollEnabled
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {TREE_SPECIES.map((sp) => (
+                    <TouchableOpacity
+                      key={sp}
+                      style={[styles.speciesItem, form.species === sp && styles.speciesItemActive]}
+                      onPress={() => {
+                        setForm({ ...form, species: sp });
+                        setShowSpeciesPicker(false);
+                      }}
+                    >
+                      <Text style={[styles.speciesItemText, form.species === sp && styles.speciesItemTextActive]}>
+                        {sp}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
               </View>
             )}
           </View>
@@ -281,29 +323,74 @@ export default function TreeFormScreen() {
             </View>
           </View>
 
-          {/* Project */}
+          {/* Project — dropdown showing only the projects selected at login */}
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>PROJECT</Text>
             {projects.length > 0 ? (
-              <View style={styles.projectList}>
-                {projects.map((p) => (
-                  <TouchableOpacity
-                    key={p.id}
-                    style={[styles.projectBtn, form.project_id === p.id && styles.projectBtnActive]}
-                    onPress={() => setForm({ ...form, project_id: p.id })}
-                  >
-                    <View style={styles.projectBtnLeft}>
-                      <Ionicons name="folder" size={18} color={form.project_id === p.id ? '#fff' : '#2B5341'} />
-                      <Text style={[styles.projectBtnText, form.project_id === p.id && styles.projectBtnTextActive]}>
-                        {p.name}
-                      </Text>
-                    </View>
-                    {form.project_id === p.id && (
-                      <Ionicons name="checkmark-circle" size={18} color="#fff" />
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
+              <>
+                <TouchableOpacity
+                  style={styles.projectDropdownTrigger}
+                  onPress={() => {
+                    Keyboard.dismiss(); // keep the keyboard from covering the list
+                    setShowProjectDropdown(!showProjectDropdown);
+                  }}
+                >
+                  <View style={styles.projectDropdownLeft}>
+                    <Ionicons name="folder" size={18} color={form.project_id ? '#2B5341' : '#999'} />
+                    <Text
+                      style={[styles.projectDropdownText, !selectedProject && styles.projectDropdownPlaceholder]}
+                      numberOfLines={1}
+                    >
+                      {selectedProject ? selectedProject.name : 'Select a project'}
+                    </Text>
+                  </View>
+                  <Ionicons name={showProjectDropdown ? 'chevron-up' : 'chevron-down'} size={18} color="#888" />
+                </TouchableOpacity>
+
+                {showProjectDropdown && (
+                  <View style={styles.projectDropdownList}>
+                    <ScrollView
+                      style={styles.projectDropdownScroll}
+                      nestedScrollEnabled
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      {projects.map((p) => (
+                        <TouchableOpacity
+                          key={p.id}
+                          style={[
+                            styles.projectDropdownItem,
+                            form.project_id === p.id && styles.projectDropdownItemActive,
+                          ]}
+                          onPress={() => {
+                            setForm({ ...form, project_id: p.id });
+                            setShowProjectDropdown(false);
+                          }}
+                        >
+                          <View style={styles.projectDropdownLeft}>
+                            <Ionicons
+                              name="folder"
+                              size={18}
+                              color={form.project_id === p.id ? '#2B5341' : '#8AA08F'}
+                            />
+                            <Text
+                              style={[
+                                styles.projectDropdownItemText,
+                                form.project_id === p.id && styles.projectDropdownItemTextActive,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {p.name}
+                            </Text>
+                          </View>
+                          {form.project_id === p.id && (
+                            <Ionicons name="checkmark-circle" size={18} color="#2B5341" />
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </>
             ) : (
               <View style={styles.noProjectsInfo}>
                 <Ionicons name="information-circle-outline" size={18} color="#6B7B6E" />
@@ -318,9 +405,17 @@ export default function TreeFormScreen() {
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>NOTE <Text style={styles.optional}>· optional</Text></Text>
             <TextInput
+              ref={notesFieldRef}
               style={styles.notesInput}
               value={form.notes}
               onChangeText={(t) => setForm({ ...form, notes: t })}
+              onFocus={handleNotesFocus}
+              onSelectionChange={() => {
+                // While writing, keep the NOTE field above the keyboard at all
+                // times — as the note grows to more lines, the page follows it
+                // so the field and the keypad are visible at the same time
+                setTimeout(() => bringNotesAboveKeyboard(), 100);
+              }}
               multiline
               numberOfLines={3}
               placeholder="Anything the reviewer should know"
@@ -570,39 +665,17 @@ const styles = StyleSheet.create({
   speciesPlaceholder: {
     color: '#aaa',
   },
-  speciesSuggestions: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  speciesChip: {
-    height: 36,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#AACBA7',
-    backgroundColor: '#EAF3DE',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  speciesChipActive: {
-    backgroundColor: '#2B5341',
-    borderColor: '#2B5341',
-  },
-  speciesChipText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#27500A',
-  },
-  speciesChipTextActive: {
-    color: '#fff',
-  },
   speciesList: {
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 12,
     overflow: 'hidden',
-    maxHeight: 200,
+    maxHeight: 240,
+    backgroundColor: '#fff',
+  },
+  // Internal scroll area of the species dropdown — every name stays reachable
+  speciesListScroll: {
+    flexGrow: 0,
   },
   speciesItem: {
     paddingHorizontal: 16,
@@ -702,6 +775,69 @@ const styles = StyleSheet.create({
     color: '#6B7B6E',
     flex: 1,
     lineHeight: 18,
+  },
+  // Project dropdown
+  projectDropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 52,
+    borderWidth: 1.5,
+    borderColor: '#DDE7D8',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+  },
+  projectDropdownLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 10,
+    marginRight: 8,
+  },
+  projectDropdownText: {
+    flex: 1,
+    fontSize: 15,
+    color: '#112121',
+    fontWeight: '500',
+  },
+  projectDropdownPlaceholder: {
+    color: '#aaa',
+    fontWeight: '400',
+  },
+  projectDropdownList: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 12,
+    overflow: 'hidden',
+    maxHeight: 220,
+    backgroundColor: '#fff',
+    marginTop: 6,
+  },
+  projectDropdownScroll: {
+    flexGrow: 0,
+  },
+  projectDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  projectDropdownItemActive: {
+    backgroundColor: '#EAF3DE',
+  },
+  projectDropdownItemText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#333',
+  },
+  projectDropdownItemTextActive: {
+    color: '#2B5341',
+    fontWeight: '600',
   },
   // Notes
   notesInput: {
