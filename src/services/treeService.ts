@@ -68,12 +68,9 @@ export async function insertTreeRecord(
       .single();
     data = retry.data;
     error = retry.error;
-
-
   }
 
   if (error && isMissingColumnError(error.message)) {
-
     // Schema out of sync — tree_records lacks event_type/quantity columns
     // (run supabase/migrations/000_full_database_setup.sql to add them).
     // Save the record anyway; DB defaults kick in (event_type 'Planting', quantity 1).
@@ -89,8 +86,7 @@ export async function insertTreeRecord(
       .single();
     data = retryWithoutExtras.data;
     error = retryWithoutExtras.error;
-}
-
+  }
 
   if (error) {
     return { data: null, error: error.message };
@@ -158,68 +154,6 @@ export async function fetchTreeById(
   return { data: await attachProjectName(mapTreeRecord(data)), error: null };
 }
 
-// ─── Fetch all trees (admin) ───────────────────────────────────────────────────
-export async function fetchAllTrees(): Promise<ApiResponse<TreeRecord[]>> {
-  // Try with project join first; fall back to plain select if join fails
-  let { data, error } = await supabase
-    .from('tree_records')
-    .select('*, projects(name)')
-    .order('submitted_at', { ascending: false });
-
-  if (error) {
-    // Retry without the join (projects table may not exist yet)
-    const retry = await supabase
-      .from('tree_records')
-      .select('*')
-      .order('submitted_at', { ascending: false });
-    data = retry.data;
-    error = retry.error;
-  }
-
-  if (error) {
-    return { data: null, error: error.message };
-  }
-
-  const trees = await attachProjectNames((data ?? []).map(mapTreeRecord));
-  return { data: trees, error: null };
-}
-
-// ─── Subscribe to realtime tree inserts ───────────────────────────────────────
-export function subscribeToTrees(
-  onInsert: (tree: TreeRecord) => void
-) {
-  return supabase
-    .channel('tree_records_channel')
-    .on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'tree_records' },
-      (payload) => {
-        const tree = mapTreeRecord(payload.new as any);
-        attachProjectName(tree)
-          .then(onInsert)
-          .catch(() => onInsert(tree));
-      }
-    )
-    .subscribe();
-}
-
-// ─── Fetch projects list ───────────────────────────────────────────────────────
-export async function fetchProjects() {
-  const { data, error } = await supabase
-    .from('projects')
-    .select('id, name, status')
-    .order('name');
-
-  return { data, error: error?.message ?? null };
-}
-
-// ─── Create tree record (alias for insertTreeRecord) ──────────────────────────
-export async function createTreeRecord(
-  record: TreeRecordInsert
-): Promise<ApiResponse<TreeRecord>> {
-  return insertTreeRecord(record);
-}
-
 // ─── Credit calculation helpers ─────────────────────────────────────────────────
 // Credits are PER PROJECT. Every project is GIVEN 500 credits upfront for the
 // user. Adding a tree to a project DEDUCTS from that project's balance.
@@ -227,21 +161,6 @@ export async function createTreeRecord(
 // When no project is active the credits stay at the initial 500 (nothing logs
 // against a specific project unless one is selected).
 export const INITIAL_CREDITS = 500;
-
-export function filterTreesByProjects(
-  trees: TreeRecord[] | null,
-  projects: Project[]
-): TreeRecord[] {
-  if (!trees) return [];
-  if (!projects || projects.length === 0) return trees;
-  const ids = new Set(projects.map((p) => p.id));
-  return trees.filter((t) => !t.project_id || ids.has(t.project_id));
-}
-
-export function computeCredits(trees: TreeRecord[] | null, projects: Project[]): number {
-  const treeCount = filterTreesByProjects(trees, projects).length;
-  return Math.max(0, INITIAL_CREDITS - treeCount);
-}
 
 // ─── Credits for a SINGLE project (the active one) ──────────────────────────────
 // 500 given − number of trees the user added inside this one project.
@@ -396,24 +315,6 @@ export async function fetchUserProfile(
   return { data, error: null };
 }
 
-// ─── Fetch user credits ───────────────────────────────────────────────────────
-export async function fetchUserCredits(
-  userId: string
-): Promise<ApiResponse<number>> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('credits')
-    .eq('id', userId)
-    .maybeSingle();
-
-  // If table doesn't exist or query fails, return null (caller defaults to INITIAL_CREDITS)
-  if (error) {
-    return { data: null, error: null };
-  }
-
-  return { data: data?.credits ?? INITIAL_CREDITS, error: null };
-}
-
 // ─── Sync remaining credits (= 500 given credits − trees added) into the profile ──
 export async function syncUserCredits(
   userId: string,
@@ -425,21 +326,6 @@ export async function syncUserCredits(
     .eq('id', userId);
 
   return { data: null, error: error?.message ?? null };
-}
-
-// ─── Deduct user credit ───────────────────────────────────────────────────────
-export async function deductUserCredit(
-  userId: string
-): Promise<ApiResponse<number>> {
-  const { data, error } = await supabase.rpc('deduct_user_credit', {
-    target_user_id: userId,
-  });
-
-  if (error) {
-    return { data: null, error: error.message };
-  }
-
-  return { data: data as number, error: null };
 }
 
 // ─── Build a User object from profile data ────────────────────────────────────

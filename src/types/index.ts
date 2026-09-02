@@ -67,16 +67,8 @@ export interface Project {
 // ─── Navigation Types ──────────────────────────────────────────────────────────
 
 export type RootStackParamList = {
-  Splash: undefined;
   Login: undefined;
   Main: undefined;
-};
-
-export type MainTabParamList = {
-  Home: undefined;
-  Capture: undefined;
-  History: undefined;
-  Profile: undefined;
 };
 
 export type CaptureStackParamList = {
@@ -96,14 +88,12 @@ export type HistoryStackParamList = {
 export interface AuthState {
   user: User | null;
   session: any | null;
-  loading: boolean;
   assignedProjects: Project[];
   activeProjectId: string | null;
   // True while the user is choosing their projects on the login page
   projectSelectionPending: boolean;
   setUser: (user: User | null) => void;
   setSession: (session: any | null) => void;
-  setLoading: (loading: boolean) => void;
   setAssignedProjects: (projects: Project[]) => void;
   setActiveProjectId: (projectId: string | null) => void;
   setProjectSelectionPending: (pending: boolean) => void;
@@ -114,19 +104,10 @@ export interface AuthState {
 
 // ─── User Project Assignment Types ─────────────────────────────────────────────
 
-export interface UserProject {
-  id: string;
-  user_id: string;
-  project_id: string;
-  assigned_at: string;
-}
-
 export interface TreeState {
   trees: TreeRecord[];
-  loading: boolean;
   setTrees: (trees: TreeRecord[]) => void;
   addTree: (tree: TreeRecord) => void;
-  setLoading: (loading: boolean) => void;
 }
 
 // ─── API Response Types ────────────────────────────────────────────────────────

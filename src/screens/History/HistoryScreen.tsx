@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,6 @@ import {
   FlatList,
   RefreshControl,
   TouchableOpacity,
-  ScrollView,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuthStore } from '../../store/authStore';
@@ -24,28 +23,34 @@ const FILTERS: { label: string; value: HealthStatus | 'all' }[] = [
 
 export default function HistoryScreen() {
   const navigation = useNavigation<any>();
-  const { user, activeProjectId } = useAuthStore();
+  // Stable primitive selectors — the `user` OBJECT's identity changes on every
+  // credit refresh, which used to re-trigger the focus effect in a loop.
+  const user = useAuthStore((s) => s.user);
+  const userId = user?.id;
+  const activeProjectId = useAuthStore((s) => s.activeProjectId);
   const { trees, setTrees } = useTreeStore();
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<HealthStatus | 'all'>('all');
 
-  const loadTrees = async () => {
-    if (!user) return;
-    const { data } = await fetchMyTrees(user.id);
+  // Ignore out-of-order responses so a slow earlier request can't overwrite a
+  // newer one and shuffle the list while refreshing.
+  const loadSeqRef = useRef(0);
+
+  const loadTrees = useCallback(async () => {
+    if (!userId) return;
+    const seq = ++loadSeqRef.current;
+    const { data } = await fetchMyTrees(userId);
+    if (seq !== loadSeqRef.current) return; // stale response — ignore it
     if (data) setTrees(data);
-  };
+  }, [userId, setTrees]);
 
-    useEffect(() => {
-    loadTrees();
-  }, [user]);
-
-  // ─── Reload trees whenever the screen regains focus ───────────────────────
-  // Ensures the list always shows the latest capture (e.g. after returning from
-  // SubmitSuccess / TreeDetail) without requiring a manual pull-to-refresh.
+  // ─── Reload trees whenever the screen is focused ───────────────────────────
+  // useFocusEffect runs on mount too, so there is no separate useEffect and no
+  // duplicate fetch. Only userId drives this callback — credits/refresh don't.
   useFocusEffect(
     useCallback(() => {
       loadTrees();
-    }, [user])
+    }, [loadTrees])
   );
 
   const onRefresh = async () => {
@@ -131,33 +136,6 @@ const styles = StyleSheet.create({
   filterBtnActive: { backgroundColor: '#1a5c2a' },
   filterBtnText: { fontSize: 12, color: '#555', fontWeight: '500' },
   filterBtnTextActive: { color: '#fff', fontWeight: '700' },
-  projectScrollContent: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  projectNameBtn: { maxWidth: 160 },
-  projectBar: {
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    maxHeight: 60,
-  },
-  projectBarContent: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 10,
-    alignItems: 'center',
-  },
-  projectBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 14,
-    backgroundColor: '#f0f4f0',
-    borderWidth: 1,
-    borderColor: '#dde8dd',
-    maxWidth: 160,
-  },
-  projectBtnActive: { backgroundColor: '#1a5c2a', borderColor: '#1a5c2a' },
-  projectBtnText: { fontSize: 12, color: '#3a6b3a', fontWeight: '500' },
-  projectBtnTextActive: { color: '#fff', fontWeight: '700' },
   count: { fontSize: 12, color: '#888', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 },
   list: { padding: 16, paddingTop: 8 },
   empty: { alignItems: 'center', paddingVertical: 60 },

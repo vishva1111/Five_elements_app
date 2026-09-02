@@ -1,11 +1,9 @@
 import { useState } from 'react';
 import { supabase } from '../services/supabase';
-import { useAuthStore } from '../store/authStore';
 
 export function useAuth() {
   // Local spinner flag for the login button
   const [signingIn, setSigningIn] = useState(false);
-  const signOut = useAuthStore((s) => s.signOut);
 
   // NOTE: session/user loading is owned by App.tsx (single auth listener).
   // A second onAuthStateChange listener here used to deadlock supabase's
@@ -27,6 +25,5 @@ export function useAuth() {
   return {
     loading: signingIn,
     signIn,
-    signOut,
   };
 }

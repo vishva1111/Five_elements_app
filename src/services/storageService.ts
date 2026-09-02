@@ -34,27 +34,9 @@ export async function uploadTreePhoto(
       .from(TREE_PHOTOS_BUCKET)
       .getPublicUrl(data.path);
 
-    console.log('Photo uploaded successfully:', urlData.publicUrl);
     return urlData.publicUrl;
   } catch (err: any) {
     console.error('Photo upload error:', err?.message ?? JSON.stringify(err));
     return null;
-  }
-}
-
-export async function deleteTreePhoto(photoUrl: string): Promise<boolean> {
-  try {
-    // Extract path from URL
-    const urlParts = photoUrl.split(`${TREE_PHOTOS_BUCKET}/`);
-    if (urlParts.length < 2) return false;
-
-    const filePath = urlParts[1];
-    const { error } = await supabase.storage
-      .from(TREE_PHOTOS_BUCKET)
-      .remove([filePath]);
-
-    return !error;
-  } catch {
-    return false;
   }
 }

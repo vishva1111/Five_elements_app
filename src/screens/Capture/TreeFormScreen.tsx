@@ -19,11 +19,9 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   CaptureStackParamList,
   TreeFormData,
-  HealthStatus,
   TREE_SPECIES,
   HEALTH_STATUS_OPTIONS,
   EVENT_TYPES,
-  EventType,
 } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
@@ -712,54 +710,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   // Project
-  projectList: {
-    gap: 8,
-  },
-  projectBtn: {
-    height: 56,
-    borderWidth: 1.5,
-    borderColor: '#AACBA7',
-    borderRadius: 14,
-    backgroundColor: '#fff',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-  },
-  projectBtnActive: {
-    backgroundColor: '#2B5341',
-    borderColor: '#2B5341',
-  },
-  projectBtnLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-  },
-  projectBtnText: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#112121',
-    flex: 1,
-  },
-  projectBtnTextActive: {
-    color: '#fff',
-  },
-  noProjectsWarning: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 12,
-    backgroundColor: '#FEF0E3',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#EF9F27',
-  },
-  noProjectsText: {
-    fontSize: 13,
-    color: '#8B3A00',
-    flex: 1,
-  },
   noProjectsInfo: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -801,10 +751,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#112121',
     fontWeight: '500',
-  },
-  projectDropdownPlaceholder: {
-    color: '#aaa',
-    fontWeight: '400',
   },
   projectDropdownList: {
     borderWidth: 1,

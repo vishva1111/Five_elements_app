@@ -1,19 +1,17 @@
 import { create } from 'zustand';
 import { AuthState, User, Project } from '../types';
 import { supabase } from '../services/supabase';
-import { fetchMyTrees, computeCreditsForProject, INITIAL_CREDITS } from '../services/treeService';
+import { fetchMyTrees, computeCreditsForProject } from '../services/treeService';
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   session: null,
-  loading: false,
   assignedProjects: [],
   activeProjectId: null,
   projectSelectionPending: false,
 
   setUser: (user) => set({ user }),
   setSession: (session) => set({ session }),
-  setLoading: (loading) => set({ loading }),
   setAssignedProjects: (projects) => set({ assignedProjects: projects }),
   setActiveProjectId: (projectId) => set({ activeProjectId: projectId }),
   setProjectSelectionPending: (pending) => set({ projectSelectionPending: pending }),

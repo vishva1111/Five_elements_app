@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,21 +11,33 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { fetchMyTrees } from '../../services/treeService';
-import { TreeRecord } from '../../types';
 import StatusBadge from '../../components/StatusBadge';
 import ProjectSelector from '../../components/ProjectSelector';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
-  const { user, activeProjectId, refreshCredits } = useAuthStore();
+  // Select stable primitives — the `user` OBJECT changes identity on every credit
+  // refresh, so depending on it inside useFocusEffect would re-trigger a refetch
+  // loop (list keeps re-ordering while refreshing).
+  const user = useAuthStore((s) => s.user);
+  const userId = user?.id;
+  const activeProjectId = useAuthStore((s) => s.activeProjectId);
+  const refreshCredits = useAuthStore((s) => s.refreshCredits);
   const { trees, setTrees } = useTreeStore();
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({ total: 0, healthy: 0, sick: 0, dead: 0 });
 
-  const loadTrees = async () => {
-    if (!user) return;
-    const { data } = await fetchMyTrees(user.id);
+  // Guards against out-of-order responses: only the MOST RECENT loadTrees call
+  // may write to the store, so a slow earlier request can't overwrite a newer
+  // one and shuffle the list back and forth.
+  const loadSeqRef = useRef(0);
+
+  const loadTrees = useCallback(async () => {
+    if (!userId) return;
+    const seq = ++loadSeqRef.current;
+    const { data } = await fetchMyTrees(userId);
+    if (seq !== loadSeqRef.current) return; // stale response — ignore it
     if (data) {
       // Filter trees by active project only
       const visibleTrees = activeProjectId
@@ -39,18 +51,18 @@ export default function HomeScreen() {
         dead: visibleTrees.filter((t) => t.health_status === 'dead').length,
       });
     }
-  };
+  }, [userId, activeProjectId, setTrees]);
 
-  useEffect(() => {
-    loadTrees();
-  }, [user, activeProjectId]);
-
-    // ─── Refresh credits + tree list when screen is focused (e.g. after returning from capture) ─
+  // ─── Load on mount + whenever the screen is focused ───────────────────────
+  // useFocusEffect alone covers both (a screen is focused right after mounting),
+  // so there is no duplicate fetch. refreshCredits is a stable store action and
+  // loadTrees only changes when userId/activeProjectId change — NOT when credits
+  // update — which stops the refetch loop.
   useFocusEffect(
     useCallback(() => {
       refreshCredits();
       loadTrees();
-    }, [])
+    }, [loadTrees, refreshCredits])
   );
 
   const onRefresh = async () => {
@@ -222,23 +234,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1a5c2a',
   },
-  creditWarning: {
-    backgroundColor: '#FEF0E3',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  creditWarningCritical: {
-    backgroundColor: '#FEE2E2',
-  },
-  creditWarningText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#8B3A00',
-  },
-  creditWarningTextCritical: {
-    color: '#EF4444',
-  },
   statsRow: {
     flexDirection: 'row',
     marginHorizontal: 16,
@@ -269,9 +264,6 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 16,
     elevation: 3,
-  },
-  captureBtnDisabled: {
-    backgroundColor: '#6b7280',
   },
   captureBtnIcon: { fontSize: 36 },
   captureBtnTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff' },

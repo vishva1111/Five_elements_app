@@ -6,14 +6,12 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  Dimensions,
-  Platform,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Ionicons, Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useCamera } from '../../hooks/useCamera';
 import { useLocation } from '../../hooks/useLocation';
 import { CaptureStackParamList } from '../../types';
@@ -21,13 +19,11 @@ import { useAuthStore } from '../../store/authStore';
 
 type Nav = NativeStackNavigationProp<CaptureStackParamList, 'CaptureCamera'>;
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
 export default function CaptureScreen() {
   const navigation = useNavigation<Nav>();
   const [permission, requestPermission] = useCameraPermissions();
   const { cameraRef, flash, facing, setIsReady, takePicture, toggleFlash, toggleFacing } = useCamera();
-  const { coords, loading: gpsLoading, requestLocation } = useLocation();
+  const { coords, requestLocation } = useLocation();
   const { user, assignedProjects, activeProjectId } = useAuthStore();
   const [capturing, setCapturing] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<'acquiring' | 'good' | 'unavailable'>('acquiring');
