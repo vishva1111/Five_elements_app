@@ -90,17 +90,18 @@ export default function TreeFormScreen() {
 
       if (error || !data) throw new Error(error ?? 'Failed to save tree record');
 
-      // 3. Earn credit — 1 credit per tree captured within the selected projects
+      // 3. Deduct credit — 1 credit deducted per tree added within the selected
+      //    projects (balance starts at the 500 credits given to every user)
       addTree(data);
-      // Credits are calculated according to the projects selected at login
+      // Credits = 500 given credits minus trees added in the projects selected at login
       const { assignedProjects } = useAuthStore.getState();
-      const earnedCredits = computeCredits(
+      const remainingCredits = computeCredits(
         useTreeStore.getState().trees,
         assignedProjects
       );
-      setUserCredits(earnedCredits);
+      setUserCredits(remainingCredits);
       // Keep the profile credits column in sync (best-effort, non-blocking)
-      syncUserCredits(user.id, earnedCredits);
+      syncUserCredits(user.id, remainingCredits);
 
       navigation.navigate('SubmitSuccess', { treeId: data.id });
     } catch (err: any) {

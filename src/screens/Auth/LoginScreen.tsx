@@ -69,7 +69,7 @@ export default function LoginScreen({ navigation }: Props) {
 
     setFetchingProjects(true);
     try {
-      // ─── Projects already selected before? Go straight in — no dropdown ────
+      // ─── Load previously selected projects (DB first, then device cache) ────
       let existing: Project[] = [];
       if (userId) {
         const { data: saved } = await fetchUserProjects(userId);
@@ -80,19 +80,30 @@ export default function LoginScreen({ navigation }: Props) {
           if (cached && cached.length > 0) existing = cached;
         }
       }
-      if (existing.length > 0) {
-        setAssignedProjects(existing);
-        setProjectSelectionPending(false);
-        return;
+
+      // ─── Fetch the project list and ALWAYS show the selection at login ─────
+      // Previously-selected projects are pre-checked so the user can confirm
+      // them as-is or change the selection before entering the app.
+      const { data, error } = await fetchAllProjects();
+      if (error) {
+        console.warn('[TreeApp] Could not load projects:', error);
+        Alert.alert(
+          'Projects Unavailable',
+          'Could not load the project list. Continuing with your saved selection.'
+        );
       }
 
-      // ─── First time: fetch projects and show the multi-select dropdown ─────
-      const { data } = await fetchAllProjects();
       if (data && data.length > 0) {
         setProjects(data);
+        // Pre-check the previously selected projects
+        if (existing.length > 0) {
+          setSelectedProjects(new Set(existing.map((p) => p.id)));
+        }
+        setDropdownOpen(true); // open the list right away so it is visible
         setShowProjectDropdown(true);
       } else {
-        // No projects exist — continue without any
+        // No projects exist (or query failed) — continue with the saved selection
+        setAssignedProjects(existing);
         setProjectSelectionPending(false);
       }
     } catch (err) {
@@ -131,6 +142,13 @@ export default function LoginScreen({ navigation }: Props) {
         );
         if (saveError) {
           console.warn('[TreeApp] Could not save project selection:', saveError);
+          const tableMissing = /could not find the table/i.test(saveError);
+          Alert.alert(
+            'Not Saved to Cloud',
+            tableMissing
+              ? 'The user_projects table is missing in your Supabase database.\n\nFIX: Open Supabase Dashboard → SQL Editor → paste the ENTIRE file supabase/migrations/000_full_database_setup.sql → RUN. Then reload the app and log in again.'
+              : `Your selection was kept on this device, but the server rejected it.\n\n${saveError}\n\nAsk your admin to run supabase/migrations/000_full_database_setup.sql in the Supabase SQL editor.`
+          );
         }
         // Also cache on this device so the app opens with the same projects
         // next time even if the DB write failed

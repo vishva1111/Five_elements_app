@@ -98,7 +98,7 @@ async function loadUserData(userId: string, email: string) {
   const { data: profile, error: profileError } = await fetchUserProfile(userId);
   // Fetch the user's trees — credits are computed from the selected projects below
   const { data: userTrees } = await fetchMyTrees(userId);
-  let earnedCredits = 0;
+  let remainingCredits = 0;
  
   let projects: any[] = [];
   try {
@@ -118,14 +118,14 @@ async function loadUserData(userId: string, email: string) {
     projects = [];
   }
 
-  // Credits are calculated according to the selected projects
-  earnedCredits = computeCredits(userTrees, projects);
+  // Credits = 500 given credits minus trees added in the selected projects
+  remainingCredits = computeCredits(userTrees, projects);
 
   const user = buildUserFromProfile(
     userId,
     email,
     profileError ? null : profile,
-    earnedCredits
+    remainingCredits
   );
 
   return { user, projects };
@@ -169,7 +169,12 @@ export default function App() {
         loadUserData(s.user.id, s.user.email ?? '')
           .then(({ user, projects }) => {
             setUser(user);
-            setAssignedProjects(projects);
+            // While the user is still choosing projects on the login screen,
+            // do NOT overwrite the selection they are about to confirm there —
+            // the login screen owns project assignment until it clears the flag
+            if (!useAuthStore.getState().projectSelectionPending) {
+              setAssignedProjects(projects);
+            }
           })
           .catch((err) => {
             console.warn('[TreeApp] Failed to load user data:', err);

@@ -28,10 +28,22 @@ export default function TreeDetailScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchTreeById(treeId).then(({ data }) => {
-      setTree(data);
-      setLoading(false);
-    });
+    let cancelled = false;
+    fetchTreeById(treeId)
+      .then(({ data }) => {
+        if (!cancelled) {
+          setTree(data);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        // Never let an unhandled promise rejection crash the release build
+        console.warn('[TreeApp] fetchTreeById failed:', err);
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [treeId]);
 
   const openInMaps = () => {
@@ -99,7 +111,10 @@ export default function TreeDetailScreen() {
         {/* Map */}
         <Text style={styles.sectionTitle}>📍 Location</Text>
         <MapPreview
-          coords={{ latitude: tree.latitude, longitude: tree.longitude }}
+          coords={{
+            latitude: Number(tree.latitude) || 0,
+            longitude: Number(tree.longitude) || 0,
+          }}
           height={200}
         />
 
@@ -110,9 +125,9 @@ export default function TreeDetailScreen() {
 
         <View style={styles.coordsBox}>
           <Text style={styles.coordsLabel}>Latitude</Text>
-          <Text style={styles.coordsValue}>{tree.latitude.toFixed(8)}</Text>
+          <Text style={styles.coordsValue}>{Number(tree.latitude ?? 0).toFixed(8)}</Text>
           <Text style={styles.coordsLabel}>Longitude</Text>
-          <Text style={styles.coordsValue}>{tree.longitude.toFixed(8)}</Text>
+          <Text style={styles.coordsValue}>{Number(tree.longitude ?? 0).toFixed(8)}</Text>
         </View>
       </View>
     </ScrollView>

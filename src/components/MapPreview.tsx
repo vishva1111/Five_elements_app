@@ -20,8 +20,8 @@ export default function MapPreview({
   interactive = false,
 }: Props) {
   const region = {
-    latitude: coords.latitude,
-    longitude: coords.longitude,
+    latitude: Number(coords.latitude) || 0,
+    longitude: Number(coords.longitude) || 0,
     latitudeDelta: 0.005,
     longitudeDelta: 0.005,
   };
@@ -57,7 +57,7 @@ export default function MapPreview({
       {/* Coords overlay */}
       <View style={styles.coordsOverlay}>
         <Text style={styles.coordsText}>
-          📍 {coords.latitude.toFixed(5)}, {coords.longitude.toFixed(5)}
+          📍 {Number(coords.latitude ?? 0).toFixed(5)}, {Number(coords.longitude ?? 0).toFixed(5)}
         </Text>
       </View>
 

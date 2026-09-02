@@ -221,9 +221,12 @@ export async function createTreeRecord(
 }
 
 // ─── Credit calculation helpers ─────────────────────────────────────────────────
-// Credits are counted according to the projects the user selected at login:
-// - projects selected → only trees inside those projects count
-// - no projects selected → all of the user's trees count
+// Every user is GIVEN 500 credits upfront. Adding a tree DEDUCTS from that
+// balance (credits = 500 − tree count):
+// - projects selected → only trees inside those projects deduct credits
+// - no projects selected → all of the user's trees deduct credits
+export const INITIAL_CREDITS = 500;
+
 export function filterTreesByProjects(
   trees: TreeRecord[] | null,
   projects: Project[]
@@ -235,7 +238,8 @@ export function filterTreesByProjects(
 }
 
 export function computeCredits(trees: TreeRecord[] | null, projects: Project[]): number {
-  return Math.max(0, filterTreesByProjects(trees, projects).length);
+  const treeCount = filterTreesByProjects(trees, projects).length;
+  return Math.max(0, INITIAL_CREDITS - treeCount);
 }
 
 // ─── Device-local cache of the user's project selection ────────────────────────
@@ -305,6 +309,41 @@ export async function saveUserProjects(
   userId: string,
   projectIds: string[]
 ): Promise<ApiResponse<null>> {
+  // Preferred path: SECURITY DEFINER RPC — bypasses RLS so the save works for
+  // every authenticated user. Install with supabase/migrations/002_save_user_projects_rpc.sql
+  const rpc = await supabase.rpc('save_my_projects', {
+    target_project_ids: projectIds,
+  });
+
+  if (!rpc.error) {
+    return { data: null, error: null };
+  }
+
+  // Table completely missing (000 migration never applied)? Report it clearly
+  // instead of trying direct writes that will fail the same way.
+  const tableMissing = /could not find the table .*user_projects/i.test(rpc.error.message);
+  if (tableMissing) {
+    return {
+      data: null,
+      error:
+        'The user_projects table is missing in your Supabase database. ' +
+        'Run supabase/migrations/000_full_database_setup.sql in the Supabase SQL Editor.',
+    };
+  }
+
+  // RPC not installed yet? Fall back to direct table writes, which need the
+  // INSERT/DELETE policies (also included in 000_full_database_setup.sql).
+  const rpcMissing = /function .* does not exist|could not find the function|schema cache/i.test(
+    rpc.error.message
+  );
+  if (!rpcMissing) {
+    return { data: null, error: rpc.error.message };
+  }
+
+  console.warn(
+    '[TreeApp] save_my_projects RPC missing — run supabase/migrations/000_full_database_setup.sql. Falling back to direct writes.'
+  );
+
   // Remove old assignments first
   const del = await supabase
     .from('user_projects')
@@ -355,15 +394,15 @@ export async function fetchUserCredits(
     .eq('id', userId)
     .maybeSingle();
 
-  // If table doesn't exist or query fails, return null (caller defaults to 10)
+  // If table doesn't exist or query fails, return null (caller defaults to INITIAL_CREDITS)
   if (error) {
     return { data: null, error: null };
   }
 
-  return { data: data?.credits ?? 10, error: null };
+  return { data: data?.credits ?? INITIAL_CREDITS, error: null };
 }
 
-// ─── Sync earned credits (= total trees captured) into the profile row ───────────
+// ─── Sync remaining credits (= 500 given credits − trees added) into the profile ──
 export async function syncUserCredits(
   userId: string,
   credits: number
@@ -405,6 +444,6 @@ export function buildUserFromProfile(
     role: profile?.role ?? 'field_user',
     avatar_url: profile?.avatar_url ?? profile?.avatar ?? '',
     created_at: profile?.created_at ?? new Date().toISOString(),
-    credits: credits ?? profile?.credits ?? 10,
+    credits: credits ?? profile?.credits ?? INITIAL_CREDITS,
   };
 }

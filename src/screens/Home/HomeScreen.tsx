@@ -77,7 +77,7 @@ export default function HomeScreen() {
         <View style={styles.creditRow}>
           <Ionicons name="wallet-outline" size={24} color="#1a5c2a" />
           <View style={styles.creditInfo}>
-            <Text style={styles.creditLabel}>Credits Earned</Text>
+            <Text style={styles.creditLabel}>Credits Remaining</Text>
             <Text style={styles.creditValue}>{user?.credits ?? 0}</Text>
           </View>
         </View>

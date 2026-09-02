@@ -20,16 +20,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       user: state.user ? { ...state.user, credits } : null,
     })),
 
-  // ─── Credits = trees captured within the user's selected projects ───────────
+  // ─── Credits = 500 given credits minus trees added in selected projects ──────
   refreshCredits: async () => {
     const { user, assignedProjects } = get();
     if (!user) return;
-    // 1 tree captured (in a selected project) = 1 credit earned
+    // 1 tree added (in a selected project) = 1 credit deducted from the 500 given
     const { data } = await fetchMyTrees(user.id);
     if (data) {
-      const earned = computeCredits(data, assignedProjects);
+      const remaining = computeCredits(data, assignedProjects);
       set((state) => ({
-        user: state.user ? { ...state.user, credits: earned } : null,
+        user: state.user ? { ...state.user, credits: remaining } : null,
       }));
     }
   },

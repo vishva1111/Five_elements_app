@@ -28,9 +28,9 @@ export default function SubmitSuccessScreen() {
               <Ionicons name="wallet-outline" size={22} color="#1a5c2a" />
             </View>
             <View style={styles.creditInfo}>
-              <Text style={styles.creditLabel}>🎉 +1 credit earned for this tree</Text>
+              <Text style={styles.creditLabel}>🌳 −1 credit used for this tree</Text>
               <Text style={styles.creditValue}>
-                Total Credits Earned: <Text style={styles.creditNumber}>{remainingCredits}</Text>
+                Remaining Credits: <Text style={styles.creditNumber}>{remainingCredits}</Text>
               </Text>
             </View>
           </View>
