@@ -167,13 +167,6 @@ export default function LoginScreen({ navigation }: Props) {
     setSavingProjects(false);
   };
 
-  const handleSkipProjects = () => {
-    // No projects selected — nothing will show for this user
-    setAssignedProjects([]);
-    setActiveProjectId(null);
-    setProjectSelectionPending(false);
-  };
-
   // Show login form
   return (
     <KeyboardAvoidingView
@@ -346,14 +339,6 @@ export default function LoginScreen({ navigation }: Props) {
                 <Text style={styles.confirmBtnText}>
                   {selectedProjects.size > 0 ? 'Start Working' : 'Continue Without Projects'}
                 </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.skipBtn}
-                onPress={handleSkipProjects}
-                disabled={savingProjects}
-              >
-                <Text style={styles.skipBtnText}>Skip for now</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -563,18 +548,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#fff',
-  },
-  skipBtn: {
-    height: 42,
-    borderRadius: 10,
-    backgroundColor: '#f5f5f5',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  skipBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#666',
   },
 });
