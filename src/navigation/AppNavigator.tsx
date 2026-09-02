@@ -88,7 +88,7 @@ function MainTabs() {
         component={CaptureNavigator}
         options={{ headerShown: false, title: 'Capture Tree' }}
       />
-      <Tab.Screen name="History" component={HistoryNavigator} options={{ headerShown: false }} />
+            <Tab.Screen name="History" component={HistoryNavigator} options={{ headerShown: true, title: 'My Submissions' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'My Profile' }} />
     </Tab.Navigator>
   );

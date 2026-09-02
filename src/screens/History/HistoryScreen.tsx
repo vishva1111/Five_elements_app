@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { fetchMyTrees } from '../../services/treeService';
@@ -36,9 +36,18 @@ export default function HistoryScreen() {
     if (data) setTrees(data);
   };
 
-  useEffect(() => {
+    useEffect(() => {
     loadTrees();
   }, [user]);
+
+  // ─── Reload trees whenever the screen regains focus ───────────────────────
+  // Ensures the list always shows the latest capture (e.g. after returning from
+  // SubmitSuccess / TreeDetail) without requiring a manual pull-to-refresh.
+  useFocusEffect(
+    useCallback(() => {
+      loadTrees();
+    }, [user])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);

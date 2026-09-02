@@ -46,10 +46,11 @@ export default function HomeScreen() {
     loadTrees();
   }, [user]);
 
-  // ─── Refresh credits when screen is focused (e.g. after returning from capture) ─
+    // ─── Refresh credits + tree list when screen is focused (e.g. after returning from capture) ─
   useFocusEffect(
     useCallback(() => {
       refreshCredits();
+      loadTrees();
     }, [])
   );
 
