@@ -24,11 +24,10 @@ const FILTERS: { label: string; value: HealthStatus | 'all' }[] = [
 
 export default function HistoryScreen() {
   const navigation = useNavigation<any>();
-  const { user, assignedProjects } = useAuthStore();
+  const { user, activeProjectId } = useAuthStore();
   const { trees, setTrees } = useTreeStore();
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<HealthStatus | 'all'>('all');
-  const [projectFilter, setProjectFilter] = useState<string>('all');
 
   const loadTrees = async () => {
     if (!user) return;
@@ -55,20 +54,11 @@ export default function HistoryScreen() {
     setRefreshing(false);
   };
 
-  // Use assigned projects from auth store (project-level access control)
-  const visibleProjects = assignedProjects;
-  // Only show trees from the user's selected projects (records with no project stay visible)
-  const assignedIds = new Set(visibleProjects.map((p) => p.id));
-  const assignedMatch = (projectId?: string) =>
-    assignedIds.size === 0 || !projectId || assignedIds.has(projectId);
-
+  // Filter trees by active project only
   const filtered = trees.filter((t) => {
     const healthMatch = filter === 'all' || t.health_status === filter;
-    const projectMatch =
-      projectFilter === 'all' ||
-      t.project_id === projectFilter ||
-      (projectFilter === 'none' && !t.project_id);
-    return healthMatch && projectMatch && assignedMatch(t.project_id);
+    const projectMatch = activeProjectId ? t.project_id === activeProjectId : true;
+    return healthMatch && projectMatch;
   });
 
   return (
@@ -86,44 +76,6 @@ export default function HistoryScreen() {
             </Text>
           </TouchableOpacity>
         ))}
-      </View>
-
-      {/* Project Filter Bar — shows only assigned projects */}
-      <View style={styles.filterBar}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.projectScrollContent}>
-          <TouchableOpacity
-            style={[styles.filterBtn, projectFilter === 'all' && styles.filterBtnActive]}
-            onPress={() => setProjectFilter('all')}
-          >
-            <Text style={[styles.filterBtnText, projectFilter === 'all' && styles.filterBtnTextActive]}>
-              All Projects
-            </Text>
-          </TouchableOpacity>
-          {trees.some((t) => !t.project_id) && (
-            <TouchableOpacity
-              style={[styles.filterBtn, projectFilter === 'none' && styles.filterBtnActive]}
-              onPress={() => setProjectFilter('none')}
-            >
-              <Text style={[styles.filterBtnText, projectFilter === 'none' && styles.filterBtnTextActive]}>
-                No Project
-              </Text>
-            </TouchableOpacity>
-          )}
-          {visibleProjects.map((p) => (
-            <TouchableOpacity
-              key={p.id}
-              style={[styles.filterBtn, projectFilter === p.id && styles.filterBtnActive, styles.projectNameBtn]}
-              onPress={() => setProjectFilter(p.id)}
-            >
-              <Text
-                style={[styles.filterBtnText, projectFilter === p.id && styles.filterBtnTextActive]}
-                numberOfLines={1}
-              >
-                {p.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
       </View>
 
       {/* Count */}
@@ -148,7 +100,7 @@ export default function HistoryScreen() {
             <Text style={styles.emptyEmoji}>🌱</Text>
             <Text style={styles.emptyText}>No trees found</Text>
             <Text style={styles.emptySubText}>
-              {filter !== 'all' || projectFilter !== 'all'
+              {filter !== 'all'
                 ? 'Try a different filter'
                 : 'Capture your first tree!'}
             </Text>

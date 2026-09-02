@@ -98,12 +98,14 @@ export interface AuthState {
   session: any | null;
   loading: boolean;
   assignedProjects: Project[];
+  activeProjectId: string | null;
   // True while the user is choosing their projects on the login page
   projectSelectionPending: boolean;
   setUser: (user: User | null) => void;
   setSession: (session: any | null) => void;
   setLoading: (loading: boolean) => void;
   setAssignedProjects: (projects: Project[]) => void;
+  setActiveProjectId: (projectId: string | null) => void;
   setProjectSelectionPending: (pending: boolean) => void;
   setUserCredits: (credits: number) => void;
   refreshCredits: () => Promise<void>;

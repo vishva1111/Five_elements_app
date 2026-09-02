@@ -13,11 +13,12 @@ import { useTreeStore } from '../../store/treeStore';
 import { fetchMyTrees } from '../../services/treeService';
 import { TreeRecord } from '../../types';
 import StatusBadge from '../../components/StatusBadge';
+import ProjectSelector from '../../components/ProjectSelector';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
-  const { user, assignedProjects, refreshCredits } = useAuthStore();
+  const { user, activeProjectId, refreshCredits } = useAuthStore();
   const { trees, setTrees } = useTreeStore();
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({ total: 0, healthy: 0, sick: 0, dead: 0 });
@@ -26,12 +27,10 @@ export default function HomeScreen() {
     if (!user) return;
     const { data } = await fetchMyTrees(user.id);
     if (data) {
-      // Only show trees from the user's selected projects (no-project records stay visible)
-      const assignedIds = new Set(assignedProjects.map((p) => p.id));
-      const visibleTrees =
-        assignedProjects.length > 0
-          ? data.filter((t) => !t.project_id || assignedIds.has(t.project_id))
-          : data;
+      // Filter trees by active project only
+      const visibleTrees = activeProjectId
+        ? data.filter((t) => t.project_id === activeProjectId)
+        : data;
       setTrees(visibleTrees);
       setStats({
         total: visibleTrees.length,
@@ -44,7 +43,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     loadTrees();
-  }, [user]);
+  }, [user, activeProjectId]);
 
     // ─── Refresh credits + tree list when screen is focused (e.g. after returning from capture) ─
   useFocusEffect(
@@ -71,6 +70,9 @@ export default function HomeScreen() {
       <View style={styles.banner}>
         <Text style={styles.greeting}>Hello, {user?.full_name?.split(' ')[0] ?? 'Field User'}</Text>
         <Text style={styles.bannerSub}>Ready to capture trees today?</Text>
+        <View style={styles.projectSelectorWrapper}>
+          <ProjectSelector />
+        </View>
       </View>
 
       {/* Credit Balance Card */}
@@ -188,6 +190,9 @@ const styles = StyleSheet.create({
   },
   greeting: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
   bannerSub: { fontSize: 14, color: '#a5d6a7', marginTop: 4 },
+  projectSelectorWrapper: {
+    marginTop: 12,
+  },
   creditCard: {
     backgroundColor: '#fff',
     marginHorizontal: 16,

@@ -13,7 +13,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 
 export default function ProfileScreen() {
-  const { user, assignedProjects, signOut, refreshCredits } = useAuthStore();
+  const { user, assignedProjects, activeProjectId, signOut, refreshCredits } = useAuthStore();
   const { trees } = useTreeStore();
 
   // ─── Refresh credits when screen is focused ─────────────────────────────────
@@ -94,9 +94,24 @@ export default function ProfileScreen() {
         ) : (
           <View style={styles.projectsCard}>
             {assignedProjects.map((project) => (
-              <View key={project.id} style={styles.projectItem}>
-                <Ionicons name="folder-outline" size={18} color="#1a5c2a" />
+              <View
+                key={project.id}
+                style={[
+                  styles.projectItem,
+                  project.id === activeProjectId && styles.projectItemActive,
+                ]}
+              >
+                <Ionicons
+                  name={project.id === activeProjectId ? 'folder' : 'folder-outline'}
+                  size={18}
+                  color="#1a5c2a"
+                />
                 <Text style={styles.projectName}>{project.name}</Text>
+                {project.id === activeProjectId && (
+                  <View style={styles.activeBadge}>
+                    <Text style={styles.activeBadgeText}>ACTIVE</Text>
+                  </View>
+                )}
               </View>
             ))}
           </View>
@@ -305,10 +320,28 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
+  projectItemActive: {
+    backgroundColor: '#E8F5E9',
+    marginHorizontal: -8,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
   projectName: {
     fontSize: 14,
     color: '#333',
     fontWeight: '500',
+    flex: 1,
+  },
+  activeBadge: {
+    backgroundColor: '#1a5c2a',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  activeBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
   },
   noProjectsCard: {
     backgroundColor: '#FEF0E3',

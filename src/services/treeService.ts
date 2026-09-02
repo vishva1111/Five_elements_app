@@ -221,10 +221,11 @@ export async function createTreeRecord(
 }
 
 // ─── Credit calculation helpers ─────────────────────────────────────────────────
-// Every user is GIVEN 500 credits upfront. Adding a tree DEDUCTS from that
-// balance (credits = 500 − tree count):
-// - projects selected → only trees inside those projects deduct credits
-// - no projects selected → all of the user's trees deduct credits
+// Credits are PER PROJECT. Every project is GIVEN 500 credits upfront for the
+// user. Adding a tree to a project DEDUCTS from that project's balance.
+//   credits for project X = 500 − number of trees the user added in project X
+// When no project is active the credits stay at the initial 500 (nothing logs
+// against a specific project unless one is selected).
 export const INITIAL_CREDITS = 500;
 
 export function filterTreesByProjects(
@@ -240,6 +241,17 @@ export function filterTreesByProjects(
 export function computeCredits(trees: TreeRecord[] | null, projects: Project[]): number {
   const treeCount = filterTreesByProjects(trees, projects).length;
   return Math.max(0, INITIAL_CREDITS - treeCount);
+}
+
+// ─── Credits for a SINGLE project (the active one) ──────────────────────────────
+// 500 given − number of trees the user added inside this one project.
+export function computeCreditsForProject(
+  trees: TreeRecord[] | null,
+  projectId: string | null | undefined
+): number {
+  if (!trees || !projectId) return INITIAL_CREDITS;
+  const count = trees.filter((t) => t.project_id === projectId).length;
+  return Math.max(0, INITIAL_CREDITS - count);
 }
 
 // ─── Device-local cache of the user's project selection ────────────────────────

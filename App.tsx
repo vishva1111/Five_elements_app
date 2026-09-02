@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from './src/services/supabase';
 import { useAuthStore } from './src/store/authStore';
 import { useTreeStore } from './src/store/treeStore';
-import { fetchUserProfile, fetchMyTrees, fetchUserProjects, buildUserFromProfile, computeCredits, getCachedUserProjects, cacheUserProjects } from './src/services/treeService';
+import { fetchUserProfile, fetchMyTrees, fetchUserProjects, buildUserFromProfile, computeCreditsForProject, INITIAL_CREDITS, getCachedUserProjects, cacheUserProjects } from './src/services/treeService';
 
 // Screens
 import LoginScreen from './src/screens/Auth/LoginScreen';
@@ -96,10 +96,10 @@ function MainTabs() {
 // ─── Fetch full user data (profile + credits + projects) ──────────────────────
 async function loadUserData(userId: string, email: string) {
   const { data: profile, error: profileError } = await fetchUserProfile(userId);
-  // Fetch the user's trees — credits are computed from the selected projects below
+  // Fetch the user's trees — per-project credits are computed below
   const { data: userTrees } = await fetchMyTrees(userId);
-  let remainingCredits = 0;
- 
+  let remainingCredits = INITIAL_CREDITS;
+
   let projects: any[] = [];
   try {
     const { data: userProjects } = await fetchUserProjects(userId);
@@ -118,8 +118,8 @@ async function loadUserData(userId: string, email: string) {
     projects = [];
   }
 
-  // Credits = 500 given credits minus trees added in the selected projects
-  remainingCredits = computeCredits(userTrees, projects);
+  // Credits are PER PROJECT — start on the first assigned project's balance
+  remainingCredits = computeCreditsForProject(userTrees, projects[0]?.id);
 
   const user = buildUserFromProfile(
     userId,
@@ -133,7 +133,7 @@ async function loadUserData(userId: string, email: string) {
 
 export default function App() {
   const [session, setSession] = useState<any>(undefined); // undefined = loading, null = no session
-  const { setUser, setSession: storeSetSession, setAssignedProjects } = useAuthStore();
+  const { setUser, setSession: storeSetSession, setAssignedProjects, setActiveProjectId } = useAuthStore();
   // While the user is choosing projects on the login page, keep them there
   const projectSelectionPending = useAuthStore((s) => s.projectSelectionPending);
   // Remember which user we already loaded so one login never loads twice
@@ -174,6 +174,10 @@ export default function App() {
             // the login screen owns project assignment until it clears the flag
             if (!useAuthStore.getState().projectSelectionPending) {
               setAssignedProjects(projects);
+              // Set active project to first assigned project if not already set
+              if (projects.length > 0 && !useAuthStore.getState().activeProjectId) {
+                setActiveProjectId(projects[0].id);
+              }
             }
           })
           .catch((err) => {

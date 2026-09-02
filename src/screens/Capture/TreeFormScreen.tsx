@@ -27,7 +27,7 @@ import {
 } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
-import { insertTreeRecord, syncUserCredits, computeCredits } from '../../services/treeService';
+import { insertTreeRecord, syncUserCredits, computeCreditsForProject } from '../../services/treeService';
 import { uploadTreePhoto } from '../../services/storageService';
 import MapPreview from '../../components/MapPreview';
 
@@ -38,14 +38,15 @@ export default function TreeFormScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
   const { photoUri, coords } = route.params;
-  const { user, assignedProjects, setUserCredits } = useAuthStore();
+  const { user, assignedProjects, activeProjectId, setUserCredits } = useAuthStore();
   const { addTree } = useTreeStore();
 
+  // Auto-select the active project
   const [form, setForm] = useState<TreeFormData>({
     species: '',
     health_status: 'healthy',
     notes: '',
-    project_id: '',
+    project_id: activeProjectId ?? '',
     event_type: 'Planting',
     quantity: 200,
   });
@@ -132,14 +133,13 @@ export default function TreeFormScreen() {
 
       if (error || !data) throw new Error(error ?? 'Failed to save tree record');
 
-      // 3. Deduct credit — 1 credit deducted per tree added within the selected
-      //    projects (balance starts at the 500 credits given to every user)
+      // 3. Deduct credit — 1 credit deducted per tree added within the ACTIVE
+      //    project (each project has its own 500-credit pool)
       addTree(data);
-      // Credits = 500 given credits minus trees added in the projects selected at login
-      const { assignedProjects } = useAuthStore.getState();
-      const remainingCredits = computeCredits(
+      const { activeProjectId } = useAuthStore.getState();
+      const remainingCredits = computeCreditsForProject(
         useTreeStore.getState().trees,
-        assignedProjects
+        activeProjectId
       );
       setUserCredits(remainingCredits);
       // Keep the profile credits column in sync (best-effort, non-blocking)
@@ -323,7 +323,7 @@ export default function TreeFormScreen() {
             </View>
           </View>
 
-          {/* Project — dropdown showing only the projects selected at login */}
+          {/* Project — shows active project as pre-selected */}
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>PROJECT</Text>
             {projects.length > 0 ? (
@@ -336,12 +336,12 @@ export default function TreeFormScreen() {
                   }}
                 >
                   <View style={styles.projectDropdownLeft}>
-                    <Ionicons name="folder" size={18} color={form.project_id ? '#2B5341' : '#999'} />
+                    <Ionicons name="folder" size={18} color="#2B5341" />
                     <Text
-                      style={[styles.projectDropdownText, !selectedProject && styles.projectDropdownPlaceholder]}
+                      style={styles.projectDropdownText}
                       numberOfLines={1}
                     >
-                      {selectedProject ? selectedProject.name : 'Select a project'}
+                      {selectedProject?.name ?? 'Select a project'}
                     </Text>
                   </View>
                   <Ionicons name={showProjectDropdown ? 'chevron-up' : 'chevron-down'} size={18} color="#888" />
@@ -439,9 +439,9 @@ export default function TreeFormScreen() {
       {/* Save Button */}
       <View style={styles.saveSection}>
         <TouchableOpacity
-          style={[styles.saveBtn, (submitting || (projects.length > 0 && !form.project_id)) && styles.saveBtnDisabled]}
+          style={[styles.saveBtn, submitting && styles.saveBtnDisabled]}
           onPress={handleSubmit}
-          disabled={submitting || (user?.credits ?? 0) <= 0 || (projects.length > 0 && !form.project_id)}
+          disabled={submitting || (user?.credits ?? 0) <= 0}
         >
           <Ionicons name="checkmark-circle" size={22} color="#112121" />
           <Text style={styles.saveBtnText}>

@@ -25,7 +25,7 @@ type Props = {
 
 export default function LoginScreen({ navigation }: Props) {
   const { signIn, loading } = useAuth();
-  const { setAssignedProjects, setProjectSelectionPending } = useAuthStore();
+  const { setAssignedProjects, setActiveProjectId, setProjectSelectionPending } = useAuthStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -159,6 +159,10 @@ export default function LoginScreen({ navigation }: Props) {
     }
 
     setAssignedProjects(selected);
+    // Set active project to first selected project
+    if (selected.length > 0) {
+      setActiveProjectId(selected[0].id);
+    }
     setProjectSelectionPending(false);
     setSavingProjects(false);
   };
@@ -166,6 +170,7 @@ export default function LoginScreen({ navigation }: Props) {
   const handleSkipProjects = () => {
     // No projects selected — nothing will show for this user
     setAssignedProjects([]);
+    setActiveProjectId(null);
     setProjectSelectionPending(false);
   };
 

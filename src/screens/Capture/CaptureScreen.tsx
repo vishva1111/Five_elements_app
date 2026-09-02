@@ -28,7 +28,7 @@ export default function CaptureScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const { cameraRef, flash, facing, setIsReady, takePicture, toggleFlash, toggleFacing } = useCamera();
   const { coords, loading: gpsLoading, requestLocation } = useLocation();
-  const { user, assignedProjects } = useAuthStore();
+  const { user, assignedProjects, activeProjectId } = useAuthStore();
   const [capturing, setCapturing] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<'acquiring' | 'good' | 'unavailable'>('acquiring');
   const [mediaPermission, setMediaPermission] = useState(false);
@@ -145,13 +145,12 @@ export default function CaptureScreen() {
     return `${date} · ${time}`;
   };
 
-  // Get assigned project name(s) — user may have selected multiple projects
+  // Show the ACTIVE project in the header — the one the user is currently working in
+  const activeProject = assignedProjects.find((p) => p.id === activeProjectId);
   const projectName =
     assignedProjects.length === 0
       ? 'No project assigned'
-      : assignedProjects.length === 1
-        ? assignedProjects[0].name
-        : `${assignedProjects[0].name} +${assignedProjects.length - 1} more`;
+      : activeProject?.name ?? assignedProjects[0].name;
 
   return (
     <View style={styles.container}>
