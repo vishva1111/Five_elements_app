@@ -14,8 +14,9 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useCamera } from '../../hooks/useCamera';
 import { useLocation } from '../../hooks/useLocation';
-import { CaptureStackParamList } from '../../types';
+import { CaptureStackParamList, Project } from '../../types';
 import { useAuthStore } from '../../store/authStore';
+import { fetchAllProjects } from '../../services/treeService';
 
 type Nav = NativeStackNavigationProp<CaptureStackParamList, 'CaptureCamera'>;
 
@@ -24,7 +25,8 @@ export default function CaptureScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const { cameraRef, flash, facing, setIsReady, takePicture, toggleFlash, toggleFacing } = useCamera();
   const { coords, requestLocation } = useLocation();
-  const { user, assignedProjects, activeProjectId } = useAuthStore();
+  const { user, activeProjectId } = useAuthStore();
+  const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [capturing, setCapturing] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<'acquiring' | 'good' | 'unavailable'>('acquiring');
   const [mediaPermission, setMediaPermission] = useState(false);
@@ -37,6 +39,19 @@ export default function CaptureScreen() {
     requestLocation().then((result) => {
       setGpsStatus(result ? 'good' : 'unavailable');
     });
+  }, []);
+
+  // Load ALL projects so the header can show the ACTIVE project's name —
+  // matching the dashboard (which lists every project, not just assigned ones).
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await fetchAllProjects();
+      if (active && data) setAllProjects(data);
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -142,11 +157,11 @@ export default function CaptureScreen() {
   };
 
   // Show the ACTIVE project in the header — the one the user is currently working in
-  const activeProject = assignedProjects.find((p) => p.id === activeProjectId);
+  const activeProject = allProjects.find((p) => p.id === activeProjectId);
   const projectName =
-    assignedProjects.length === 0
-      ? 'No project assigned'
-      : activeProject?.name ?? assignedProjects[0].name;
+    allProjects.length === 0
+      ? 'No project available'
+      : activeProject?.name ?? 'Select a project';
 
   return (
     <View style={styles.container}>
@@ -161,10 +176,6 @@ export default function CaptureScreen() {
             <Text style={styles.headerSubtitle} numberOfLines={1}>{projectName}</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.syncBtn}>
-          <Ionicons name="cloud-upload-outline" size={18} color="#AACBA7" />
-          <Text style={styles.syncBtnText}>0 waiting</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Camera View */}
@@ -217,7 +228,7 @@ export default function CaptureScreen() {
           activeOpacity={0.8}
         >
           {capturing ? (
-            <ActivityIndicator color="#2B5341" size="small" />
+            <ActivityIndicator color="#1a5c2a" size="small" />
           ) : (
             <View style={styles.shutterBtnInner} />
           )}
@@ -225,11 +236,15 @@ export default function CaptureScreen() {
 
         {/* Flash + Flip Buttons */}
         <View style={styles.sideButtons}>
-          <TouchableOpacity style={styles.sideBtn} onPress={toggleFlash}>
+          <TouchableOpacity
+            style={[styles.sideBtn, flash === 'on' && styles.sideBtnActive]}
+            onPress={toggleFlash}
+            activeOpacity={0.7}
+          >
             <Ionicons
               name={flash === 'on' ? 'flash' : 'flash-off'}
               size={20}
-              color="#fff"
+              color={flash === 'on' ? '#F09125' : '#fff'}
             />
           </TouchableOpacity>
           <TouchableOpacity style={styles.sideBtn} onPress={toggleFacing}>
@@ -277,7 +292,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a5c2a',
     paddingHorizontal: 32,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 7.5,
   },
   permBtnText: {
     color: '#fff',
@@ -286,12 +301,12 @@ const styles = StyleSheet.create({
   },
   // Header
   header: {
-    backgroundColor: '#2B5341',
+    backgroundColor: '#1a5c2a',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingTop: 48,
   },
   headerLeft: {
@@ -303,7 +318,7 @@ const styles = StyleSheet.create({
   pentagon: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: 7.5,
     backgroundColor: 'rgba(170, 203, 167, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -313,27 +328,14 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 19,
     fontWeight: '700',
+    textTransform: 'uppercase',
   },
   headerSubtitle: {
     color: '#AACBA7',
     fontSize: 11,
     marginTop: 2,
-  },
-  syncBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#112121',
-    paddingHorizontal: 14,
-    height: 40,
-    borderRadius: 20,
-  },
-  syncBtnText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
   },
   // Camera
   camera: {
@@ -351,7 +353,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#EAF3DE',
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 7.5,
     zIndex: 10,
   },
   gpsChipGood: {
@@ -363,11 +365,11 @@ const styles = StyleSheet.create({
   gpsDot: {
     width: 9,
     height: 9,
-    borderRadius: 5,
+    borderRadius: 7.5,
     backgroundColor: '#6B7B6E',
   },
   gpsDotGood: {
-    backgroundColor: '#2B5341',
+    backgroundColor: '#1a5c2a',
   },
   gpsDotPulse: {
     backgroundColor: '#6B7B6E',
@@ -424,7 +426,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 7.5,
   },
   coordsText: {
     color: '#fff',
@@ -445,12 +447,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 22,
     paddingVertical: 14,
-    backgroundColor: '#112121',
+    backgroundColor: '#1a5c2a',
   },
   galleryBtn: {
     width: 52,
     height: 52,
-    borderRadius: 12,
+    borderRadius: 7.5,
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.4)',
     backgroundColor: 'transparent',
@@ -460,7 +462,7 @@ const styles = StyleSheet.create({
   shutterBtn: {
     width: 76,
     height: 76,
-    borderRadius: 38,
+    borderRadius: 7.5,
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
@@ -478,9 +480,9 @@ const styles = StyleSheet.create({
   shutterBtnInner: {
     width: 56,
     height: 56,
-    borderRadius: 28,
+    borderRadius: 7.5,
     borderWidth: 2.5,
-    borderColor: '#2B5341',
+    borderColor: '#1a5c2a',
   },
   sideButtons: {
     alignItems: 'center',
@@ -489,14 +491,17 @@ const styles = StyleSheet.create({
   sideBtn: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: 7.5,
     backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  sideBtnActive: {
+    backgroundColor: 'rgba(240,145,37,0.35)',
+  },
   // Hint Bar
   hintBar: {
-    backgroundColor: '#112121',
+    backgroundColor: '#1a5c2a',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

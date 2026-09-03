@@ -7,7 +7,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import MapView, { Marker, UrlTile, MapPressEvent } from 'react-native-maps';
+import MapView, { Marker, UrlTile, Callout, MapPressEvent } from 'react-native-maps';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -64,7 +64,7 @@ export default function MapPickerScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>📍 Confirm Location</Text>
+        <Text style={styles.headerTitle}>Confirm Location</Text>
         <View style={{ width: 44 }} />
       </View>
 
@@ -89,9 +89,14 @@ export default function MapPickerScreen() {
             const { latitude, longitude } = e.nativeEvent.coordinate;
             setCoords({ latitude, longitude });
           }}
-          title="Tree Location"
-          description="Drag to adjust"
-        />
+        >
+          <Callout>
+            <View>
+              <Text>📍 Tree Location</Text>
+              <Text>{coords.latitude.toFixed(6)}, {coords.longitude.toFixed(6)}</Text>
+            </View>
+          </Callout>
+        </Marker>
       </MapView>
 
       {/* Instruction */}
@@ -141,7 +146,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#1a5c2a',
-    paddingTop: 52,
+    paddingTop: 48,
     paddingBottom: 14,
     paddingHorizontal: 16,
   },
@@ -151,7 +156,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  headerTitle: { color: '#fff', fontSize: 19, fontWeight: '700', textTransform: 'uppercase', textAlign: 'center', flex: 1 },
   map: { flex: 1 },
   instruction: {
     backgroundColor: 'rgba(0,0,0,0.65)',
@@ -170,7 +175,7 @@ const styles = StyleSheet.create({
   },
   coordsBox: {
     backgroundColor: '#f0fdf4',
-    borderRadius: 10,
+    borderRadius: 7.5,
     padding: 12,
     marginBottom: 16,
     borderWidth: 1,
@@ -187,7 +192,7 @@ const styles = StyleSheet.create({
     gap: 6,
     borderWidth: 2,
     borderColor: '#1a5c2a',
-    borderRadius: 12,
+    borderRadius: 7.5,
     paddingVertical: 14,
   },
   relocateBtnText: { color: '#1a5c2a', fontWeight: '600', fontSize: 14 },
@@ -198,7 +203,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: '#1a5c2a',
-    borderRadius: 12,
+    borderRadius: 7.5,
     paddingVertical: 14,
   },
   confirmBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },

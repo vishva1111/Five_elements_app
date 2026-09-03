@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#fff',
-    borderRadius: 24,
+    borderRadius: 7.5,
     padding: 32,
     alignItems: 'center',
     width: '100%',
@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
   iconCircle: {
     width: 120,
     height: 120,
-    borderRadius: 60,
+    borderRadius: 7.5,
     backgroundColor: '#dcfce7',
     alignItems: 'center',
     justifyContent: 'center',
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
   },
   creditCard: {
     backgroundColor: '#f0fdf4',
-    borderRadius: 12,
+    borderRadius: 7.5,
     borderWidth: 1,
     borderColor: '#bbf7d0',
     paddingVertical:  14,
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
   creditIconWrap: {
     width:  42,
     height:  42,
-    borderRadius:  21,
+    borderRadius: 7.5,
     backgroundColor: '#E8F5E9',
     alignItems: 'center',
     justifyContent:'center',
@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   creditNumber: { color: '#1a5c2a', fontWeight: 'bold', fontSize:17 },
   infoBox: {
     backgroundColor: '#f0fdf4',
-    borderRadius: 12,
+    borderRadius: 7.5,
     padding: 16,
     width: '100%',
     gap: 8,
@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     backgroundColor: '#1a5c2a',
-    borderRadius: 12,
+    borderRadius: 7.5,
     paddingVertical: 14,
     paddingHorizontal: 28,
     width: '100%',

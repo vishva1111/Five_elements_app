@@ -34,7 +34,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 20,
+    borderRadius: 7.5,
     gap: 4,
   },
   badgeSm: { paddingHorizontal: 7, paddingVertical: 3 },

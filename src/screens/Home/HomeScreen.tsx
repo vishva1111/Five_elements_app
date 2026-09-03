@@ -8,15 +8,18 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { fetchMyTrees } from '../../services/treeService';
 import StatusBadge from '../../components/StatusBadge';
 import ProjectSelector from '../../components/ProjectSelector';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   // Select stable primitives — the `user` OBJECT changes identity on every credit
   // refresh, so depending on it inside useFocusEffect would re-trigger a refetch
   // loop (list keeps re-ordering while refreshing).
@@ -27,6 +30,9 @@ export default function HomeScreen() {
   const { trees, setTrees } = useTreeStore();
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({ total: 0, healthy: 0, sick: 0, dead: 0 });
+
+  const firstName = (user?.full_name?.trim()?.split(' ')[0] || '').replace(/[.!]$/, '');
+  const greetingName = firstName || 'there';
 
   // Guards against out-of-order responses: only the MOST RECENT loadTrees call
   // may write to the store, so a slow earlier request can't overwrite a newer
@@ -76,27 +82,49 @@ export default function HomeScreen() {
   return (
     <ScrollView
       style={styles.container}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a5c2a" />}
     >
-      {/* Welcome Banner */}
-      <View style={styles.banner}>
-        <Text style={styles.greeting}>Hello, {user?.full_name?.split(' ')[0] ?? 'Field User'}</Text>
-        <Text style={styles.bannerSub}>Ready to capture trees today?</Text>
+      {/* Welcome Banner — green fading down to a light/white green */}
+      <LinearGradient
+        colors={['#1a5c2a', '#48915b', '#cde8d3']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.banner}
+      >
+        <View style={styles.bannerTopRow}>
+          <View style={styles.bannerGreeting}>
+            <Text style={styles.greeting}>Hi {greetingName}</Text>
+            <Text style={styles.bannerSub}>Ready to capture trees today?</Text>
+          </View>
+          {/* Compact credits pill — shown near the user's name, no big card */}
+          <View style={styles.creditsPill}>
+            <Ionicons name="wallet-outline" size={15} color="#F09125" />
+            <Text style={styles.creditsPillText}>{user?.credits ?? 0}</Text>
+          </View>
+        </View>
         <View style={styles.projectSelectorWrapper}>
           <ProjectSelector />
         </View>
-      </View>
+      </LinearGradient>
 
-      {/* Credit Balance Card */}
-      <View style={styles.creditCard}>
-        <View style={styles.creditRow}>
-          <Ionicons name="wallet-outline" size={24} color="#1a5c2a" />
-          <View style={styles.creditInfo}>
-            <Text style={styles.creditLabel}>Credits Remaining</Text>
-            <Text style={styles.creditValue}>{user?.credits ?? 0}</Text>
-          </View>
+      {/* Capture CTA — prioritized for field agents */}
+      <TouchableOpacity
+        style={styles.captureBtn}
+        onPress={() => navigation.navigate('Capture')}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.captureBtnIcon}>📸</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.captureBtnTitle}>Capture a Tree</Text>
+          <Text style={styles.captureBtnSub}>Take photo + tag GPS location</Text>
         </View>
-      </View>
+        {(user?.credits ?? 0) > 0 && (
+          <View style={styles.creditBadge}>
+            <Text style={styles.creditBadgeText}>{user?.credits} credits</Text>
+          </View>
+        )}
+      </TouchableOpacity>
 
       {/* Stats Cards */}
       <View style={styles.statsRow}>
@@ -118,28 +146,10 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* Capture CTA */}
-      <TouchableOpacity
-        style={styles.captureBtn}
-        onPress={() => navigation.navigate('Capture')}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.captureBtnIcon}>📸</Text>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.captureBtnTitle}>Capture a Tree</Text>
-          <Text style={styles.captureBtnSub}>Take photo + tag GPS location</Text>
-        </View>
-        {(user?.credits ?? 0) > 0 && (
-          <View style={styles.creditBadge}>
-            <Text style={styles.creditBadgeText}>{user?.credits} credits</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-
-      {/* Recent Submissions */}
+      {/* Recent Captures */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Submissions</Text>
+          <Text style={styles.sectionTitle}>Recent Captures</Text>
           {trees.length > 5 && (
             <TouchableOpacity onPress={() => navigation.navigate('History')}>
               <Text style={styles.seeAll}>See all</Text>
@@ -198,41 +208,34 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a5c2a',
     padding: 24,
     paddingTop: 20,
-    paddingBottom: 32,
+    paddingBottom: 16,
   },
-  greeting: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
-  bannerSub: { fontSize: 14, color: '#a5d6a7', marginTop: 4 },
-  projectSelectorWrapper: {
-    marginTop: 12,
-  },
-  creditCard: {
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginTop: -16,
-    borderRadius: 12,
-    padding: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-  },
-  creditRow: {
+  bannerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 12,
   },
-  creditInfo: {
-    flex: 1,
+  bannerGreeting: { flex: 1 },
+  creditsPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 7.5,
+    alignSelf: 'flex-start',
   },
-  creditLabel: {
-    fontSize: 12,
-    color: '#888',
+  creditsPillText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#F09125',
   },
-  creditValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1a5c2a',
+  greeting: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
+  bannerSub: { fontSize: 14, color: '#fff', marginTop: 4 },
+  projectSelectorWrapper: {
+    marginTop: 12,
   },
   statsRow: {
     flexDirection: 'row',
@@ -243,7 +246,7 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 7.5,
     padding: 12,
     alignItems: 'center',
     borderTopWidth: 3,
@@ -260,7 +263,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#1a5c2a',
     margin: 16,
-    borderRadius: 16,
+    borderRadius: 7.5,
     padding: 20,
     gap: 16,
     elevation: 3,
@@ -272,7 +275,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 7.5,
   },
   creditBadgeText: {
     fontSize: 11,
@@ -290,7 +293,7 @@ const styles = StyleSheet.create({
   seeAll: { fontSize: 13, color: '#1a5c2a', fontWeight: '600' },
   treeRow: {
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 7.5,
     padding: 14,
     marginBottom: 8,
     flexDirection: 'row',

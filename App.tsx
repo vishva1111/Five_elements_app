@@ -4,14 +4,17 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, View, ActivityIndicator, Text } from 'react-native';
+import { StyleSheet, View, ActivityIndicator, Text, Image } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from './src/services/supabase';
 import { useAuthStore } from './src/store/authStore';
 import { useTreeStore } from './src/store/treeStore';
-import { fetchUserProfile, fetchMyTrees, fetchUserProjects, buildUserFromProfile, computeCreditsForProject, INITIAL_CREDITS, getCachedUserProjects, cacheUserProjects } from './src/services/treeService';
+import { fetchUserProfile, fetchMyTrees, fetchUserProjects, fetchAllProjects, buildUserFromProfile, computeCreditsForProject, INITIAL_CREDITS, getCachedUserProjects, cacheUserProjects } from './src/services/treeService';
+import { getCachedActiveProject } from './src/store/authStore';
+import logo from './src/assets/logo.png';
 
 // Screens
 import LoginScreen from './src/screens/Auth/LoginScreen';
@@ -56,16 +59,18 @@ function HistoryNavigator() {
       screenOptions={{
         headerStyle: { backgroundColor: '#1a5c2a' },
         headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: 'bold' },
+        headerTitleStyle: { fontWeight: 'bold', fontSize: 19 },
+        headerTitleAlign: 'center',
       }}
     >
-      <HistoryStack.Screen name="HistoryList" component={HistoryScreen} options={{ title: 'My Submissions' }} />
-      <HistoryStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'Tree Details' }} />
+      <HistoryStack.Screen name="HistoryList" component={HistoryScreen} options={{ title: 'MY SUBMISSIONS' }} />
+      <HistoryStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS' }} />
     </HistoryStack.Navigator>
   );
 }
 
 function MainTabs() {
+  const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -79,16 +84,23 @@ function MainTabs() {
         },
         tabBarActiveTintColor: '#1a5c2a',
         tabBarInactiveTintColor: '#888',
-        tabBarStyle: { paddingBottom: 4, height: 60 },
+        // Respect the gesture/navigation bar inset so tabs stay fully visible
+        // and tappable on devices with on-screen navigation bars.
+        tabBarStyle: {
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 6,
+          paddingTop: 6,
+          height: 60 + (insets.bottom > 0 ? insets.bottom : 6),
+        },
         headerStyle: { backgroundColor: '#1a5c2a' },
         headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: 'bold' },
+        headerTitleStyle: { fontWeight: 'bold', fontSize: 19 },
+        headerTitleAlign: 'center',
       })}
     >
-      <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Dashboard' }} />
-      <Tab.Screen name="Capture" component={CaptureNavigator} options={{ headerShown: false, title: 'Capture Tree' }} />
+      <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'DASHBOARD' }} />
+      <Tab.Screen name="Capture" component={CaptureNavigator} options={{ headerShown: false, title: 'CAPTURE TREE' }} />
       <Tab.Screen name="History" component={HistoryNavigator} options={{ headerShown: false }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'My Profile' }} />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'MY PROFILE' }} />
     </Tab.Navigator>
   );
 }
@@ -100,26 +112,42 @@ async function loadUserData(userId: string, email: string) {
   const { data: userTrees } = await fetchMyTrees(userId);
   let remainingCredits = INITIAL_CREDITS;
 
-  let projects: any[] = [];
+  // ALL projects — the active-project dropdown and restoration use this list,
+  // so the app shows every project and can restore any previously-used project.
+  let allProjects: any[] = [];
   try {
-    const { data: userProjects } = await fetchUserProjects(userId);
-    // Only the projects this user selected at login are visible — no fallback
-    projects = userProjects ?? [];
-    if (projects.length === 0) {
-      // Fall back to the last selection saved on this device, so the app
-      // opens directly with the already-selected projects
-      const cached = await getCachedUserProjects(userId);
-      if (cached && cached.length > 0) projects = cached;
-    } else {
-      // Keep the device cache fresh for future fallbacks
-      await cacheUserProjects(userId, projects);
-    }
+    const { data } = await fetchAllProjects();
+    allProjects = data ?? [];
   } catch {
-    projects = [];
+    allProjects = [];
   }
 
-  // Credits are PER PROJECT — start on the first assigned project's balance
-  remainingCredits = computeCreditsForProject(userTrees, projects[0]?.id);
+  // Assigned projects are kept for backward compatibility (login assignment),
+  // but no longer gate what can be selected as the active project.
+  let assignedProjects: any[] = [];
+  try {
+    const { data } = await fetchUserProjects(userId);
+    assignedProjects = data ?? [];
+    if (assignedProjects.length === 0) {
+      const cached = await getCachedUserProjects(userId);
+      if (cached && cached.length > 0) assignedProjects = cached;
+    } else {
+      await cacheUserProjects(userId, assignedProjects);
+    }
+  } catch {
+    assignedProjects = [];
+  }
+
+  // Restore the LAST ACTIVE project the user was working with (persisted per
+  // user on the device). If it no longer exists, or nothing was saved yet,
+  // fall back to the first available project so the app always opens with an
+  // active project selected.
+  const lastActive = await getCachedActiveProject(userId);
+  const validLastActive =
+    lastActive && allProjects.some((p: any) => p.id === lastActive) ? lastActive : null;
+  const initialActiveProjectId = validLastActive ?? allProjects[0]?.id ?? null;
+
+  remainingCredits = computeCreditsForProject(userTrees, initialActiveProjectId);
 
   const user = buildUserFromProfile(
     userId,
@@ -128,7 +156,7 @@ async function loadUserData(userId: string, email: string) {
     remainingCredits
   );
 
-  return { user, projects };
+  return { user, projects: assignedProjects, initialActiveProjectId };
 }
 
 export default function App() {
@@ -167,17 +195,17 @@ export default function App() {
         loadedUserIdRef.current = s.user.id;
         // Fire and forget — a data-loading failure must NEVER log the user out
         loadUserData(s.user.id, s.user.email ?? '')
-          .then(({ user, projects }) => {
+          .then(({ user, projects, initialActiveProjectId }) => {
             setUser(user);
             // While the user is still choosing projects on the login screen,
             // do NOT overwrite the selection they are about to confirm there —
             // the login screen owns project assignment until it clears the flag
             if (!useAuthStore.getState().projectSelectionPending) {
               setAssignedProjects(projects);
-              // Set active project to first assigned project if not already set
-              if (projects.length > 0 && !useAuthStore.getState().activeProjectId) {
-                setActiveProjectId(projects[0].id);
-              }
+              // Restore the last active project (persisted per user) so the app
+              // reopens showing the same project the user was working on. Falls
+              // back to the first available project if nothing was stored yet.
+              setActiveProjectId(initialActiveProjectId);
             }
           })
           .catch((err) => {
@@ -212,27 +240,29 @@ export default function App() {
   if (session === undefined) {
     return (
       <View style={styles.loading}>
-        <Text style={styles.loadingEmoji}>🌳</Text>
-        <ActivityIndicator size="large" color="#1a5c2a" style={{ marginTop: 16 }} />
-        <Text style={styles.loadingText}>TreeApp</Text>
+        <Image source={logo} style={styles.loadingLogo} resizeMode="contain" />
+        <ActivityIndicator size="large" color="#1a5c2a" style={{ marginTop: 20 }} />
+        <Text style={styles.loadingText}>Five Elements</Text>
       </View>
     );
   }
 
   return (
     <GestureHandlerRootView style={styles.root}>
-      <PaperProvider theme={theme}>
-        <NavigationContainer>
-          <StatusBar style="light" backgroundColor="#1a5c2a" />
-          <RootStack.Navigator screenOptions={{ headerShown: false }}>
-            {!session || projectSelectionPending ? (
-              <RootStack.Screen name="Login" component={LoginScreen} />
-            ) : (
-              <RootStack.Screen name="Main" component={MainTabs} />
-            )}
-          </RootStack.Navigator>
-        </NavigationContainer>
-      </PaperProvider>
+      <SafeAreaProvider>
+        <PaperProvider theme={theme}>
+          <NavigationContainer>
+            <StatusBar style="light" backgroundColor="#1a5c2a" />
+            <RootStack.Navigator screenOptions={{ headerShown: false }}>
+              {!session || projectSelectionPending ? (
+                <RootStack.Screen name="Login" component={LoginScreen} />
+              ) : (
+                <RootStack.Screen name="Main" component={MainTabs} />
+              )}
+            </RootStack.Navigator>
+          </NavigationContainer>
+        </PaperProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
@@ -245,7 +275,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#f5f5f5',
   },
-  loadingEmoji: { fontSize: 64 },
+  loadingLogo: {
+    width: 120,
+    height: 120,
+    marginBottom: 8,
+  },
   loadingText: {
     marginTop: 12,
     fontSize: 20,
