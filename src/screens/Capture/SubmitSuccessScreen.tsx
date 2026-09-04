@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
   iconCircle: {
     width: 120,
     height: 120,
-    borderRadius: 7.5,
+    borderRadius: 60,
     backgroundColor: '#dcfce7',
     alignItems: 'center',
     justifyContent: 'center',
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
   creditIconWrap: {
     width:  42,
     height:  42,
-    borderRadius: 7.5,
+    borderRadius: 21,
     backgroundColor: '#E8F5E9',
     alignItems: 'center',
     justifyContent:'center',

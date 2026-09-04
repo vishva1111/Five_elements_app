@@ -5,12 +5,21 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
     "assetBundlePatterns": [
       "**/*"
     ],
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.fiveelements.treeapp",
+      "splash": {
+        "image": "./assets/splash-icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#ffffff"
+      },
       "infoPlist": {
         "NSCameraUsageDescription": "TreeApp needs camera access to photograph trees in the field.",
         "NSLocationWhenInUseUsageDescription": "TreeApp needs your location to tag the GPS coordinates of each tree.",
@@ -19,6 +28,15 @@
     },
     "android": {
       "package": "com.fiveelements.treeapp",
+      "splash": {
+        "image": "./assets/splash-icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#ffffff"
+      },
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
       "config": {
         "googleMaps": {
           "apiKey": "REPLACE_WITH_YOUR_GOOGLE_MAPS_API_KEY"
@@ -37,6 +55,15 @@
       ]
     },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
       [
         "expo-camera",
         {
