@@ -61,7 +61,7 @@ export default function TreeCard({ tree, onPress }: Props) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 7.5,
     marginBottom: 12,
     overflow: 'hidden',
     elevation: 2,

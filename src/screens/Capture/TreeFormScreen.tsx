@@ -25,7 +25,8 @@ import {
 } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
-import { insertTreeRecord, syncUserCredits, computeCreditsForProject } from '../../services/treeService';
+import { insertTreeRecord, syncUserCredits, computeCreditsForProject, fetchAllProjects } from '../../services/treeService';
+import { Project } from '../../types';
 import { uploadTreePhoto } from '../../services/storageService';
 import MapPreview from '../../components/MapPreview';
 
@@ -36,8 +37,9 @@ export default function TreeFormScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
   const { photoUri, coords } = route.params;
-  const { user, assignedProjects, activeProjectId, setUserCredits } = useAuthStore();
-  const { addTree } = useTreeStore();
+  const { user, activeProjectId, setUserCredits } = useAuthStore();
+  const { addTree, trees } = useTreeStore();
+  const [allProjects, setAllProjects] = useState<Project[]>([]);
 
   // Auto-select the active project
   const [form, setForm] = useState<TreeFormData>({
@@ -57,18 +59,19 @@ export default function TreeFormScreen() {
   const scrollOffsetRef = useRef(0);
   const windowHRef = useRef(Dimensions.get('window').height);
 
-  // Scroll the page so the NOTE field sits fully above the keyboard.
-  // Works whether or not the OS resizes the window when the keyboard opens.
-  const bringNotesAboveKeyboard = (kbHeight?: number) => {
+  // Scroll the page so the NOTE field sits fully above the keyboard. Uses the
+  // ACTUAL measured keyboard height (instead of a hardcoded guess) and handles
+  // both iOS "padding" and Android "adjustResize" so the field is never hidden.
+  const bringNotesAboveKeyboard = (kb?: number) => {
     const scroll = scrollRef.current;
     const input = notesFieldRef.current;
     if (!scroll || !input) return;
     input.measureInWindow((_x: number, y: number, _w: number, h: number) => {
       const winH = Dimensions.get('window').height;
       // If the OS already shrank the window (adjustResize), the keyboard is
-      // excluded from winH; otherwise subtract the keyboard height ourselves
+      // excluded from winH; otherwise subtract the measured keyboard height.
       const resized = winH < windowHRef.current - 20;
-      const visibleBottom = resized ? winH : winH - (kbHeight ?? 300);
+      const visibleBottom = resized ? winH : winH - (kb ?? 300);
       const overflow = y + h + 16 - visibleBottom;
       if (overflow > 0) {
         scroll.scrollTo({ y: scrollOffsetRef.current + overflow, animated: true });
@@ -79,26 +82,52 @@ export default function TreeFormScreen() {
   const handleNotesFocus = () => {
     // Close the species dropdown so it never sits over the keyboard
     setShowSpeciesPicker(false);
-    // Scroll twice: once early, once after the keyboard has fully opened,
-    // so the NOTE field ends up visible on every device
+    // Scroll a few times so the NOTE field ends up visible after the layout
+    // settles on every device
     setTimeout(() => bringNotesAboveKeyboard(), 150);
     setTimeout(() => bringNotesAboveKeyboard(), 500);
   };
 
-  // Whenever the keyboard opens while the NOTE field is focused, re-scroll
-  // so the field (and what you type) stays visible
+  // Whenever the keyboard opens while the NOTE field is focused, re-scroll so
+  // the field (and what you type) stays visible using the REAL keyboard height
   useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', () => {
-      setTimeout(() => bringNotesAboveKeyboard(), 150);
-      setTimeout(() => bringNotesAboveKeyboard(), 450);
+    const willShow = Keyboard.addListener('keyboardWillShow', (e) => {
+      setTimeout(() => bringNotesAboveKeyboard(e.endCoordinates.height), 150);
+      setTimeout(() => bringNotesAboveKeyboard(e.endCoordinates.height), 500);
     });
-    return () => showSub.remove();
+    const didShow = Keyboard.addListener('keyboardDidShow', (e) => {
+      setTimeout(() => bringNotesAboveKeyboard(e.endCoordinates.height), 150);
+      setTimeout(() => bringNotesAboveKeyboard(e.endCoordinates.height), 450);
+    });
+    return () => {
+      willShow.remove();
+      didShow.remove();
+    };
   }, []);
 
-  // ─── PROJECT dropdown shows only the projects selected at login ────────────
-  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  // ─── Load ALL projects so the picker matches the dashboard (not just login) ──
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await fetchAllProjects();
+      if (active && data) setAllProjects(data);
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  const projects = assignedProjects;
+  // Keep the form's project in step with the ACTIVE project: whenever the user
+  // switches the active project, the capture is pre-assigned to it.
+  useEffect(() => {
+    if (activeProjectId && form.project_id !== activeProjectId) {
+      setForm((f) => ({ ...f, project_id: activeProjectId }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProjectId]);
+
+  // ─── PROJECT dropdown shows ALL projects, defaults to the active one ───────
+  const projects = allProjects;
   const selectedProject = projects.find((p) => p.id === form.project_id);
 
   const handleSubmit = async () => {
@@ -158,26 +187,32 @@ export default function TreeFormScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      {/* Header */}
+      {/* Header with credits on the right */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Field capture</Text>
-        <View style={{ width: 44 }} />
-      </View>
-
-      {/* Credit Banner */}
-      <View style={styles.creditBanner}>
-        <Ionicons name="wallet-outline" size={18} color="#1a5c2a" />
-        <Text style={styles.creditText}>
-          Credits: <Text style={styles.creditCount}>{user?.credits ?? 0}</Text>
-        </Text>
-        {user?.credits !== undefined && user.credits <= 3 && (
-          <Text style={styles.creditWarning}>
-            {user.credits === 0 ? 'No credits!' : `Only ${user.credits} left`}
+        <View
+          style={[
+            styles.headerCredits,
+            user?.credits !== undefined && user.credits <= 3 && styles.headerCreditsLow,
+          ]}
+        >
+          <Ionicons
+            name="wallet-outline"
+            size={14}
+            color={user?.credits !== undefined && user.credits <= 3 ? '#fff' : '#1a5c2a'}
+          />
+          <Text
+            style={[
+              styles.headerCreditsText,
+              user?.credits !== undefined && user.credits <= 3 && styles.headerCreditsLowText,
+            ]}
+          >
+            {user?.credits ?? 0}
           </Text>
-        )}
+        </View>
       </View>
 
       <ScrollView
@@ -321,82 +356,20 @@ export default function TreeFormScreen() {
             </View>
           </View>
 
-          {/* Project — shows active project as pre-selected */}
+          {/* Project — read-only active project display */}
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>PROJECT</Text>
-            {projects.length > 0 ? (
-              <>
-                <TouchableOpacity
-                  style={styles.projectDropdownTrigger}
-                  onPress={() => {
-                    Keyboard.dismiss(); // keep the keyboard from covering the list
-                    setShowProjectDropdown(!showProjectDropdown);
-                  }}
+            <View style={styles.projectDropdownTrigger}>
+              <View style={styles.projectDropdownLeft}>
+                <Ionicons name="folder" size={18} color="#1a5c2a" />
+                <Text
+                  style={styles.projectDropdownText}
+                  numberOfLines={1}
                 >
-                  <View style={styles.projectDropdownLeft}>
-                    <Ionicons name="folder" size={18} color="#2B5341" />
-                    <Text
-                      style={styles.projectDropdownText}
-                      numberOfLines={1}
-                    >
-                      {selectedProject?.name ?? 'Select a project'}
-                    </Text>
-                  </View>
-                  <Ionicons name={showProjectDropdown ? 'chevron-up' : 'chevron-down'} size={18} color="#888" />
-                </TouchableOpacity>
-
-                {showProjectDropdown && (
-                  <View style={styles.projectDropdownList}>
-                    <ScrollView
-                      style={styles.projectDropdownScroll}
-                      nestedScrollEnabled
-                      keyboardShouldPersistTaps="handled"
-                    >
-                      {projects.map((p) => (
-                        <TouchableOpacity
-                          key={p.id}
-                          style={[
-                            styles.projectDropdownItem,
-                            form.project_id === p.id && styles.projectDropdownItemActive,
-                          ]}
-                          onPress={() => {
-                            setForm({ ...form, project_id: p.id });
-                            setShowProjectDropdown(false);
-                          }}
-                        >
-                          <View style={styles.projectDropdownLeft}>
-                            <Ionicons
-                              name="folder"
-                              size={18}
-                              color={form.project_id === p.id ? '#2B5341' : '#8AA08F'}
-                            />
-                            <Text
-                              style={[
-                                styles.projectDropdownItemText,
-                                form.project_id === p.id && styles.projectDropdownItemTextActive,
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {p.name}
-                            </Text>
-                          </View>
-                          {form.project_id === p.id && (
-                            <Ionicons name="checkmark-circle" size={18} color="#2B5341" />
-                          )}
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-              </>
-            ) : (
-              <View style={styles.noProjectsInfo}>
-                <Ionicons name="information-circle-outline" size={18} color="#6B7B6E" />
-                <Text style={styles.noProjectsInfoText}>
-                  No projects available. You can still capture trees without selecting a project.
+                  {selectedProject?.name ?? 'All Projects'}
                 </Text>
               </View>
-            )}
+            </View>
           </View>
 
           {/* Notes */}
@@ -441,14 +414,11 @@ export default function TreeFormScreen() {
           onPress={handleSubmit}
           disabled={submitting || (user?.credits ?? 0) <= 0}
         >
-          <Ionicons name="checkmark-circle" size={22} color="#112121" />
+          <Ionicons name="checkmark-circle" size={20} color="#112121" />
           <Text style={styles.saveBtnText}>
             {submitting ? 'Submitting...' : 'Save capture'}
           </Text>
         </TouchableOpacity>
-        <Text style={styles.saveHint}>
-          Saves to this device instantly — even with no signal.
-        </Text>
       </View>
     </KeyboardAvoidingView>
   );
@@ -463,8 +433,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#2B5341',
+    backgroundColor: '#1a5c2a',
     paddingTop: 48,
     paddingBottom: 14,
     paddingHorizontal: 14,
@@ -477,33 +446,33 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 19,
     fontWeight: '700',
-  },
-  // Credit Banner
-  creditBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E8F5E9',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#C8E6C9',
-  },
-  creditText: {
-    fontSize: 13,
-    color: '#1a5c2a',
+    textTransform: 'uppercase',
+    textAlign: 'center',
     flex: 1,
   },
-  creditCount: {
-    fontWeight: '700',
-    fontSize: 15,
+  headerCredits: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#fff',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 7.5,
+    minWidth: 48,
+    justifyContent: 'center',
   },
-  creditWarning: {
-    color: '#8B3A00',
-    fontSize: 11,
-    fontWeight: '600',
+  headerCreditsText: {
+    color: '#1a5c2a',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  headerCreditsLow: {
+    backgroundColor: '#F09125',
+  },
+  headerCreditsLowText: {
+    color: '#fff',
   },
   // Scroll Content
   scrollContent: {
@@ -531,7 +500,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 12,
+    borderRadius: 7.5,
   },
   photoBadgeText: {
     color: '#fff',
@@ -543,7 +512,7 @@ const styles = StyleSheet.create({
     height: 120,
     marginHorizontal: 16,
     marginTop: 12,
-    borderRadius: 12,
+    borderRadius: 7.5,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#E5E5E5',
@@ -559,7 +528,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#2B5341',
+    color: '#1a5c2a',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
@@ -581,7 +550,7 @@ const styles = StyleSheet.create({
   eventTypeBtn: {
     height: 44,
     paddingHorizontal: 18,
-    borderRadius: 22,
+    borderRadius: 7.5,
     borderWidth: 1.5,
     borderColor: '#AACBA7',
     backgroundColor: '#fff',
@@ -589,8 +558,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   eventTypeBtnActive: {
-    backgroundColor: '#2B5341',
-    borderColor: '#2B5341',
+    backgroundColor: '#1a5c2a',
+    borderColor: '#1a5c2a',
   },
   eventTypeText: {
     fontSize: 14,
@@ -610,9 +579,9 @@ const styles = StyleSheet.create({
   quantityBtn: {
     width: 56,
     height: 56,
-    borderRadius: 14,
+    borderRadius: 7.5,
     borderWidth: 1.5,
-    borderColor: '#2B5341',
+    borderColor: '#1a5c2a',
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
@@ -620,13 +589,13 @@ const styles = StyleSheet.create({
   quantityBtnText: {
     fontSize: 26,
     fontWeight: '700',
-    color: '#2B5341',
+    color: '#1a5c2a',
   },
   quantityDisplay: {
     flex: 1,
     borderWidth: 1.5,
     borderColor: '#AACBA7',
-    borderRadius: 14,
+    borderRadius: 7.5,
     backgroundColor: '#fff',
     flexDirection: 'row',
     alignItems: 'center',
@@ -648,7 +617,7 @@ const styles = StyleSheet.create({
     height: 52,
     borderWidth: 1.5,
     borderColor: '#AACBA7',
-    borderRadius: 14,
+    borderRadius: 7.5,
     paddingHorizontal: 16,
     backgroundColor: '#fff',
     flexDirection: 'row',
@@ -666,7 +635,7 @@ const styles = StyleSheet.create({
   speciesList: {
     borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 12,
+    borderRadius: 7.5,
     overflow: 'hidden',
     maxHeight: 240,
     backgroundColor: '#fff',
@@ -690,7 +659,7 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   speciesItemTextActive: {
-    color: '#2B5341',
+    color: '#1a5c2a',
     fontWeight: '600',
   },
   // Health Status
@@ -702,7 +671,7 @@ const styles = StyleSheet.create({
   healthBtn: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 7.5,
     borderWidth: 2,
   },
   healthBtnText: {
@@ -716,7 +685,7 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 14,
     backgroundColor: '#F5F5F5',
-    borderRadius: 12,
+    borderRadius: 7.5,
     borderWidth: 1,
     borderColor: '#E5E5E5',
   },
@@ -734,7 +703,7 @@ const styles = StyleSheet.create({
     minHeight: 52,
     borderWidth: 1.5,
     borderColor: '#DDE7D8',
-    borderRadius: 12,
+    borderRadius: 7.5,
     paddingHorizontal: 14,
     paddingVertical: 12,
     backgroundColor: '#fff',
@@ -755,7 +724,7 @@ const styles = StyleSheet.create({
   projectDropdownList: {
     borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 12,
+    borderRadius: 7.5,
     overflow: 'hidden',
     maxHeight: 220,
     backgroundColor: '#fff',
@@ -782,14 +751,14 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   projectDropdownItemTextActive: {
-    color: '#2B5341',
+    color: '#1a5c2a',
     fontWeight: '600',
   },
   // Notes
   notesInput: {
     borderWidth: 1.5,
     borderColor: '#AACBA7',
-    borderRadius: 14,
+    borderRadius: 7.5,
     padding: 14,
     fontSize: 15,
     backgroundColor: '#fff',
@@ -803,13 +772,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF0E3',
     borderWidth: 1,
     borderColor: '#EF9F27',
-    borderRadius: 12,
+    borderRadius: 7.5,
     padding: 12,
   },
   accuracyDot: {
     width: 10,
     height: 10,
-    borderRadius: 5,
+    borderRadius: 7.5,
     backgroundColor: '#EF9F27',
     marginTop: 3,
   },
@@ -821,8 +790,9 @@ const styles = StyleSheet.create({
   },
   // Save Section
   saveSection: {
-    padding: 16,
-    paddingBottom: 24,
+    padding: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 20,
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#EDE6DF',
@@ -833,13 +803,13 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   saveBtn: {
-    height: 60,
-    borderRadius: 16,
+    height: 48,
+    borderRadius: 7.5,
     backgroundColor: '#F09125',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
     shadowColor: '#F09125',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
@@ -851,14 +821,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
   },
   saveBtnText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: '#112121',
-  },
-  saveHint: {
-    textAlign: 'center',
-    fontSize: 12,
-    color: '#6B7B6E',
-    marginTop: 8,
   },
 });

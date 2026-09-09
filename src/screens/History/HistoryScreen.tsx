@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
   filterBtn: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 7.5,
     backgroundColor: '#f3f4f6',
   },
   filterBtnActive: { backgroundColor: '#1a5c2a' },

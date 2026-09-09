@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import MapView, { Marker, UrlTile } from 'react-native-maps';
+import MapView, { Marker, UrlTile, Callout } from 'react-native-maps';
 import { Coordinates } from '../types';
 
 interface Props {
@@ -50,8 +50,14 @@ export default function MapPreview({
         />
         <Marker
           coordinate={{ latitude: coords.latitude, longitude: coords.longitude }}
-          title="Tree Location"
-        />
+        >
+          <Callout>
+            <View>
+              <Text>📍 Tree Location</Text>
+              <Text>{Number(coords.latitude ?? 0).toFixed(5)}, {Number(coords.longitude ?? 0).toFixed(5)}</Text>
+            </View>
+          </Callout>
+        </Marker>
       </MapView>
 
       {/* Coords overlay */}
@@ -72,7 +78,7 @@ export default function MapPreview({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 12,
+    borderRadius: 7.5,
     overflow: 'hidden',
     backgroundColor: '#e8f5e9',
   },
@@ -81,7 +87,7 @@ const styles = StyleSheet.create({
     bottom: 8,
     left: 8,
     backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: 8,
+    borderRadius: 7.5,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
@@ -91,7 +97,7 @@ const styles = StyleSheet.create({
     top: 8,
     right: 8,
     backgroundColor: 'rgba(26,92,42,0.85)',
-    borderRadius: 8,
+    borderRadius: 7.5,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },

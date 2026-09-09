@@ -64,6 +64,39 @@ export interface Project {
   status: string;
 }
 
+// ─── Task Types ────────────────────────────────────────────────────────────────
+
+export type TaskStatus = 'assigned' | 'in_progress' | 'completed';
+
+export interface Task {
+  id: string;
+  name: string;
+  project_id?: string;
+  assignee_id: string;
+  target_count: number;
+  location?: string;
+  priority: 'high' | 'medium' | 'low';
+  due_date?: string | null;
+  started_at?: string | null;
+  created_at: string;
+  // Derived live from actual tree captures (never stored — fully automatic)
+  captured: number;
+  remaining: number;
+  progress: number; // 0..100
+  status: TaskStatus;
+  // Joined fields
+  project_name?: string;
+}
+
+// ─── Task Store Types ──────────────────────────────────────────────────────────
+
+export interface TaskState {
+  tasks: Task[];
+  localTasks: Task[]; // tasks created in the UI, stored on-device (no DB needed)
+  setTasks: (tasks: Task[]) => void;
+  setLocalTasks: (localTasks: Task[]) => void;
+}
+
 // ─── Navigation Types ──────────────────────────────────────────────────────────
 
 export type RootStackParamList = {

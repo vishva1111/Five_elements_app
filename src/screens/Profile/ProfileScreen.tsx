@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,27 +7,46 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
+import { fetchAllProjects } from '../../services/treeService';
+import { Project } from '../../types';
+
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function ProfileScreen() {
-  const { user, assignedProjects, activeProjectId, signOut, refreshCredits } = useAuthStore();
+  const insets = useSafeAreaInsets();
+  const { user, activeProjectId, signOut, refreshCredits } = useAuthStore();
   const { trees } = useTreeStore();
+  const [allProjects, setAllProjects] = useState<Project[]>([]);
 
-  // ─── Refresh credits when screen is focused ─────────────────────────────────
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await fetchAllProjects();
+      if (active && data) setAllProjects(data);
+    })();
+    return () => { active = false; };
+  }, []);
+
+  // ─── Refresh credits when screen is focused ───────────────────────────────
   useFocusEffect(
     useCallback(() => {
       refreshCredits();
     }, [])
   );
 
+  // Filter the user's OWN trees to the ACTIVE project only
+  const activeTrees = trees.filter((t) => activeProjectId ? t.project_id === activeProjectId : true);
+
   const stats = {
-    total: trees.length,
-    healthy: trees.filter((t) => t.health_status === 'healthy').length,
-    sick: trees.filter((t) => t.health_status === 'sick').length,
-    dead: trees.filter((t) => t.health_status === 'dead').length,
+    total: activeTrees.length,
+    healthy: activeTrees.filter((t) => t.health_status === 'healthy').length,
+    sick: activeTrees.filter((t) => t.health_status === 'sick').length,
+    dead: activeTrees.filter((t) => t.health_status === 'dead').length,
   };
 
   const handleSignOut = () => {
@@ -42,9 +61,17 @@ export default function ProfileScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Avatar & Name */}
-      <View style={styles.profileHeader}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
+    >
+      {/* Avatar & Name — green fading down to a light/white green */}
+      <LinearGradient
+        colors={['#1a5c2a', '#48915b', '#cde8d3']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.profileHeader}
+      >
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
             {user?.full_name?.charAt(0)?.toUpperCase() ?? '?'}
@@ -55,7 +82,7 @@ export default function ProfileScreen() {
         <View style={styles.roleBadge}>
           <Text style={styles.roleText}>{user?.role ?? 'field_user'}</Text>
         </View>
-      </View>
+      </LinearGradient>
 
       {/* Credits Section */}
       <View style={styles.creditsSection}>
@@ -81,41 +108,15 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      {/* Assigned Projects */}
+      {/* Active Project — read-only display */}
       <View style={styles.projectsSection}>
-        <Text style={styles.sectionTitle}>Assigned Projects ({assignedProjects.length})</Text>
-        {assignedProjects.length === 0 ? (
-          <View style={styles.noProjectsCard}>
-            <Ionicons name="alert-circle-outline" size={20} color="#8B3A00" />
-            <Text style={styles.noProjectsText}>
-              No projects assigned. Contact your administrator.
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.projectsCard}>
-            {assignedProjects.map((project) => (
-              <View
-                key={project.id}
-                style={[
-                  styles.projectItem,
-                  project.id === activeProjectId && styles.projectItemActive,
-                ]}
-              >
-                <Ionicons
-                  name={project.id === activeProjectId ? 'folder' : 'folder-outline'}
-                  size={18}
-                  color="#1a5c2a"
-                />
-                <Text style={styles.projectName}>{project.name}</Text>
-                {project.id === activeProjectId && (
-                  <View style={styles.activeBadge}>
-                    <Text style={styles.activeBadgeText}>ACTIVE</Text>
-                  </View>
-                )}
-              </View>
-            ))}
-          </View>
-        )}
+        <Text style={styles.sectionTitle}>Active Project</Text>
+        <View style={styles.activeProjectDisplay}>
+          <Ionicons name="folder-open" size={18} color="#1a5c2a" />
+          <Text style={styles.activeProjectName} numberOfLines={1}>
+            {allProjects.find((p) => p.id === activeProjectId)?.name ?? 'All Projects'}
+          </Text>
+        </View>
       </View>
 
       {/* Stats */}
@@ -150,7 +151,7 @@ export default function ProfileScreen() {
       <View style={styles.infoSection}>
         <Text style={styles.sectionTitle}>App Info</Text>
         <View style={styles.infoCard}>
-          <InfoRow icon="phone-portrait" label="App" value="TreeApp v1.0.0" />
+          <InfoRow icon="phone-portrait" label="App" value="Five Elements v1.0.0" />
           <InfoRow icon="server" label="Backend" value="Supabase (Free)" />
           <InfoRow icon="map" label="Maps" value="OpenStreetMap (Free)" />
           <InfoRow icon="location" label="GPS" value="Device GPS (Free)" />
@@ -193,7 +194,7 @@ const statStyles = StyleSheet.create({
   box: {
     flex: 1,
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 7.5,
     padding: 14,
     alignItems: 'center',
     borderTopWidth: 3,
@@ -233,7 +234,7 @@ const styles = StyleSheet.create({
   avatar: {
     width: 80,
     height: 80,
-    borderRadius: 40,
+    borderRadius: 7.5,
     backgroundColor: '#a5d6a7',
     alignItems: 'center',
     justifyContent: 'center',
@@ -241,19 +242,19 @@ const styles = StyleSheet.create({
   },
   avatarText: { fontSize: 32, fontWeight: 'bold', color: '#1a5c2a' },
   name: { fontSize: 22, fontWeight: 'bold', color: '#fff', marginBottom: 4 },
-  email: { fontSize: 13, color: '#a5d6a7', marginBottom: 10 },
+  email: { fontSize: 13, color: '#fff', marginBottom: 10 },
   roleBadge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.9)',
     paddingHorizontal: 14,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 7.5,
   },
-  roleText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  roleText: { color: '#1a5c2a', fontSize: 12, fontWeight: '700' },
   creditsSection: { padding: 16 },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: '#333', marginBottom: 12 },
   creditsCard: {
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 7.5,
     padding: 16,
     elevation: 1,
     shadowColor: '#000',
@@ -282,7 +283,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF0E3',
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 7.5,
   },
   creditsWarningCritical: {
     backgroundColor: '#FEE2E2',
@@ -302,9 +303,23 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   projectsSection: { paddingHorizontal: 16, paddingBottom: 16 },
+  activeProjectDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    borderRadius: 7.5,
+    padding: 12,
+    gap: 10,
+  },
+  activeProjectName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1a5c2a',
+    flex: 1,
+  },
   projectsCard: {
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 7.5,
     padding: 16,
     elevation: 1,
     shadowColor: '#000',
@@ -324,7 +339,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8F5E9',
     marginHorizontal: -8,
     paddingHorizontal: 8,
-    borderRadius: 8,
+    borderRadius: 7.5,
   },
   projectName: {
     fontSize: 14,
@@ -336,7 +351,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a5c2a',
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 7.5,
   },
   activeBadgeText: {
     color: '#fff',
@@ -345,7 +360,7 @@ const styles = StyleSheet.create({
   },
   noProjectsCard: {
     backgroundColor: '#FEF0E3',
-    borderRadius: 14,
+    borderRadius: 7.5,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -363,7 +378,7 @@ const styles = StyleSheet.create({
   infoSection: { paddingHorizontal: 16, paddingBottom: 16 },
   infoCard: {
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 7.5,
     padding: 16,
     elevation: 1,
     shadowColor: '#000',
@@ -379,7 +394,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 16,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 7.5,
     borderWidth: 1.5,
     borderColor: '#ef4444',
     backgroundColor: '#fff',
