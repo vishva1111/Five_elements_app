@@ -45,7 +45,8 @@ export default function TaskScreen() {
   const activeProjectId = useAuthStore((s) => s.activeProjectId);
   const assignedProjects = useAuthStore((s) => s.assignedProjects);
   const refreshCredits = useAuthStore((s) => s.refreshCredits);
-  const { trees, setTrees } = useTreeStore();
+  const trees = useTreeStore((s) => s.trees) ?? [];
+  const setTrees = useTreeStore((s) => s.setTrees);
   const tasks = useTaskStore((s) => s.tasks) ?? [];
   const setTasks = useTaskStore((s) => s.setTasks);
   const localTasks = useTaskStore((s) => s.localTasks) ?? [];
