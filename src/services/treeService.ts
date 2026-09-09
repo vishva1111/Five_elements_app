@@ -210,9 +210,13 @@ export async function fetchAllProjects(): Promise<ApiResponse<Project[]>> {
     .select('id, name, description, status')
     .order('name');
 
+  if (error) {
+    return { data: [], error: error.message };
+  }
+
   return {
-    data: data as Project[] | null,
-    error: error?.message ?? null,
+    data: (data ?? []) as Project[],
+    error: null,
   };
 }
 
