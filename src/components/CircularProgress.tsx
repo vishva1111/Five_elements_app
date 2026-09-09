@@ -7,7 +7,9 @@ interface Props {
   size?: number;
   strokeWidth?: number;
   color?: string;
+  trackColor?: string;
   showLabel?: boolean;
+  children?: React.ReactNode;
 }
 
 export default function CircularProgress({
@@ -15,7 +17,9 @@ export default function CircularProgress({
   size = 80,
   strokeWidth = 8,
   color = '#1a5c2a',
+  trackColor = '#e0e0e0',
   showLabel = true,
+  children,
 }: Props) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -28,7 +32,7 @@ export default function CircularProgress({
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="#e0e0e0"
+          stroke={trackColor}
           strokeWidth={strokeWidth}
           fill="none"
         />
@@ -45,13 +49,13 @@ export default function CircularProgress({
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
       </Svg>
-      {showLabel && (
-        <View style={styles.labelContainer}>
+      <View style={styles.labelContainer}>
+        {children || (showLabel && (
           <Text style={[styles.label, { fontSize: size * 0.2 }]}>
             {Math.round(progress)}%
           </Text>
-        </View>
-      )}
+        ))}
+      </View>
     </View>
   );
 }
