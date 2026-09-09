@@ -1,14 +1,21 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
-export default function CurveDivider() {
+interface Props {
+  height?: number;
+  color?: string;
+  cornerRadius?: number;
+  style?: ViewStyle;
+}
+
+export default function CurveDivider({ height = 30, color = '#E8F5E9', cornerRadius = 24, style }: Props) {
   return (
-    <View style={styles.container}>
-      <Svg width="100%" height={40} viewBox="0 0 400 40" preserveAspectRatio="none">
+    <View style={[styles.container, style]}>
+      <Svg width="100%" height={height} viewBox={`0 0 400 ${height}`} preserveAspectRatio="none">
         <Path
-          d="M0,0 Q200,40 400,0 L400,40 L0,40 Z"
-          fill="#E8F5E9"
+          d={`M0,0 Q200,${height} 400,0 L400,${height} L0,${height} Z`}
+          fill={color}
         />
       </Svg>
     </View>
@@ -17,6 +24,6 @@ export default function CurveDivider() {
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 8,
+    marginVertical: 0,
   },
 });
