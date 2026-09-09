@@ -46,8 +46,9 @@ export default function TaskScreen() {
   const assignedProjects = useAuthStore((s) => s.assignedProjects);
   const refreshCredits = useAuthStore((s) => s.refreshCredits);
   const { trees, setTrees } = useTreeStore();
-  const { tasks, setTasks } = useTaskStore();
-  const localTasks = useTaskStore((s) => s.localTasks);
+  const tasks = useTaskStore((s) => s.tasks) ?? [];
+  const setTasks = useTaskStore((s) => s.setTasks);
+  const localTasks = useTaskStore((s) => s.localTasks) ?? [];
   const setLocalTasks = useTaskStore((s) => s.setLocalTasks);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<TaskTab>('assigned');
