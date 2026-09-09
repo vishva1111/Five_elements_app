@@ -83,7 +83,7 @@ export default function TaskScreen() {
     const localWithProgress = refreshLocalProgress(localTasks, myTrees);
 
     // Get assigned project IDs
-    const assignedProjectIds = new Set(assignedProjects.map((p) => p.id));
+    const assignedProjectIds = new Set((assignedProjects ?? []).map((p) => p.id));
 
     // Filter tasks to only show those from assigned projects
     const filterByAssigned = (tasks: Task[]) =>
