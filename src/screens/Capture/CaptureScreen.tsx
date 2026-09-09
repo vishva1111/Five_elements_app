@@ -12,6 +12,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useCamera } from '../../hooks/useCamera';
 import { useLocation } from '../../hooks/useLocation';
 import { CaptureStackParamList, Project } from '../../types';
@@ -166,7 +167,7 @@ export default function CaptureScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.pentagon}>
             <Ionicons name="leaf" size={20} color="#AACBA7" />
@@ -176,7 +177,7 @@ export default function CaptureScreen() {
             <Text style={styles.headerSubtitle} numberOfLines={1}>{projectName}</Text>
           </View>
         </View>
-      </View>
+      </LinearGradient>
 
       {/* Camera View */}
       <CameraView
@@ -301,7 +302,6 @@ const styles = StyleSheet.create({
   },
   // Header
   header: {
-    backgroundColor: '#1a5c2a',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

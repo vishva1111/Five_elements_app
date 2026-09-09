@@ -16,6 +16,7 @@ import {
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   CaptureStackParamList,
   TreeFormData,
@@ -188,7 +189,7 @@ export default function TreeFormScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {/* Header with credits on the right */}
-      <View style={styles.header}>
+      <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -213,7 +214,7 @@ export default function TreeFormScreen() {
             {user?.credits ?? 0}
           </Text>
         </View>
-      </View>
+      </LinearGradient>
 
       <ScrollView
         ref={scrollRef}
@@ -433,7 +434,6 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a5c2a',
     paddingTop: 48,
     paddingBottom: 14,
     paddingHorizontal: 14,

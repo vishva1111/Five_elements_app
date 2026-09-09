@@ -11,6 +11,7 @@ import MapView, { Marker, UrlTile, Callout, MapPressEvent } from 'react-native-m
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { CaptureStackParamList, Coordinates } from '../../types';
 import { useLocation } from '../../hooks/useLocation';
 
@@ -60,13 +61,13 @@ export default function MapPickerScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Confirm Location</Text>
         <View style={{ width: 44 }} />
-      </View>
+      </LinearGradient>
 
       {/* Map */}
       <MapView
@@ -145,7 +146,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1a5c2a',
     paddingTop: 48,
     paddingBottom: 14,
     paddingHorizontal: 16,

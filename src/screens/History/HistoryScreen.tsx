@@ -12,6 +12,8 @@ import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { fetchMyTrees } from '../../services/treeService';
 import { HealthStatus } from '../../types';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import TreeCard from '../../components/TreeCard';
 
 const FILTERS: { label: string; value: HealthStatus | 'all' }[] = [
@@ -68,6 +70,12 @@ export default function HistoryScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Header */}
+      <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={styles.header}>
+        <Ionicons name="leaf" size={20} color="#fff" />
+        <Text style={styles.headerTitle}>History</Text>
+      </LinearGradient>
+
       {/* Health Status Filter Bar */}
       <View style={styles.filterBar}>
         {FILTERS.map((f) => (
@@ -118,6 +126,19 @@ export default function HistoryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingTop: 48,
+    paddingBottom: 14,
+    paddingHorizontal: 16,
+  },
+  headerTitle: {
+    fontSize: 19,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
   filterBar: {
     flexDirection: 'row',
     paddingHorizontal: 16,

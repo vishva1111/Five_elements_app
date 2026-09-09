@@ -86,6 +86,7 @@ export interface Task {
   status: TaskStatus;
   // Joined fields
   project_name?: string;
+  notes?: string;
 }
 
 // ─── Task Store Types ──────────────────────────────────────────────────────────

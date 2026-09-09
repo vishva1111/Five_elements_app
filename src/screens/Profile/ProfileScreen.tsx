@@ -65,9 +65,9 @@ export default function ProfileScreen() {
       style={styles.container}
       contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
     >
-      {/* Avatar & Name — green fading down to a light/white green */}
+      {/* Avatar & Name — green gradient matching dashboard */}
       <LinearGradient
-        colors={['#1a5c2a', '#48915b', '#cde8d3']}
+        colors={['#123f24', '#1a5c2a', '#2e7d43']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.profileHeader}

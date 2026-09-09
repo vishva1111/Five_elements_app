@@ -64,7 +64,7 @@ function HistoryNavigator() {
         headerTitleAlign: 'center',
       }}
     >
-      <HistoryStack.Screen name="HistoryList" component={HistoryScreen} options={{ title: 'MY SUBMISSIONS' }} />
+      <HistoryStack.Screen name="HistoryList" component={HistoryScreen} options={{ title: 'MY SUBMISSIONS', headerShown: false }} />
       <HistoryStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS' }} />
     </HistoryStack.Navigator>
   );
@@ -79,6 +79,7 @@ function MainTabs() {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
           if (route.name === 'Home') iconName = focused ? 'home' : 'home-outline';
           else if (route.name === 'Capture') iconName = focused ? 'camera' : 'camera-outline';
+          else if (route.name === 'Task') iconName = focused ? 'clipboard' : 'clipboard-outline';
           else if (route.name === 'History') iconName = focused ? 'list' : 'list-outline';
           else if (route.name === 'Profile') iconName = focused ? 'person' : 'person-outline';
           return <Ionicons name={iconName} size={size} color={color} />;
