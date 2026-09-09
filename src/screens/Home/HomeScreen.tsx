@@ -33,9 +33,10 @@ export default function HomeScreen() {
   const userId = user?.id;
   const activeProjectId = useAuthStore((s) => s.activeProjectId);
   const setActiveProjectId = useAuthStore((s) => s.setActiveProjectId);
-  const assignedProjects = useAuthStore((s) => s.assignedProjects);
+  const assignedProjects = useAuthStore((s) => s.assignedProjects) ?? [];
   const refreshCredits = useAuthStore((s) => s.refreshCredits);
-  const { trees, setTrees } = useTreeStore();
+  const trees = useTreeStore((s) => s.trees) ?? [];
+  const setTrees = useTreeStore((s) => s.setTrees);
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({ total: 0, healthy: 0, sick: 0, dead: 0 });
   const [taskStats, setTaskStats] = useState({ total: 0, assigned: 0, inProgress: 0, completed: 0 });
