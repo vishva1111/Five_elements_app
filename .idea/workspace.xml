@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="NONE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="update design.">
+      <change beforePath="$PROJECT_DIR$/src/services/taskService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/taskService.ts" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ClangdSettings">
+    <option name="formatViaClangd" value="false" />
+  </component>
+  <component name="Git.Settings">
+    <option name="INCOMING_COMMITS_CHECK_STRATEGY" value="FETCH" />
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="project_task" />
+      </map>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+    <option name="RESET_MODE" value="HARD" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {}
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/vishva1111/Five_elements_app.git&quot;,
+    &quot;accountId&quot;: &quot;166ab3e3-d5e1-4163-a838-b74233a4f6f8&quot;
+  }
+}</component>
+  <component name="ProblemsViewState">
+    <option name="selectedTabId" value="ProjectErrors" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 0,
+  &quot;fromUser&quot;: false
+}</component>
+  <component name="ProjectId" id="3IiVbnV7yMJLGhF1MYoZSnGdrDh" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;AnalyzeApkAction.lastApkPath&quot;: &quot;D:/5eliment/app/treeapp&quot;,
+    &quot;Lightbuild Test.run.executor&quot;: &quot;Run&quot;,
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;Notification.DisplayName-DoNotAsk-vcs.project.update.finished&quot;: &quot;&quot;,
+    &quot;Notification.DoNotAsk-vcs.project.update.finished&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.readMode.enableVisualFormatting&quot;: &quot;true&quot;,
+    &quot;cf.first.check.clang-format&quot;: &quot;false&quot;,
+    &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
+    &quot;dart.analysis.tool.window.visible&quot;: &quot;false&quot;,
+    &quot;deletionFromPopupRequiresConfirmation&quot;: &quot;false&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;project__task&quot;,
+    &quot;git.auto.fetch.suggestion.counter&quot;: &quot;3&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;show.migrate.to.gradle.popup&quot;: &quot;false&quot;
+  }
+}</component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="" />
+      <created>1788247451170</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1788247451170</updated>
+    </task>
+    <task id="LOCAL-00001" summary="update features">
+      <option name="closed" value="true" />
+      <created>1788260474400</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1788260474402</updated>
+    </task>
+    <task id="LOCAL-00002" summary="update features 2">
+      <option name="closed" value="true" />
+      <created>1788262599997</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1788262599997</updated>
+    </task>
+    <task id="LOCAL-00003" summary="project according to login">
+      <option name="closed" value="true" />
+      <created>1788264146363</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1788264146363</updated>
+    </task>
+    <task id="LOCAL-00004" summary="login session bug fixed.">
+      <option name="closed" value="true" />
+      <created>1788265768741</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1788265768741</updated>
+    </task>
+    <task id="LOCAL-00005" summary="credit logic update">
+      <option name="closed" value="true" />
+      <created>1788332240636</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1788332240636</updated>
+    </task>
+    <task id="LOCAL-00006" summary="design bug">
+      <option name="closed" value="true" />
+      <created>1788333451671</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1788333451671</updated>
+    </task>
+    <task id="LOCAL-00007" summary="design bug 2">
+      <option name="closed" value="true" />
+      <created>1788334001514</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1788334001514</updated>
+    </task>
+    <task id="LOCAL-00008" summary="new Feature- entire app work only with the selected project">
+      <option name="closed" value="true" />
+      <created>1788342085403</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1788342085403</updated>
+    </task>
+    <task id="LOCAL-00009" summary="clean project">
+      <option name="closed" value="true" />
+      <created>1788343397350</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1788343397351</updated>
+    </task>
+    <task id="LOCAL-00010" summary="small design bug">
+      <option name="closed" value="true" />
+      <created>1788343785346</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1788343785347</updated>
+    </task>
+    <task id="LOCAL-00011" summary="project selection logic and redesign the interface.">
+      <option name="closed" value="true" />
+      <created>1788426569425</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1788426569428</updated>
+    </task>
+    <task id="LOCAL-00012" summary="task feature">
+      <option name="closed" value="true" />
+      <created>1788503499647</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1788503499647</updated>
+    </task>
+    <task id="LOCAL-00013" summary="add task page and chnage design.">
+      <option name="closed" value="true" />
+      <created>1788937068975</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1788937068975</updated>
+    </task>
+    <task id="LOCAL-00014" summary="update design.">
+      <option name="closed" value="true" />
+      <created>1788942296721</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1788942296721</updated>
+    </task>
+    <option name="localTasksCounter" value="15" />
+    <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State>
+              <option name="FILTERS">
+                <map>
+                  <entry key="branch">
+                    <value>
+                      <list>
+                        <option value="project_task" />
+                      </list>
+                    </value>
+                  </entry>
+                </map>
+              </option>
+            </State>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="update features" />
+    <MESSAGE value="update features 2" />
+    <MESSAGE value="project according to login" />
+    <MESSAGE value="login session bug fixed." />
+    <MESSAGE value="credit logic update" />
+    <MESSAGE value="design bug" />
+    <MESSAGE value="design bug 2" />
+    <MESSAGE value="new Feature- entire app work only with the selected project" />
+    <MESSAGE value="clean project" />
+    <MESSAGE value="small design bug" />
+    <MESSAGE value="project selection logic and redesign the interface." />
+    <MESSAGE value="task feature" />
+    <MESSAGE value="add task page and chnage design." />
+    <MESSAGE value="update design." />
+    <option name="LAST_COMMIT_MESSAGE" value="update design." />
+  </component>
+</project>

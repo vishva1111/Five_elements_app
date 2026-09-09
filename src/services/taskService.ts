@@ -13,7 +13,7 @@ export async function fetchAgentTasks(userId: string) {
     return { data: [] as Task[], error: error.message };
   }
 
-  return { data: data as Task[], error: null };
+  return { data: (data ?? []) as Task[], error: null };
 }
 
 export async function createTask(task: Omit<Task, 'id' | 'created_at' | 'captured' | 'remaining' | 'progress'>) {
