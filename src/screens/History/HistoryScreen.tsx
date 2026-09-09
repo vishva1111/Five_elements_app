@@ -30,7 +30,8 @@ export default function HistoryScreen() {
   const user = useAuthStore((s) => s.user);
   const userId = user?.id;
   const activeProjectId = useAuthStore((s) => s.activeProjectId);
-  const { trees, setTrees } = useTreeStore();
+  const trees = useTreeStore((s) => s.trees) ?? [];
+  const setTrees = useTreeStore((s) => s.setTrees);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<HealthStatus | 'all'>('all');
 

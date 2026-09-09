@@ -20,7 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, activeProjectId, signOut, refreshCredits } = useAuthStore();
-  const { trees } = useTreeStore();
+  const trees = useTreeStore((s) => s.trees) ?? [];
   const [allProjects, setAllProjects] = useState<Project[]>([]);
 
   useEffect(() => {

@@ -39,7 +39,8 @@ export default function TreeFormScreen() {
   const route = useRoute<Route>();
   const { photoUri, coords } = route.params;
   const { user, activeProjectId, setUserCredits } = useAuthStore();
-  const { addTree, trees } = useTreeStore();
+  const trees = useTreeStore((s) => s.trees) ?? [];
+  const addTree = useTreeStore((s) => s.addTree);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
 
   // Auto-select the active project
