@@ -47,3 +47,17 @@ export async function updateTaskStatus(taskId: string, status: Task['status']) {
 
   return { error: null };
 }
+
+export async function startTask(taskId: string) {
+  const { error } = await supabase
+    .from('tasks')
+    .update({ status: 'in_progress', started_at: new Date().toISOString() })
+    .eq('id', taskId);
+
+  if (error) {
+    console.error('[taskService] startTask error:', error.message);
+    return { error: error.message };
+  }
+
+  return { error: null };
+}

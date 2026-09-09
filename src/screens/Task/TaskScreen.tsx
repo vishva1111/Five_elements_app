@@ -1,349 +1,508 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Modal,
-  TextInput,
-  Alert,
   RefreshControl,
+  Alert,
+  ActivityIndicator,
+  Linking,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuthStore } from '../../store/authStore';
+import { useTreeStore } from '../../store/treeStore';
+import { useTaskStore } from '../../store/taskStore';
+import { fetchMyTrees, fetchAllProjects } from '../../services/treeService';
+import { fetchAgentTasks, startTask } from '../../services/taskService';
+import {
+  loadLocalTasks,
+  saveLocalTasks,
+  makeLocalTask,
+  refreshLocalProgress,
+  isLocalTask,
+} from '../../services/localTaskService';
+import { Task, Project } from '../../types';
+
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useAuthStore } from '../../store/authStore';
-import { useTaskStore } from '../../store/taskStore';
-import { fetchAgentTasks } from '../../services/taskService';
-import { loadLocalTasks, saveLocalTask } from '../../services/localTaskService';
-import { Task, TaskStatus } from '../../types';
 
-const PRIORITY_COLORS: Record<string, string> = {
-  high: '#ef4444',
-  medium: '#f59e0b',
-  low: '#22c55e',
-};
+type TaskTab = 'assigned' | 'in_progress' | 'completed';
 
-const STATUS_ICONS: Record<TaskStatus, keyof typeof Ionicons.glyphMap> = {
-  assigned: 'clipboard-outline',
-  in_progress: 'time-outline',
-  completed: 'checkmark-circle',
-};
+const TABS: { key: TaskTab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'assigned', label: 'Assigned', icon: 'clipboard-outline' },
+  { key: 'in_progress', label: 'Pending', icon: 'time-outline' },
+  { key: 'completed', label: 'Completed', icon: 'checkmark-done-circle-outline' },
+];
 
 export default function TaskScreen() {
+  const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
-  const { tasks, setTasks, localTasks, setLocalTasks } = useTaskStore();
+  const userId = user?.id;
+  const activeProjectId = useAuthStore((s) => s.activeProjectId);
+  const assignedProjects = useAuthStore((s) => s.assignedProjects);
+  const refreshCredits = useAuthStore((s) => s.refreshCredits);
+  const { trees, setTrees } = useTreeStore();
+  const { tasks, setTasks } = useTaskStore();
+  const localTasks = useTaskStore((s) => s.localTasks);
+  const setLocalTasks = useTaskStore((s) => s.setLocalTasks);
   const [refreshing, setRefreshing] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [filter, setFilter] = useState<'all' | TaskStatus>('all');
-  const [newTask, setNewTask] = useState({
-    name: '',
-    target_count: '',
-    priority: 'medium' as 'high' | 'medium' | 'low',
-    location: '',
-    due_date: '',
-  });
-  const [submitting, setSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState<TaskTab>('assigned');
+  const [addingDemo, setAddingDemo] = useState(false);
+  const [allProjects, setAllProjects] = useState<Project[]>([]);
+  const loadSeqRef = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadLocalTasks().then((loaded) => {
+      if (!cancelled && loaded.length > 0) setLocalTasks(loaded);
+    });
+
+    (async () => {
+      const { data } = await fetchAllProjects();
+      if (!cancelled && data) setAllProjects(data);
+    })();
+
+    return () => { cancelled = true; };
+  }, []);
 
   const loadTasks = useCallback(async () => {
-    if (!user?.id) return;
-    const { data } = await fetchAgentTasks(user.id);
-    if (data) setTasks(data);
-  }, [user?.id, setTasks]);
+    if (!userId) return;
+    const seq = ++loadSeqRef.current;
+    const [treesRes, tasksRes] = await Promise.all([
+      fetchMyTrees(userId),
+      fetchAgentTasks(userId),
+    ]);
+    if (seq !== loadSeqRef.current) return;
+    const myTrees = treesRes.data ?? [];
+    const localWithProgress = refreshLocalProgress(localTasks, myTrees);
 
-  const loadLocal = useCallback(async () => {
-    const local = await loadLocalTasks();
-    setLocalTasks(local);
-  }, [setLocalTasks]);
+    // Get assigned project IDs
+    const assignedProjectIds = new Set(assignedProjects.map((p) => p.id));
+
+    // Filter tasks to only show those from assigned projects
+    const filterByAssigned = (tasks: Task[]) =>
+      tasks.filter((t) => !t.project_id || assignedProjectIds.has(t.project_id));
+
+    if (tasksRes.data) {
+      let visibleTasks = filterByAssigned(tasksRes.data);
+      if (activeProjectId) {
+        visibleTasks = visibleTasks.filter((t) => t.project_id === activeProjectId);
+      }
+      const visibleLocal = filterByAssigned(localWithProgress);
+      setTasks([...visibleTasks, ...visibleLocal]);
+    } else {
+      let visibleLocalTasks = filterByAssigned(localWithProgress);
+      if (activeProjectId) {
+        visibleLocalTasks = visibleLocalTasks.filter((t) => t.project_id === activeProjectId);
+      }
+      setTasks(visibleLocalTasks);
+    }
+  }, [userId, activeProjectId, assignedProjects, setTasks, localTasks]);
 
   useFocusEffect(
     useCallback(() => {
       loadTasks();
-      loadLocal();
-    }, [loadTasks, loadLocal])
+    }, [loadTasks])
   );
 
-  const onRefresh = useCallback(async () => {
+  useEffect(() => {
+    loadTasks();
+  }, [activeProjectId]);
+
+  const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadTasks(), loadLocal()]);
+    await loadTasks();
     setRefreshing(false);
-  }, [loadTasks, loadLocal]);
+  };
 
-  const handleAddTask = async () => {
-    if (!newTask.name.trim()) {
-      Alert.alert('Error', 'Please enter a task name');
-      return;
+  const handleStartTask = async (task: Task) => {
+    if (!task.started_at) {
+      if (isLocalTask(task)) {
+        const startedAt = new Date().toISOString();
+        const updatedLocal = localTasks.map((t) =>
+          t.id === task.id
+            ? { ...t, started_at: startedAt, status: 'in_progress' as const }
+            : t
+        );
+        setLocalTasks(updatedLocal);
+        saveLocalTasks(updatedLocal);
+        setTasks(
+          tasks.map((t) =>
+            t.id === task.id ? { ...t, started_at: startedAt, status: 'in_progress' } : t
+          )
+        );
+      } else {
+        await startTask(task.id);
+        setTasks(tasks.map((t) => (t.id === task.id ? { ...t, started_at: new Date().toISOString(), status: 'in_progress' } : t)));
+      }
     }
-    if (!newTask.target_count || parseInt(newTask.target_count) <= 0) {
-      Alert.alert('Error', 'Please enter a valid target count');
-      return;
-    }
+    navigation.navigate('Capture');
+  };
 
-    setSubmitting(true);
-    const taskId = `local_${Date.now()}`;
-    const task: Task = {
-      id: taskId,
-      name: newTask.name.trim(),
-      assignee_id: user?.id ?? '',
-      target_count: parseInt(newTask.target_count),
-      priority: newTask.priority,
-      location: newTask.location.trim() || undefined,
-      due_date: newTask.due_date || null,
-      created_at: new Date().toISOString(),
-      captured: 0,
-      remaining: parseInt(newTask.target_count),
-      progress: 0,
-      status: 'assigned',
-    };
-
-    await saveLocalTask(task);
-    const updated = await loadLocalTasks();
+  const handleAddDemoTask = async () => {
+    setAddingDemo(true);
+    const names = ['Demo Survey — Phase 1', 'Demo Planting Drive', 'Demo Health Check'];
+    const localOnly = localTasks.filter(isLocalTask);
+    const used = new Set(localOnly.map((t) => t.name));
+    const name = names.find((n) => !used.has(n)) ?? `Demo Task ${localOnly.length + 1}`;
+    const due = new Date(Date.now() + 30 * 86400000).toISOString();
+    const newTask = makeLocalTask({
+      name,
+      target_count: 50,
+      location: 'Demo field site',
+      priority: 'medium',
+      due_date: due,
+    });
+    const updated = [...localTasks, newTask];
     setLocalTasks(updated);
-
-    setNewTask({ name: '', target_count: '', priority: 'medium', location: '', due_date: '' });
-    setShowAddModal(false);
-    setSubmitting(false);
+    await saveLocalTasks(updated);
+    setTasks(refreshLocalProgress(updated, trees));
+    setAddingDemo(false);
+    Alert.alert('Demo task added', `"${name}" saved on this device. Capture trees and watch progress fill up!`);
   };
 
-  const allTasks = [...tasks, ...localTasks];
-  const filteredTasks = filter === 'all' ? allTasks : allTasks.filter((t) => t.status === filter);
-  const stats = {
-    total: allTasks.length,
-    assigned: allTasks.filter((t) => t.status === 'assigned').length,
-    inProgress: allTasks.filter((t) => t.status === 'in_progress').length,
-    completed: allTasks.filter((t) => t.status === 'completed').length,
+  const handleOpenMap = (location: string) => {
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
+    Linking.openURL(url);
   };
 
-  return (
-    <View style={styles.container}>
-      <LinearGradient colors={['#1a5c2a', '#2e7d32']} style={styles.header}>
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>My Tasks</Text>
-          <TouchableOpacity style={styles.addButton} onPress={() => setShowAddModal(true)}>
-            <Ionicons name="add" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats.total}</Text>
-            <Text style={styles.statLabel}>Total</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={[styles.statNumber, { color: '#f59e0b' }]}>{stats.assigned}</Text>
-            <Text style={styles.statLabel}>Assigned</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={[styles.statNumber, { color: '#2196F3' }]}>{stats.inProgress}</Text>
-            <Text style={styles.statLabel}>In Progress</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={[styles.statNumber, { color: '#22c55e' }]}>{stats.completed}</Text>
-            <Text style={styles.statLabel}>Completed</Text>
-          </View>
-        </View>
-      </LinearGradient>
+  const getTodayDate = () => {
+    const now = new Date();
+    const options: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+    return now.toLocaleDateString('en-IN', options);
+  };
 
-      <View style={styles.filterRow}>
-        {(['all', 'assigned', 'in_progress', 'completed'] as const).map((f) => (
+  const assignedTasks = tasks.filter((t) => t.status === 'assigned');
+  const inProgressTasks = tasks.filter((t) => t.status === 'in_progress');
+  const completedTasks = tasks.filter((t) => t.status === 'completed');
+  const priorityColor = (p: string) => p === 'high' ? '#ef4444' : p === 'medium' ? '#f59e0b' : '#6b7280';
+
+  const activeProject = allProjects.find((p) => p.id === activeProjectId);
+
+  const renderTaskCard = (task: Task) => {
+    const started = !!task.started_at;
+    const createdDate = task.created_at ? new Date(task.created_at) : null;
+    const dayName = createdDate ? createdDate.toLocaleDateString('en-IN', { weekday: 'short' }) : '';
+    const dateStr = createdDate ? createdDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    return (
+      <View key={task.id} style={s.taskCard}>
+        <View style={s.taskCardTop}>
+          <View style={s.taskTitleWrap}>
+            <Text style={s.taskId} numberOfLines={1}>ID: {task.id.slice(0, 8).toUpperCase()}</Text>
+            <Text style={s.taskName} numberOfLines={1}>{task.name}</Text>
+          </View>
           <TouchableOpacity
-            key={f}
-            style={[styles.filterTab, filter === f && styles.filterTabActive]}
-            onPress={() => setFilter(f)}
+            style={[s.startBtn, task.status === 'completed' && s.startBtnDone]}
+            onPress={() => handleStartTask(task)}
+            disabled={task.status === 'completed'}
           >
-            <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
-              {f === 'in_progress' ? 'In Progress' : f.charAt(0).toUpperCase() + f.slice(1)}
+            <Ionicons name={started ? 'play-circle' : 'play-circle-outline'} size={16} color="#fff" />
+            <Text style={s.startBtnText}>
+              {task.status === 'completed' ? 'Done' : started ? 'Continue' : 'Start'}
             </Text>
           </TouchableOpacity>
-        ))}
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-        {filteredTasks.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="clipboard-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>No tasks found</Text>
-            <Text style={styles.emptySubtext}>Tap + to create a new task</Text>
+        </View>
+        {task.notes ? (
+          <Text style={s.taskNote} numberOfLines={2}>{task.notes}</Text>
+        ) : null}
+        <View style={s.taskCardBottom}>
+          <View style={[s.priorityBadge, { backgroundColor: priorityColor(task.priority) + '22' }]}>
+            <Text style={[s.priorityText, { color: priorityColor(task.priority) }]}>{task.priority.toUpperCase()}</Text>
           </View>
-        ) : (
-          filteredTasks.map((task) => (
-            <View key={task.id} style={styles.taskCard}>
-              <View style={styles.taskHeader}>
-                <View style={styles.taskTitleRow}>
-                  <Ionicons
-                    name={STATUS_ICONS[task.status]}
-                    size={20}
-                    color={task.status === 'completed' ? '#22c55e' : task.status === 'in_progress' ? '#2196F3' : '#f59e0b'}
-                  />
-                  <Text style={styles.taskName}>{task.name}</Text>
-                </View>
-                <View style={[styles.priorityBadge, { backgroundColor: PRIORITY_COLORS[task.priority] + '20' }]}>
-                  <Text style={[styles.priorityText, { color: PRIORITY_COLORS[task.priority] }]}>
-                    {task.priority.toUpperCase()}
-                  </Text>
-                </View>
-              </View>
-              {task.location ? (
-                <View style={styles.taskDetail}>
-                  <Ionicons name="location-outline" size={14} color="#888" />
-                  <Text style={styles.taskDetailText}>{task.location}</Text>
-                </View>
-              ) : null}
-              <View style={styles.taskProgress}>
-                <View style={styles.progressInfo}>
-                  <Text style={styles.progressText}>{task.captured} / {task.target_count}</Text>
-                  <Text style={styles.progressPercent}>{Math.round(task.progress)}%</Text>
-                </View>
-                <View style={styles.progressBar}>
-                  <View
-                    style={[styles.progressFill, { width: `${task.progress}%`, backgroundColor: task.progress >= 100 ? '#22c55e' : '#1a5c2a' }]}
-                  />
-                </View>
-              </View>
-              <View style={styles.taskFooter}>
-                <Text style={styles.taskDate}>
-                  Due: {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'No date'}
-                </Text>
-                {task.project_name && (
-                  <View style={styles.projectTag}>
-                    <Text style={styles.projectTagText}>{task.project_name}</Text>
-                  </View>
-                )}
-              </View>
+          {createdDate ? (
+            <View style={s.dueRow}>
+              <Ionicons name="calendar-outline" size={11} color="#888" />
+              <Text style={s.dueText}>{dayName}, {dateStr}</Text>
             </View>
-          ))
-        )}
-      </ScrollView>
+          ) : null}
+        </View>
+      </View>
+    );
+  };
 
-      <Modal visible={showAddModal} transparent animationType="slide">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Create New Task</Text>
-              <TouchableOpacity onPress={() => setShowAddModal(false)}>
-                <Ionicons name="close" size={24} color="#1a1a1a" />
-              </TouchableOpacity>
+  const renderEmpty = (emoji: string, title: string, sub: string) => (
+    <View style={s.emptyState}>
+      <Text style={s.emptyEmoji}>{emoji}</Text>
+      <Text style={s.emptyText}>{title}</Text>
+      <Text style={s.emptySubText}>{sub}</Text>
+    </View>
+  );
+
+  const renderTaskList = (list: Task[]) =>
+    list.length === 0
+      ? renderEmpty('🗂️', 'No tasks here', 'Tap "+ Add Demo" to create one')
+      : list.map(renderTaskCard);
+
+  return (
+    <View style={s.container}>
+      <ScrollView
+        style={s.scroll}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a5c2a" />}
+      >
+        {/* Header with date and project location */}
+        <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={[s.header, { paddingTop: insets.top + 12 }]}>
+          <View style={s.headerRow}>
+            <View style={s.headerLeft}>
+              <Text style={s.headerDate}>{getTodayDate()}</Text>
+              <Text style={s.headerSub} numberOfLines={1}>{activeProject?.name ?? 'No project selected'}</Text>
             </View>
-            <ScrollView style={styles.modalContent}>
-              <Text style={styles.inputLabel}>Task Name *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter task name"
-                value={newTask.name}
-                onChangeText={(text) => setNewTask({ ...newTask, name: text })}
-              />
-              <Text style={styles.inputLabel}>Target Count *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter target number"
-                keyboardType="numeric"
-                value={newTask.target_count}
-                onChangeText={(text) => setNewTask({ ...newTask, target_count: text })}
-              />
-              <Text style={styles.inputLabel}>Priority</Text>
-              <View style={styles.priorityRow}>
-                {(['high', 'medium', 'low'] as const).map((p) => (
-                  <TouchableOpacity
-                    key={p}
-                    style={[styles.priorityOption, newTask.priority === p && { backgroundColor: PRIORITY_COLORS[p], borderColor: PRIORITY_COLORS[p] }]}
-                    onPress={() => setNewTask({ ...newTask, priority: p })}
-                  >
-                    <Text style={[styles.priorityOptionText, newTask.priority === p && { color: '#fff' }]}>
-                      {p.charAt(0).toUpperCase() + p.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <Text style={styles.inputLabel}>Location</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter location (optional)"
-                value={newTask.location}
-                onChangeText={(text) => setNewTask({ ...newTask, location: text })}
-              />
-              <Text style={styles.inputLabel}>Due Date</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="YYYY-MM-DD (optional)"
-                value={newTask.due_date}
-                onChangeText={(text) => setNewTask({ ...newTask, due_date: text })}
-              />
-            </ScrollView>
-            <View style={styles.modalFooter}>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddModal(false)}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
+            <View style={s.headerDivider} />
+            {activeProject ? (
               <TouchableOpacity
-                style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
-                onPress={handleAddTask}
-                disabled={submitting}
+                style={s.headerLocation}
+                onPress={() => handleOpenMap(activeProject.name)}
+                activeOpacity={0.7}
               >
-                <Text style={styles.submitButtonText}>{submitting ? 'Creating...' : 'Create Task'}</Text>
+                <View style={s.headerLocationImage}>
+                  <Ionicons name="map" size={22} color="#fff" />
+                </View>
+                <Text style={s.headerLocationLabel}>OPEN MAP</Text>
               </TouchableOpacity>
-            </View>
+            ) : (
+              <View style={s.headerLocation}>
+                <View style={s.headerLocationImage}>
+                  <Ionicons name="location-outline" size={22} color="#fff" />
+                </View>
+                <Text style={s.headerLocationLabel}>LOCATION</Text>
+              </View>
+            )}
+          </View>
+        </LinearGradient>
+
+        {/* Tabs */}
+        <View style={s.tabsWrap}>
+          <View style={s.tabsRow}>
+            {TABS.map((tab) => {
+              const count = tab.key === 'assigned' ? assignedTasks.length
+                : tab.key === 'in_progress' ? inProgressTasks.length
+                : completedTasks.length;
+              const active = activeTab === tab.key;
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[s.tabBtn, active && s.tabBtnActive]}
+                  onPress={() => setActiveTab(tab.key)}
+                  activeOpacity={0.7}
+                >
+                  {count > 0 && (
+                    <View style={[s.tabCount, active && s.tabCountActive]}>
+                      <Text style={[s.tabCountText, active && s.tabCountTextActive]}>{count > 99 ? '99+' : count}</Text>
+                    </View>
+                  )}
+                  <Ionicons name={tab.icon} size={17} color={active ? '#fff' : '#1a5c2a'} />
+                  <Text numberOfLines={1} style={[s.tabText, active && s.tabTextActive]}>{tab.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
-      </Modal>
+
+        {/* Tab content */}
+        <View style={s.content}>
+          {activeTab === 'assigned' && renderTaskList(assignedTasks)}
+          {activeTab === 'in_progress' && renderTaskList(inProgressTasks)}
+          {activeTab === 'completed' && (
+            completedTasks.length === 0
+              ? renderEmpty('✅', 'Nothing completed yet', 'Tasks move here automatically once the target is captured.')
+              : completedTasks.map((t) => {
+                  const tCreatedDate = t.created_at ? new Date(t.created_at) : null;
+                  const tDayName = tCreatedDate ? tCreatedDate.toLocaleDateString('en-IN', { weekday: 'short' }) : '';
+                  const tDateStr = tCreatedDate ? tCreatedDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+                  return (
+                  <View key={t.id} style={[s.taskCard, s.taskCardDone]}>
+                    <View style={s.taskCardTop}>
+                      <View style={s.taskTitleWrap}>
+                        <Text style={s.taskId} numberOfLines={1}>ID: {t.id.slice(0, 8).toUpperCase()}</Text>
+                        <Text style={s.taskName} numberOfLines={1}>{t.name}</Text>
+                      </View>
+                      <View style={s.doneBadge}>
+                        <Ionicons name="checkmark-circle" size={14} color="#16a34a" />
+                        <Text style={s.doneText}>Done</Text>
+                      </View>
+                    </View>
+                    {t.notes ? (
+                      <Text style={s.taskNote} numberOfLines={2}>{t.notes}</Text>
+                    ) : null}
+                    <View style={s.taskCardBottom}>
+                      <View style={[s.priorityBadge, { backgroundColor: '#16a34a22' }]}>
+                        <Text style={[s.priorityText, { color: '#16a34a' }]}>COMPLETED</Text>
+                      </View>
+                      {tCreatedDate ? (
+                        <View style={s.dueRow}>
+                          <Ionicons name="calendar-outline" size={11} color="#888" />
+                          <Text style={s.dueText}>{tDayName}, {tDateStr}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+                  );
+                })
+          )}
+        </View>
+      </ScrollView>
+
+      {/* Add Demo Button - Fixed at bottom */}
+      <View style={[s.bottomBar, { paddingBottom: insets.bottom + 8 }]}>
+        <TouchableOpacity
+          style={s.addDemoBtn}
+          onPress={handleAddDemoTask}
+          disabled={addingDemo}
+          activeOpacity={0.8}
+        >
+          {addingDemo ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="add-circle-outline" size={20} color="#fff" />
+              <Text style={s.addDemoBtnText}>Add Demo Task</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { paddingTop: 48, paddingBottom: 20, paddingHorizontal: 16 },
-  headerContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  headerTitle: { fontSize: 28, fontWeight: 'bold', color: '#fff' },
-  addButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-  statsRow: { flexDirection: 'row', gap: 8 },
-  statCard: { flex: 1, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, padding: 12, alignItems: 'center' },
-  statNumber: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
-  statLabel: { fontSize: 11, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
-  filterRow: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
-  filterTab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e0e0e0' },
-  filterTabActive: { backgroundColor: '#1a5c2a', borderColor: '#1a5c2a' },
-  filterText: { fontSize: 13, color: '#666', fontWeight: '500' },
-  filterTextActive: { color: '#fff' },
-  scrollView: { flex: 1 },
-  scrollContent: { padding: 16 },
-  taskCard: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
-  taskHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
-  taskTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
-  taskName: { fontSize: 16, fontWeight: '600', color: '#1a1a1a', flex: 1 },
-  priorityBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  priorityText: { fontSize: 10, fontWeight: '700' },
-  taskDetail: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-  taskDetailText: { fontSize: 13, color: '#888' },
-  taskProgress: { marginTop: 8 },
-  progressInfo: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  progressText: { fontSize: 13, color: '#555', fontWeight: '500' },
-  progressPercent: { fontSize: 13, color: '#1a5c2a', fontWeight: '700' },
-  progressBar: { height: 6, backgroundColor: '#e0e0e0', borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: '100%', borderRadius: 3 },
-  taskFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
-  taskDate: { fontSize: 12, color: '#888' },
-  projectTag: { backgroundColor: '#E8F5E9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  projectTagText: { fontSize: 11, color: '#1a5c2a', fontWeight: '500' },
-  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
-  emptyText: { fontSize: 18, fontWeight: '600', color: '#888', marginTop: 16 },
-  emptySubtext: { fontSize: 14, color: '#aaa', marginTop: 4 },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 20, maxHeight: '90%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 20 },
-  modalTitle: { fontSize: 20, fontWeight: '700', color: '#1a1a1a' },
-  modalContent: { paddingHorizontal: 20 },
-  inputLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 8, marginTop: 16 },
-  input: { borderWidth: 1.5, borderColor: '#DDE7D8', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, backgroundColor: '#fff' },
-  priorityRow: { flexDirection: 'row', gap: 10 },
-  priorityOption: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5, borderColor: '#DDE7D8', alignItems: 'center' },
-  priorityOptionText: { fontSize: 14, fontWeight: '600', color: '#555' },
-  modalFooter: { flexDirection: 'row', gap: 12, padding: 20, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
-  cancelButton: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1.5, borderColor: '#DDE7D8', alignItems: 'center' },
-  cancelButtonText: { fontSize: 15, fontWeight: '600', color: '#666' },
-  submitButton: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#1a5c2a', alignItems: 'center' },
-  submitButtonDisabled: { backgroundColor: '#ccc' },
-  submitButtonText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  scroll: { flex: 1 },
+  header: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  headerLeft: { flex: 1 },
+  headerDate: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
+  headerSub: { fontSize: 13, fontWeight: '600', color: '#cde8d3', marginTop: 2 },
+  headerDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  headerLocation: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  headerLocationImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerLocationLabel: { fontSize: 9, fontWeight: '600', color: '#cde8d3', letterSpacing: 0.5 },
+  tabsWrap: { padding: 16, paddingBottom: 0 },
+  tabsRow: { flexDirection: 'row', gap: 8 },
+  tabBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderWidth: 1,
+    borderColor: '#E0ECDD',
+  },
+  tabBtnActive: { backgroundColor: '#1a5c2a', borderColor: '#1a5c2a' },
+  tabText: { fontSize: 11, fontWeight: '600', color: '#1a5c2a' },
+  tabTextActive: { color: '#fff' },
+  tabCount: {
+    position: 'absolute',
+    top: 4,
+    right: 5,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 7.5,
+    minWidth: 16,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    alignItems: 'center',
+  },
+  tabCountActive: { backgroundColor: 'rgba(255,255,255,0.25)' },
+  tabCountText: { fontSize: 9, fontWeight: '700', color: '#1a5c2a' },
+  tabCountTextActive: { color: '#fff' },
+  content: { padding: 16, paddingTop: 12 },
+  taskCard: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    borderLeftWidth: 3,
+    borderLeftColor: '#1a5c2a',
+  },
+  taskCardDone: { borderLeftColor: '#16a34a' },
+  taskCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  taskTitleWrap: { flex: 1 },
+  taskId: { fontSize: 10, fontWeight: '600', color: '#999', marginBottom: 2 },
+  taskName: { fontSize: 14, fontWeight: '700', color: '#222' },
+  taskNote: { fontSize: 12, color: '#666', marginTop: 6, lineHeight: 16 },
+  taskCardBottom: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  doneBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#16a34a22', borderRadius: 7.5, paddingHorizontal: 8, paddingVertical: 4 },
+  doneText: { fontSize: 11, fontWeight: '700', color: '#16a34a' },
+  priorityBadge: { borderRadius: 7.5, paddingHorizontal: 7, paddingVertical: 2 },
+  priorityText: { fontSize: 9, fontWeight: '700' },
+  dueRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  dueText: { fontSize: 10, color: '#888' },
+  startBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F09125',
+    borderRadius: 7.5,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+  },
+  startBtnDone: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#16a34a',
+    borderRadius: 7.5,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+  },
+  startBtnText: { color: '#fff', fontWeight: '700', fontSize: 11 },
+  emptyState: { alignItems: 'center', paddingVertical: 48 },
+  emptyEmoji: { fontSize: 48, marginBottom: 12 },
+  emptyText: { fontSize: 16, fontWeight: '600', color: '#555' },
+  emptySubText: { fontSize: 13, color: '#888', marginTop: 4, textAlign: 'center', paddingHorizontal: 24 },
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  },
+  addDemoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#1a5c2a',
+    borderRadius: 10,
+    paddingVertical: 14,
+  },
+  addDemoBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 });
