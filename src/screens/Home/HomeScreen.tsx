@@ -18,7 +18,8 @@ import { fetchAgentTasks } from '../../services/taskService';
 import { loadLocalTasks } from '../../services/localTaskService';
 import ProjectSelector from '../../components/ProjectSelector';
 import CurveDivider from '../../components/CurveDivider';
-import CircularProgress from '../../components/CircularProgress';
+import GradientProgress from '../../components/GradientProgress';
+import { buildProgressPalette, buildProjectPalette } from '../../utils/colorMix';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Task, Project } from '../../types';
@@ -215,73 +216,79 @@ export default function HomeScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* Task Stats - 2x2 Grid with CircularProgress */}
+        {/* Task Stats - 2x2 Grid with GradientProgress */}
         <View style={styles.taskStatsContainer}>
+          {/* Header — username + all data (left aligned above the boxes) */}
+          <View style={styles.taskStatsHeader}>
+            <Text style={styles.taskStatsHeaderText} numberOfLines={1}>
+              {user?.full_name?.trim() || 'User'} all data
+            </Text>
+          </View>
           <View style={styles.taskStatsRow}>
             <TouchableOpacity
               style={styles.taskStatCard}
-              onPress={() => navigation.navigate('Task')}
+              onPress={() => navigation.navigate('Task', { tab: 'assigned' })}
               activeOpacity={0.7}
             >
-              <CircularProgress
+              <GradientProgress
                 size={64}
                 progress={100}
                 strokeWidth={5}
-                color="#F09125"
+                colors={buildProgressPalette(['#f97316', '#f59e0b', '#fbbf24', '#fde047'], allProjects.length)}
                 trackColor="#FFF3E0"
               >
                 <Text style={styles.taskStatNumber}>{taskStats.total}</Text>
-              </CircularProgress>
+              </GradientProgress>
               <Text style={styles.taskStatLabel}>Total Tasks</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.taskStatCard}
-              onPress={() => navigation.navigate('Task')}
+              onPress={() => setProjectDropdownOpen(true)}
               activeOpacity={0.7}
             >
-              <CircularProgress
+              <GradientProgress
                 size={64}
                 progress={100}
                 strokeWidth={5}
-                color="#1a5c2a"
+                colors={buildProjectPalette(allProjects.length)}
                 trackColor="#E8F5E9"
               >
                 <Text style={styles.taskStatNumber}>{allProjects.length}</Text>
-              </CircularProgress>
+              </GradientProgress>
               <Text style={styles.taskStatLabel}>Projects</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.taskStatsRow}>
             <TouchableOpacity
               style={styles.taskStatCard}
-              onPress={() => navigation.navigate('Task')}
+              onPress={() => navigation.navigate('Task', { tab: 'rejected' })}
               activeOpacity={0.7}
             >
-              <CircularProgress
+              <GradientProgress
                 size={64}
                 progress={taskStats.total > 0 ? (taskStats.rejected / taskStats.total) * 100 : 0}
                 strokeWidth={5}
-                color="#ef4444"
+                colors={buildProgressPalette(['#fecaca', '#f87171', '#ef4444', '#b91c1c'], allProjects.length)}
                 trackColor="#FEE2E2"
               >
                 <Text style={styles.taskStatNumber}>{taskStats.rejected}</Text>
-              </CircularProgress>
+              </GradientProgress>
               <Text style={styles.taskStatLabel}>Rejected</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.taskStatCard}
-              onPress={() => navigation.navigate('Task')}
+              onPress={() => navigation.navigate('Task', { tab: 'completed' })}
               activeOpacity={0.7}
             >
-              <CircularProgress
+              <GradientProgress
                 size={64}
                 progress={taskStats.total > 0 ? (taskStats.completed / taskStats.total) * 100 : 0}
                 strokeWidth={5}
-                color="#43A047"
+                colors={buildProgressPalette(['#86d189', '#4caf50', '#2e7d43', '#1a5c2a'], allProjects.length)}
                 trackColor="#E8F5E9"
               >
                 <Text style={styles.taskStatNumber}>{taskStats.completed}</Text>
-              </CircularProgress>
+              </GradientProgress>
               <Text style={styles.taskStatLabel}>Completed</Text>
             </TouchableOpacity>
           </View>
@@ -538,6 +545,18 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 8,
     gap: 8,
+  },
+  taskStatsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  taskStatsHeaderText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    textTransform: 'capitalize',
   },
   taskStatsRow: {
     flexDirection: 'row',

@@ -11,7 +11,7 @@ import {
   Linking,
   FlatList,
 } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
@@ -41,6 +41,7 @@ const TABS: { key: TaskTab; label: string; color: string }[] = [
 
 export default function TaskScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
   const userId = user?.id;
@@ -59,6 +60,12 @@ export default function TaskScreen() {
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>('all');
   const loadSeqRef = useRef(0);
+
+  // Dashboard boxes can open this screen on a specific tab (e.g. Rejected/Completed).
+  useEffect(() => {
+    const tab = (route.params as { tab?: TaskTab } | undefined)?.tab;
+    if (tab) setActiveTab(tab);
+  }, [route.params]);
 
   // Filter tasks by selected date
   const filterByDate = (taskList: Task[]) => {
