@@ -4,17 +4,10 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="add task page and chnage design.">
+    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="add 4 tabs in task page.">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/App.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app.json" beforeDir="false" afterPath="$PROJECT_DIR$/app.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/dist/metadata.json" beforeDir="false" afterPath="$PROJECT_DIR$/dist/metadata.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/package-lock.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/MapPreview.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/MapPreview.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/localTaskService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/localTaskService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/types/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/types/index.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -190,7 +183,15 @@
       <option name="project" value="LOCAL" />
       <updated>1788937068975</updated>
     </task>
-    <option name="localTasksCounter" value="14" />
+    <task id="LOCAL-00014" summary="add 4 tabs in task page.">
+      <option name="closed" value="true" />
+      <created>1789026784009</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1789026784009</updated>
+    </task>
+    <option name="localTasksCounter" value="15" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -230,6 +231,7 @@
     <MESSAGE value="project selection logic and redesign the interface." />
     <MESSAGE value="task feature" />
     <MESSAGE value="add task page and chnage design." />
-    <option name="LAST_COMMIT_MESSAGE" value="add task page and chnage design." />
+    <MESSAGE value="add 4 tabs in task page." />
+    <option name="LAST_COMMIT_MESSAGE" value="add 4 tabs in task page." />
   </component>
 </project>

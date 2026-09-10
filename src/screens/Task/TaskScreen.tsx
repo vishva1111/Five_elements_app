@@ -197,12 +197,13 @@ export default function TaskScreen() {
   const approvedTasks = tasks.filter((t) => t.status === 'approved');
   const rejectedTasks = tasks.filter((t) => t.status === 'rejected');
 
-  // Count tree captures as tasks
+  // Count tasks for each tab
   const treeCaptures = trees.length;
-  const assignedCount = assignedTasks.length + treeCaptures;
-  const completedCount = completedTasks.length;
+  const assignedCount = assignedTasks.length;
+  const completedCount = completedTasks.length + treeCaptures;
   const approvedCount = approvedTasks.length;
   const rejectedCount = rejectedTasks.length;
+  const reviewedCount = approvedCount + rejectedCount;
   const totalTasks = assignedCount + completedCount + approvedCount + rejectedCount;
   const priorityColor = (p: string) => p === 'high' ? '#ef4444' : p === 'medium' ? '#f59e0b' : '#6b7280';
 
@@ -340,21 +341,32 @@ export default function TaskScreen() {
         <View style={s.tabsWrap}>
           <View style={s.tabsRow}>
             {TABS.map((tab) => {
-              const count = tab.key === 'assigned' ? assignedCount
-                : tab.key === 'completed' ? completedCount
-                : tab.key === 'approved' ? approvedCount
-                : rejectedCount;
               const active = activeTab === tab.key;
-              const pct = totalTasks > 0 ? (count / totalTasks) * 100 : 0;
+              let count: number;
+              let denominator: number;
+              if (tab.key === 'assigned') {
+                count = completedCount;
+                denominator = totalTasks;
+              } else if (tab.key === 'completed') {
+                count = reviewedCount;
+                denominator = completedCount;
+              } else if (tab.key === 'approved') {
+                count = approvedCount;
+                denominator = totalTasks;
+              } else {
+                count = rejectedCount;
+                denominator = completedCount;
+              }
+              const pct = denominator > 0 ? (count / denominator) * 100 : 0;
               return (
                 <TouchableOpacity
                   key={tab.key}
-                  style={[s.tabBtn, active && s.tabBtnActive]}
+                  style={[s.tabBtn, active && { backgroundColor: tab.color + '15', borderColor: tab.color }]}
                   onPress={() => setActiveTab(tab.key)}
                   activeOpacity={0.7}
                 >
                   <CircularProgress size={52} progress={pct} color={tab.color} strokeWidth={4} trackColor="#E8E8E8">
-                    <Text style={[s.tabCountText, { color: tab.color }]}>{count}/{totalTasks}</Text>
+                    <Text style={[s.tabCountText, { color: tab.color }]}>{count}/{denominator}</Text>
                   </CircularProgress>
                   <Text numberOfLines={1} style={[s.tabText, active && { color: tab.color }]}>{tab.label}</Text>
                 </TouchableOpacity>
@@ -483,7 +495,7 @@ const s = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#E8E8E8',
   },
-  tabBtnActive: { borderColor: 'transparent', elevation: 2 },
+  tabBtnActive: {},
   tabText: { fontSize: 11, fontWeight: '700', color: '#888' },
   tabCountText: { fontSize: 12, fontWeight: '700' },
   dateSelectorWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 4, gap: 8 },
