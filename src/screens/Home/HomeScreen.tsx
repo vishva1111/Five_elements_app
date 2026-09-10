@@ -390,6 +390,7 @@ const styles = StyleSheet.create({
   contentSection: {
     backgroundColor: '#f5f5f5',
     paddingBottom: 8,
+    marginTop: -4,
   },
   bannerTopRow: {
     flexDirection: 'row',
