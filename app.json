@@ -9,6 +9,7 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "sdkVersion": "57.0.0",
     "web": {
       "favicon": "./assets/favicon.png"
     },
@@ -75,7 +76,8 @@
         {
           "locationAlwaysAndWhenInUsePermission": "TreeApp needs your location to tag the GPS coordinates of each tree."
         }
-      ]
+      ],
+      "expo-status-bar"
     ],
     "scheme": "treeapp",
     "extra": {

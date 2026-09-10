@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Task } from '../types';
+import { Task, TreeRecord } from '../types';
 
 const LOCAL_TASKS_KEY = '@local_tasks';
 
@@ -74,7 +74,7 @@ export function makeLocalTask(options: {
   };
 }
 
-export function refreshLocalProgress(tasks: Task[], allTrees: Task[]): Task[] {
+export function refreshLocalProgress(tasks: Task[], allTrees: TreeRecord[]): Task[] {
   return tasks.map((task) => {
     const captured = allTrees.filter(
       (t) => t.project_id === task.project_id

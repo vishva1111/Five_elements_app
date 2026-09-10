@@ -34,7 +34,7 @@ export default function MapPreview({
       disabled={!onPress}
     >
       <MapView
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         region={region}
         scrollEnabled={interactive}
         zoomEnabled={interactive}

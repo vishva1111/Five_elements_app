@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   Linking,
+  FlatList,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,16 +26,17 @@ import {
   isLocalTask,
 } from '../../services/localTaskService';
 import { Task, Project } from '../../types';
-
+import CircularProgress from '../../components/CircularProgress';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
-type TaskTab = 'assigned' | 'in_progress' | 'completed';
+type TaskTab = 'assigned' | 'completed' | 'approved' | 'rejected';
 
-const TABS: { key: TaskTab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: 'assigned', label: 'Assigned', icon: 'clipboard-outline' },
-  { key: 'in_progress', label: 'Pending', icon: 'time-outline' },
-  { key: 'completed', label: 'Completed', icon: 'checkmark-done-circle-outline' },
+const TABS: { key: TaskTab; label: string; color: string }[] = [
+  { key: 'assigned', label: 'Assigned', color: '#1a5c2a' },
+  { key: 'completed', label: 'Completed', color: '#22c55e' },
+  { key: 'approved', label: 'Approved', color: '#8b5cf6' },
+  { key: 'rejected', label: 'Rejected', color: '#ef4444' },
 ];
 
 export default function TaskScreen() {
@@ -55,7 +57,18 @@ export default function TaskScreen() {
   const [activeTab, setActiveTab] = useState<TaskTab>('assigned');
   const [addingDemo, setAddingDemo] = useState(false);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string>('all');
   const loadSeqRef = useRef(0);
+
+  // Filter tasks by selected date
+  const filterByDate = (taskList: Task[]) => {
+    if (selectedDate === 'all') return taskList;
+    const dateStr = selectedDate === 'today' ? new Date().toISOString().split('T')[0] : selectedDate;
+    return taskList.filter((t) => {
+      if (!t.created_at) return false;
+      return t.created_at.split('T')[0] === dateStr;
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -181,7 +194,45 @@ export default function TaskScreen() {
   const assignedTasks = tasks.filter((t) => t.status === 'assigned');
   const inProgressTasks = tasks.filter((t) => t.status === 'in_progress');
   const completedTasks = tasks.filter((t) => t.status === 'completed');
+  const approvedTasks = tasks.filter((t) => t.status === 'approved');
+  const rejectedTasks = tasks.filter((t) => t.status === 'rejected');
+
+  // Count tree captures as tasks
+  const treeCaptures = trees.length;
+  const assignedCount = assignedTasks.length + treeCaptures;
+  const completedCount = completedTasks.length;
+  const approvedCount = approvedTasks.length;
+  const rejectedCount = rejectedTasks.length;
+  const totalTasks = assignedCount + completedCount + approvedCount + rejectedCount;
   const priorityColor = (p: string) => p === 'high' ? '#ef4444' : p === 'medium' ? '#f59e0b' : '#6b7280';
+
+  // Extract unique dates from assigned tasks (descending, past first)
+  const dates = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split('T')[0];
+    const dateSet = new Set<string>();
+    assignedTasks.forEach((t) => {
+      if (t.created_at) dateSet.add(t.created_at.split('T')[0]);
+    });
+    trees.forEach((t) => {
+      if (t.submitted_at) dateSet.add(t.submitted_at.split('T')[0]);
+    });
+    const sorted = Array.from(dateSet).sort((a, b) => b.localeCompare(a));
+    return sorted.map((dateStr) => {
+      const d = new Date(dateStr + 'T00:00:00');
+      const dayNum = d.getDate().toString();
+      const monthStr = d.toLocaleDateString('en-IN', { month: 'short' });
+      const weekdayStr = d.toLocaleDateString('en-IN', { weekday: 'short' }).toUpperCase();
+      return {
+        key: dateStr === todayStr ? 'today' : dateStr,
+        label: dateStr === todayStr ? 'TODAY' : weekdayStr,
+        day: dayNum,
+        month: monthStr,
+        isToday: dateStr === todayStr,
+      };
+    });
+  }, [assignedTasks, trees]);
 
   const activeProject = allProjects.find((p) => p.id === activeProjectId);
 
@@ -190,23 +241,32 @@ export default function TaskScreen() {
     const createdDate = task.created_at ? new Date(task.created_at) : null;
     const dayName = createdDate ? createdDate.toLocaleDateString('en-IN', { weekday: 'short' }) : '';
     const dateStr = createdDate ? createdDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    const statusColor = task.status === 'completed' ? '#22c55e'
+      : task.status === 'approved' ? '#8b5cf6'
+      : task.status === 'rejected' ? '#ef4444'
+      : '#1a5c2a';
+    const isAssigned = task.status === 'assigned';
     return (
-      <View key={task.id} style={s.taskCard}>
+      <View key={task.id} style={[s.taskCard, { borderLeftColor: statusColor }]}>
         <View style={s.taskCardTop}>
           <View style={s.taskTitleWrap}>
             <Text style={s.taskId} numberOfLines={1}>ID: {task.id.slice(0, 8).toUpperCase()}</Text>
             <Text style={s.taskName} numberOfLines={1}>{task.name}</Text>
           </View>
-          <TouchableOpacity
-            style={[s.startBtn, task.status === 'completed' && s.startBtnDone]}
-            onPress={() => handleStartTask(task)}
-            disabled={task.status === 'completed'}
-          >
-            <Ionicons name={started ? 'play-circle' : 'play-circle-outline'} size={16} color="#fff" />
-            <Text style={s.startBtnText}>
-              {task.status === 'completed' ? 'Done' : started ? 'Continue' : 'Start'}
-            </Text>
-          </TouchableOpacity>
+          {isAssigned ? (
+            <TouchableOpacity
+              style={s.startBtn}
+              onPress={() => handleStartTask(task)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="play-circle-outline" size={14} color="#fff" />
+              <Text style={s.startBtnText}>Start</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={[s.statusBadge, { backgroundColor: statusColor + '18' }]}>
+              <Text style={[s.statusText, { color: statusColor }]}>{task.status.toUpperCase()}</Text>
+            </View>
+          )}
         </View>
         {task.notes ? (
           <Text style={s.taskNote} numberOfLines={2}>{task.notes}</Text>
@@ -276,14 +336,16 @@ export default function TaskScreen() {
           </View>
         </LinearGradient>
 
-        {/* Tabs */}
+        {/* Tabs with CircularProgress rings */}
         <View style={s.tabsWrap}>
           <View style={s.tabsRow}>
             {TABS.map((tab) => {
-              const count = tab.key === 'assigned' ? assignedTasks.length
-                : tab.key === 'in_progress' ? inProgressTasks.length
-                : completedTasks.length;
+              const count = tab.key === 'assigned' ? assignedCount
+                : tab.key === 'completed' ? completedCount
+                : tab.key === 'approved' ? approvedCount
+                : rejectedCount;
               const active = activeTab === tab.key;
+              const pct = totalTasks > 0 ? (count / totalTasks) * 100 : 0;
               return (
                 <TouchableOpacity
                   key={tab.key}
@@ -291,60 +353,64 @@ export default function TaskScreen() {
                   onPress={() => setActiveTab(tab.key)}
                   activeOpacity={0.7}
                 >
-                  {count > 0 && (
-                    <View style={[s.tabCount, active && s.tabCountActive]}>
-                      <Text style={[s.tabCountText, active && s.tabCountTextActive]}>{count > 99 ? '99+' : count}</Text>
-                    </View>
-                  )}
-                  <Ionicons name={tab.icon} size={17} color={active ? '#fff' : '#1a5c2a'} />
-                  <Text numberOfLines={1} style={[s.tabText, active && s.tabTextActive]}>{tab.label}</Text>
+                  <CircularProgress size={52} progress={pct} color={tab.color} strokeWidth={4} trackColor="#E8E8E8">
+                    <Text style={[s.tabCountText, { color: tab.color }]}>{count}/{totalTasks}</Text>
+                  </CircularProgress>
+                  <Text numberOfLines={1} style={[s.tabText, active && { color: tab.color }]}>{tab.label}</Text>
                 </TouchableOpacity>
               );
             })}
           </View>
         </View>
 
+        {/* Date Selector */}
+        <View style={s.dateSelectorWrap}>
+          <TouchableOpacity
+            style={[s.dateAllBtn, selectedDate === 'all' && s.dateAllBtnActive]}
+            onPress={() => setSelectedDate('all')}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="calendar-outline" size={16} color={selectedDate === 'all' ? '#fff' : '#1a5c2a'} />
+            <Text style={[s.dateAllText, selectedDate === 'all' && s.dateAllTextActive]}>All</Text>
+          </TouchableOpacity>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.dateList}>
+            {dates.map((d) => {
+              const isActive = selectedDate === d.key;
+              return (
+                <TouchableOpacity
+                  key={d.key}
+                  style={[s.dateItem, isActive && s.dateItemActive]}
+                  onPress={() => setSelectedDate(d.key)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[s.dateLabel, isActive && s.dateLabelActive]}>{d.label}</Text>
+                  <Text style={[s.dateDay, isActive && s.dateDayActive]}>{d.day}</Text>
+                  <Text style={[s.dateMonth, isActive && s.dateMonthActive]}>{d.month}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
         {/* Tab content */}
         <View style={s.content}>
-          {activeTab === 'assigned' && renderTaskList(assignedTasks)}
-          {activeTab === 'in_progress' && renderTaskList(inProgressTasks)}
-          {activeTab === 'completed' && (
-            completedTasks.length === 0
-              ? renderEmpty('✅', 'Nothing completed yet', 'Tasks move here automatically once the target is captured.')
-              : completedTasks.map((t) => {
-                  const tCreatedDate = t.created_at ? new Date(t.created_at) : null;
-                  const tDayName = tCreatedDate ? tCreatedDate.toLocaleDateString('en-IN', { weekday: 'short' }) : '';
-                  const tDateStr = tCreatedDate ? tCreatedDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-                  return (
-                  <View key={t.id} style={[s.taskCard, s.taskCardDone]}>
-                    <View style={s.taskCardTop}>
-                      <View style={s.taskTitleWrap}>
-                        <Text style={s.taskId} numberOfLines={1}>ID: {t.id.slice(0, 8).toUpperCase()}</Text>
-                        <Text style={s.taskName} numberOfLines={1}>{t.name}</Text>
-                      </View>
-                      <View style={s.doneBadge}>
-                        <Ionicons name="checkmark-circle" size={14} color="#16a34a" />
-                        <Text style={s.doneText}>Done</Text>
-                      </View>
-                    </View>
-                    {t.notes ? (
-                      <Text style={s.taskNote} numberOfLines={2}>{t.notes}</Text>
-                    ) : null}
-                    <View style={s.taskCardBottom}>
-                      <View style={[s.priorityBadge, { backgroundColor: '#16a34a22' }]}>
-                        <Text style={[s.priorityText, { color: '#16a34a' }]}>COMPLETED</Text>
-                      </View>
-                      {tCreatedDate ? (
-                        <View style={s.dueRow}>
-                          <Ionicons name="calendar-outline" size={11} color="#888" />
-                          <Text style={s.dueText}>{tDayName}, {tDateStr}</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  </View>
-                  );
-                })
-          )}
+          {activeTab === 'assigned' && renderTaskList(filterByDate(assignedTasks))}
+          {activeTab === 'completed' && renderTaskList(filterByDate([...completedTasks, ...trees.map((t) => ({
+            id: t.id,
+            name: t.species || 'Tree Capture',
+            project_id: t.project_id,
+            assignee_id: t.user_id || '',
+            target_count: 1,
+            priority: 'medium' as const,
+            captured: 1,
+            remaining: 0,
+            progress: 100,
+            status: 'completed' as const,
+            created_at: t.submitted_at,
+            notes: t.notes,
+          }))]))}
+          {activeTab === 'approved' && renderTaskList(filterByDate(approvedTasks))}
+          {activeTab === 'rejected' && renderTaskList(filterByDate(rejectedTasks))}
         </View>
       </ScrollView>
 
@@ -403,41 +469,62 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   headerLocationLabel: { fontSize: 9, fontWeight: '600', color: '#cde8d3', letterSpacing: 0.5 },
-  tabsWrap: { padding: 16, paddingBottom: 0 },
-  tabsRow: { flexDirection: 'row', gap: 8 },
+  tabsWrap: { paddingHorizontal: 12, paddingTop: 12 },
+  tabsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
   tabBtn: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
     backgroundColor: '#fff',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    borderWidth: 1,
-    borderColor: '#E0ECDD',
-  },
-  tabBtnActive: { backgroundColor: '#1a5c2a', borderColor: '#1a5c2a' },
-  tabText: { fontSize: 11, fontWeight: '600', color: '#1a5c2a' },
-  tabTextActive: { color: '#fff' },
-  tabCount: {
-    position: 'absolute',
-    top: 4,
-    right: 5,
-    backgroundColor: '#E8F5E9',
     borderRadius: 7.5,
-    minWidth: 16,
+    paddingVertical: 10,
     paddingHorizontal: 4,
-    paddingVertical: 1,
-    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#E8E8E8',
   },
-  tabCountActive: { backgroundColor: 'rgba(255,255,255,0.25)' },
-  tabCountText: { fontSize: 9, fontWeight: '700', color: '#1a5c2a' },
-  tabCountTextActive: { color: '#fff' },
+  tabBtnActive: { borderColor: 'transparent', elevation: 2 },
+  tabText: { fontSize: 11, fontWeight: '700', color: '#888' },
+  tabCountText: { fontSize: 12, fontWeight: '700' },
+  dateSelectorWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 4, gap: 8 },
+  dateAllBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 7.5,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1.5,
+    borderColor: '#E0ECDD',
+    minWidth: 56,
+    minHeight: 68,
+  },
+  dateAllBtnActive: { backgroundColor: '#1a5c2a', borderColor: '#1a5c2a' },
+  dateAllText: { fontSize: 12, fontWeight: '700', color: '#1a5c2a' },
+  dateAllTextActive: { color: '#fff' },
+  dateList: { gap: 8 },
+  dateItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 7.5,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1.5,
+    borderColor: '#E8E8E8',
+    minWidth: 56,
+  },
+  dateItemActive: { backgroundColor: '#1a5c2a', borderColor: '#1a5c2a' },
+  dateLabel: { fontSize: 9, fontWeight: '700', color: '#888', letterSpacing: 0.5 },
+  dateLabelActive: { color: '#fff' },
+  dateDay: { fontSize: 18, fontWeight: '800', color: '#222', marginTop: 1 },
+  dateDayActive: { color: '#fff' },
+  dateMonth: { fontSize: 10, fontWeight: '600', color: '#888' },
+  dateMonthActive: { color: '#fff' },
   content: { padding: 16, paddingTop: 12 },
   taskCard: {
     backgroundColor: '#fff',
-    borderRadius: 10,
+    borderRadius: 7.5,
     padding: 12,
     marginBottom: 8,
     elevation: 2,
@@ -448,40 +535,28 @@ const s = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: '#1a5c2a',
   },
-  taskCardDone: { borderLeftColor: '#16a34a' },
   taskCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   taskTitleWrap: { flex: 1 },
   taskId: { fontSize: 10, fontWeight: '600', color: '#999', marginBottom: 2 },
   taskName: { fontSize: 14, fontWeight: '700', color: '#222' },
-  taskNote: { fontSize: 12, color: '#666', marginTop: 6, lineHeight: 16 },
-  taskCardBottom: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
-  doneBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#16a34a22', borderRadius: 7.5, paddingHorizontal: 8, paddingVertical: 4 },
-  doneText: { fontSize: 11, fontWeight: '700', color: '#16a34a' },
-  priorityBadge: { borderRadius: 7.5, paddingHorizontal: 7, paddingVertical: 2 },
-  priorityText: { fontSize: 9, fontWeight: '700' },
-  dueRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  dueText: { fontSize: 10, color: '#888' },
+  statusBadge: { borderRadius: 7.5, paddingHorizontal: 8, paddingVertical: 3 },
+  statusText: { fontSize: 9, fontWeight: '700' },
   startBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#F09125',
     borderRadius: 7.5,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    justifyContent: 'center',
-  },
-  startBtnDone: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#16a34a',
-    borderRadius: 7.5,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
   },
   startBtnText: { color: '#fff', fontWeight: '700', fontSize: 11 },
+  taskNote: { fontSize: 12, color: '#666', marginTop: 6, lineHeight: 16 },
+  taskCardBottom: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  priorityBadge: { borderRadius: 7.5, paddingHorizontal: 7, paddingVertical: 2 },
+  priorityText: { fontSize: 9, fontWeight: '700' },
+  dueRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  dueText: { fontSize: 10, color: '#888' },
   emptyState: { alignItems: 'center', paddingVertical: 48 },
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
   emptyText: { fontSize: 16, fontWeight: '600', color: '#555' },

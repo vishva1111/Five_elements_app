@@ -66,7 +66,7 @@ export interface Project {
 
 // ─── Task Types ────────────────────────────────────────────────────────────────
 
-export type TaskStatus = 'assigned' | 'in_progress' | 'completed';
+export type TaskStatus = 'assigned' | 'in_progress' | 'completed' | 'approved' | 'rejected';
 
 export interface Task {
   id: string;

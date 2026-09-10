@@ -255,7 +255,7 @@ export default function App() {
       <SafeAreaProvider>
         <PaperProvider theme={theme}>
           <NavigationContainer>
-            <StatusBar style="light" backgroundColor="#1a5c2a" />
+            <StatusBar style="light" />
             <RootStack.Navigator screenOptions={{ headerShown: false }}>
               {!session || projectSelectionPending ? (
                 <RootStack.Screen name="Login" component={LoginScreen} />
