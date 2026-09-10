@@ -57,10 +57,12 @@ export function makeLocalTask(options: {
   location?: string;
   priority?: 'high' | 'medium' | 'low';
   due_date?: string;
+  project_id?: string;
 }): Task {
   return {
     id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     name: options.name,
+    project_id: options.project_id,
     assignee_id: '',
     target_count: options.target_count,
     location: options.location,
@@ -81,7 +83,13 @@ export function refreshLocalProgress(tasks: Task[], allTrees: TreeRecord[]): Tas
     ).length;
     const remaining = Math.max(0, task.target_count - captured);
     const progress = task.target_count > 0 ? (captured / task.target_count) * 100 : 0;
-    const status = progress >= 100 ? 'completed' : captured > 0 ? 'in_progress' : 'assigned';
+    // Keep status as 'assigned' if task hasn't been started by user
+    let status = task.status;
+    if (task.started_at) {
+      status = progress >= 100 ? 'completed' : 'in_progress';
+    } else if (task.status !== 'completed' && task.status !== 'approved' && task.status !== 'rejected') {
+      status = 'assigned';
+    }
     return { ...task, captured, remaining, progress, status };
   });
 }

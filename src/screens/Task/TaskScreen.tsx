@@ -95,27 +95,19 @@ export default function TaskScreen() {
     const myTrees = treesRes.data ?? [];
     const localWithProgress = refreshLocalProgress(localTasks, myTrees);
 
-    // Get assigned project IDs
-    const assignedProjectIds = new Set((assignedProjects ?? []).map((p) => p.id));
+    // Filter: tasks with no project, assigned projects, or active project
+    const filterByAssigned = (t: Task) =>
+      !t.project_id || (assignedProjects ?? []).some((p) => p.id === t.project_id) || t.project_id === activeProjectId;
 
-    // Filter tasks to only show those from assigned projects
-    const filterByAssigned = (tasks: Task[]) =>
-      tasks.filter((t) => !t.project_id || assignedProjectIds.has(t.project_id));
+    let visibleTasks = (tasksRes.data ?? []).filter(filterByAssigned);
+    let visibleLocal = localWithProgress.filter(filterByAssigned);
 
-    if (tasksRes.data) {
-      let visibleTasks = filterByAssigned(tasksRes.data);
-      if (activeProjectId) {
-        visibleTasks = visibleTasks.filter((t) => t.project_id === activeProjectId);
-      }
-      const visibleLocal = filterByAssigned(localWithProgress);
-      setTasks([...visibleTasks, ...visibleLocal]);
-    } else {
-      let visibleLocalTasks = filterByAssigned(localWithProgress);
-      if (activeProjectId) {
-        visibleLocalTasks = visibleLocalTasks.filter((t) => t.project_id === activeProjectId);
-      }
-      setTasks(visibleLocalTasks);
+    if (activeProjectId) {
+      visibleTasks = visibleTasks.filter((t) => t.project_id === activeProjectId);
+      visibleLocal = visibleLocal.filter((t) => t.project_id === activeProjectId);
     }
+
+    setTasks([...visibleTasks, ...visibleLocal]);
   }, [userId, activeProjectId, assignedProjects, setTasks, localTasks]);
 
   useFocusEffect(
@@ -161,7 +153,7 @@ export default function TaskScreen() {
   const handleAddDemoTask = async () => {
     setAddingDemo(true);
     const names = ['Demo Survey — Phase 1', 'Demo Planting Drive', 'Demo Health Check'];
-    const localOnly = localTasks.filter(isLocalTask);
+    const localOnly = localTasks.filter(isLocalTask).filter((t) => activeProjectId ? t.project_id === activeProjectId : true);
     const used = new Set(localOnly.map((t) => t.name));
     const name = names.find((n) => !used.has(n)) ?? `Demo Task ${localOnly.length + 1}`;
     const due = new Date(Date.now() + 30 * 86400000).toISOString();
@@ -171,13 +163,37 @@ export default function TaskScreen() {
       location: 'Demo field site',
       priority: 'medium',
       due_date: due,
+      project_id: activeProjectId ?? undefined,
     });
     const updated = [...localTasks, newTask];
     setLocalTasks(updated);
     await saveLocalTasks(updated);
-    setTasks(refreshLocalProgress(updated, trees));
+
+    // Reload tasks with the updated local list (loadTasks uses stale closure)
+    if (userId) {
+      const [treesRes, tasksRes] = await Promise.all([
+        fetchMyTrees(userId),
+        fetchAgentTasks(userId),
+      ]);
+      const myTrees = treesRes.data ?? [];
+      const localWithProgress = refreshLocalProgress(updated, myTrees);
+      const assignedProjectIds = new Set((assignedProjects ?? []).map((p) => p.id));
+      const filterByAssigned = (t: Task) => !t.project_id || assignedProjectIds.has(t.project_id);
+      if (tasksRes.data) {
+        let visibleTasks = tasksRes.data.filter(filterByAssigned);
+        if (activeProjectId) visibleTasks = visibleTasks.filter((t) => t.project_id === activeProjectId);
+        let visibleLocal = localWithProgress.filter(filterByAssigned);
+        if (activeProjectId) visibleLocal = visibleLocal.filter((t) => t.project_id === activeProjectId);
+        setTasks([...visibleTasks, ...visibleLocal]);
+      } else {
+        let visibleLocal = localWithProgress.filter(filterByAssigned);
+        if (activeProjectId) visibleLocal = visibleLocal.filter((t) => t.project_id === activeProjectId);
+        setTasks(visibleLocal);
+      }
+    }
+
     setAddingDemo(false);
-    Alert.alert('Demo task added', `"${name}" saved on this device. Capture trees and watch progress fill up!`);
+    Alert.alert('Demo task added', `"${name}" saved for this project.`);
   };
 
   const handleOpenMap = (location: string) => {
@@ -345,7 +361,7 @@ export default function TaskScreen() {
               let count: number;
               let denominator: number;
               if (tab.key === 'assigned') {
-                count = completedCount;
+                count = totalTasks - completedCount;
                 denominator = totalTasks;
               } else if (tab.key === 'completed') {
                 count = reviewedCount;
