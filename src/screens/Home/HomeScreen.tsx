@@ -19,12 +19,9 @@ import { loadLocalTasks } from '../../services/localTaskService';
 import ProjectSelector from '../../components/ProjectSelector';
 import CurveDivider from '../../components/CurveDivider';
 import CircularProgress from '../../components/CircularProgress';
-import MultiProgressRing from '../../components/MultiProgressRing';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Task, Project } from '../../types';
-
-const PROJECT_COLORS = ['#1a5c2a', '#00897B', '#F09125', '#2196F3', '#9C27B0', '#E91E63', '#FF5722'];
 
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
@@ -39,7 +36,7 @@ export default function HomeScreen() {
   const setTrees = useTreeStore((s) => s.setTrees);
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({ total: 0, healthy: 0, sick: 0, dead: 0 });
-  const [taskStats, setTaskStats] = useState({ total: 0, assigned: 0, inProgress: 0, completed: 0 });
+  const [taskStats, setTaskStats] = useState({ total: 0, assigned: 0, rejected: 0, completed: 0 });
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const loadSeqRef = useRef(0);
@@ -88,26 +85,27 @@ export default function HomeScreen() {
     const localTasks = await loadLocalTasks();
     if (seq !== loadSeqRef.current) return;
     
-    // Get assigned project IDs
-    const assignedProjectIds = new Set(assignedProjects.map((p) => p.id));
+    // Fetch tree captures (count as completed tasks)
+    const { data: treeData } = await fetchMyTrees(userId);
+    if (seq !== loadSeqRef.current) return;
+    const treeCaptures = (treeData ?? []).length;
     
-    // Filter tasks to only show those from assigned projects
-    const filterByAssigned = (tasks: Task[]) =>
-      tasks.filter((t) => !t.project_id || assignedProjectIds.has(t.project_id));
-    
+    // Show ALL tasks across all projects
     const allTasks: Task[] = [
-      ...filterByAssigned(dbTasks ?? []),
-      ...filterByAssigned(localTasks),
+      ...(dbTasks ?? []),
+      ...localTasks,
     ];
     
-    // Calculate stats from tasks across assigned projects
+    const dbCompleted = allTasks.filter((t) => t.status === 'completed').length;
+    
+    // Calculate stats from all tasks + tree captures
     setTaskStats({
-      total: allTasks.length,
+      total: allTasks.length + treeCaptures,
       assigned: allTasks.filter((t) => t.status === 'assigned').length,
-      inProgress: allTasks.filter((t) => t.status === 'in_progress').length,
-      completed: allTasks.filter((t) => t.status === 'completed').length,
+      rejected: allTasks.filter((t) => t.status === 'rejected').length,
+      completed: dbCompleted + treeCaptures,
     });
-  }, [userId, activeProjectId, assignedProjects]);
+  }, [userId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -241,29 +239,15 @@ export default function HomeScreen() {
               onPress={() => navigation.navigate('Task')}
               activeOpacity={0.7}
             >
-              {assignedProjects.length > 0 ? (
-                <MultiProgressRing
-                  size={64}
-                  strokeWidth={5}
-                  trackColor="#E0F2F1"
-                  segments={assignedProjects.map((_, i) => ({
-                    value: 1,
-                    color: PROJECT_COLORS[i % PROJECT_COLORS.length],
-                  }))}
-                >
-                  <Text style={styles.taskStatNumber}>{assignedProjects.length}</Text>
-                </MultiProgressRing>
-              ) : (
-                <CircularProgress
-                  size={64}
-                  progress={0}
-                  strokeWidth={5}
-                  color="#00897B"
-                  trackColor="#E0F2F1"
-                >
-                  <Text style={styles.taskStatNumber}>0</Text>
-                </CircularProgress>
-              )}
+              <CircularProgress
+                size={64}
+                progress={100}
+                strokeWidth={5}
+                color="#1a5c2a"
+                trackColor="#E8F5E9"
+              >
+                <Text style={styles.taskStatNumber}>{allProjects.length}</Text>
+              </CircularProgress>
               <Text style={styles.taskStatLabel}>Projects</Text>
             </TouchableOpacity>
           </View>
@@ -275,14 +259,14 @@ export default function HomeScreen() {
             >
               <CircularProgress
                 size={64}
-                progress={taskStats.total > 0 ? ((taskStats.assigned + taskStats.inProgress) / taskStats.total) * 100 : 0}
+                progress={taskStats.total > 0 ? (taskStats.rejected / taskStats.total) * 100 : 0}
                 strokeWidth={5}
-                color="#FFB300"
-                trackColor="#FFF8E1"
+                color="#ef4444"
+                trackColor="#FEE2E2"
               >
-                <Text style={styles.taskStatNumber}>{taskStats.assigned + taskStats.inProgress}</Text>
+                <Text style={styles.taskStatNumber}>{taskStats.rejected}</Text>
               </CircularProgress>
-              <Text style={styles.taskStatLabel}>Pending</Text>
+              <Text style={styles.taskStatLabel}>Rejected</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.taskStatCard}
