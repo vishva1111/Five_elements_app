@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  Modal,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -21,8 +22,12 @@ import {
   CaptureStackParamList,
   TreeFormData,
   TREE_SPECIES,
-  HEALTH_STATUS_OPTIONS,
   EVENT_TYPES,
+  TREE_CONDITION_OPTIONS,
+  LAND_TYPE_OPTIONS,
+  TreeCondition,
+  MultiStemOption,
+  LandType,
 } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
@@ -46,34 +51,65 @@ export default function TreeFormScreen() {
   // Auto-select the active project
   const [form, setForm] = useState<TreeFormData>({
     species: '',
+    scientific_name: '',
     health_status: 'healthy',
     notes: '',
     project_id: activeProjectId ?? '',
     event_type: 'Planting',
-    quantity: 200,
+    quantity: 1,
+    tree_id: '',
+    dbh_cm: '',
+    height_m: '',
+    wood_density: '',
+    crown_diameter_m: '',
+    tree_condition: 'Healthy',
+    multi_stem: 'No',
+    age_years: '',
+    land_type: 'Roadside',
+    surveyor: user?.full_name ?? '',
+    survey_date: new Date().toISOString().split('T')[0],
+    co2_kg: 0,
   });
   const [showSpeciesPicker, setShowSpeciesPicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showNoteHelper, setShowNoteHelper] = useState(false);
 
-  // Refs used to keep the NOTE field visible above the keyboard while typing
+  // Auto-generate TreeID on mount
+  useEffect(() => {
+    const seq = String(Date.now()).slice(-4).padStart(4, '0');
+    setForm((f) => ({ ...f, tree_id: `TREE-${seq}` }));
+  }, []);
+
+  // Auto-calculate CO2_kg: 0.0673 × (WoodDensity × DBH² × Height)^0.976 × 1.20 × 0.47 × 3.67
+  useEffect(() => {
+    const dbh = parseFloat(form.dbh_cm);
+    const height = parseFloat(form.height_m);
+    const density = parseFloat(form.wood_density);
+    if (dbh > 0 && height > 0 && density > 0) {
+      const agb = 0.0673 * Math.pow(density * dbh * dbh * height, 0.976);
+      const co2 = agb * 1.20 * 0.47 * 3.67;
+      setForm((f) => ({ ...f, co2_kg: Math.round(co2 * 100) / 100 }));
+    } else {
+      setForm((f) => ({ ...f, co2_kg: 0 }));
+    }
+  }, [form.dbh_cm, form.height_m, form.wood_density]);
+
+  // Refs used to keep fields visible above the keyboard while typing
   const scrollRef = useRef<ScrollView>(null);
   const notesFieldRef = useRef<TextInput>(null);
   const scrollOffsetRef = useRef(0);
   const windowHRef = useRef(Dimensions.get('window').height);
 
-  // Scroll the page so the NOTE field sits fully above the keyboard. Uses the
-  // ACTUAL measured keyboard height (instead of a hardcoded guess) and handles
-  // both iOS "padding" and Android "adjustResize" so the field is never hidden.
-  const bringNotesAboveKeyboard = (kb?: number) => {
+  // Generic: scroll any focused input into view above the keyboard
+  const scrollToInput = (ref: React.RefObject<TextInput>) => {
     const scroll = scrollRef.current;
-    const input = notesFieldRef.current;
+    const input = ref.current;
     if (!scroll || !input) return;
     input.measureInWindow((_x: number, y: number, _w: number, h: number) => {
       const winH = Dimensions.get('window').height;
-      // If the OS already shrank the window (adjustResize), the keyboard is
-      // excluded from winH; otherwise subtract the measured keyboard height.
       const resized = winH < windowHRef.current - 20;
-      const visibleBottom = resized ? winH : winH - (kb ?? 300);
+      const kbHeight = 300;
+      const visibleBottom = resized ? winH : winH - kbHeight;
       const overflow = y + h + 16 - visibleBottom;
       if (overflow > 0) {
         scroll.scrollTo({ y: scrollOffsetRef.current + overflow, animated: true });
@@ -81,25 +117,58 @@ export default function TreeFormScreen() {
     });
   };
 
-  const handleNotesFocus = () => {
-    // Close the species dropdown so it never sits over the keyboard
-    setShowSpeciesPicker(false);
-    // Scroll a few times so the NOTE field ends up visible after the layout
-    // settles on every device
-    setTimeout(() => bringNotesAboveKeyboard(), 150);
-    setTimeout(() => bringNotesAboveKeyboard(), 500);
+  // Generic handler: when any input is focused, scroll so it stays above the keyboard
+  const handleInputFocus = (e: any) => {
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    // e.target is the native tag; we can measure it via the responder
+    const node = e?.target;
+    if (!node) return;
+    // Small delay to let keyboard animation start
+    setTimeout(() => {
+      // On Android/iOS the native node exposes measureInWindow via the Fabric/TurboModule
+      // bridge. If it's not available we fall back to a conservative scroll.
+      if (typeof node.measureInWindow === 'function') {
+        node.measureInWindow((_x: number, y: number, _w: number, h: number) => {
+          const winH = Dimensions.get('window').height;
+          const keyboardHeight = 320;
+          const visibleTop = scrollOffsetRef.current;
+          const visibleBottom = visibleTop + winH - keyboardHeight;
+          if (y + h > visibleBottom) {
+            scroll.scrollTo({ y: scrollOffsetRef.current + (y + h - visibleBottom) + 16, animated: true });
+          }
+        });
+      } else {
+        scroll.scrollTo({ y: scrollOffsetRef.current + 250, animated: true });
+      }
+    }, 150);
   };
 
-  // Whenever the keyboard opens while the NOTE field is focused, re-scroll so
-  // the field (and what you type) stays visible using the REAL keyboard height
+  const handleNotesFocus = () => {
+    setShowSpeciesPicker(false);
+    setTimeout(() => scrollToInput(notesFieldRef), 100);
+    setTimeout(() => scrollToInput(notesFieldRef), 350);
+  };
+
+  // When keyboard opens, make sure the focused input stays visible
   useEffect(() => {
-    const willShow = Keyboard.addListener('keyboardWillShow', (e) => {
-      setTimeout(() => bringNotesAboveKeyboard(e.endCoordinates.height), 150);
-      setTimeout(() => bringNotesAboveKeyboard(e.endCoordinates.height), 500);
+    const willShow = Keyboard.addListener('keyboardWillShow', () => {
+      // iOS: keyboard animation starting, give layout a moment then re-measure
+      setTimeout(() => {
+        const scroll = scrollRef.current;
+        if (scroll) {
+          scroll.scrollTo({ y: scrollOffsetRef.current + 200, animated: true });
+        }
+      }, 150);
     });
-    const didShow = Keyboard.addListener('keyboardDidShow', (e) => {
-      setTimeout(() => bringNotesAboveKeyboard(e.endCoordinates.height), 150);
-      setTimeout(() => bringNotesAboveKeyboard(e.endCoordinates.height), 450);
+    const didShow = Keyboard.addListener('keyboardDidShow', () => {
+      // Android: keyboard already shown, nudge scroll
+      setTimeout(() => {
+        const scroll = scrollRef.current;
+        if (scroll) {
+          scroll.scrollTo({ y: scrollOffsetRef.current + 200, animated: true });
+        }
+      }, 200);
     });
     return () => {
       willShow.remove();
@@ -137,6 +206,14 @@ export default function TreeFormScreen() {
       Alert.alert('Required', 'Please select or enter a tree species.');
       return;
     }
+    if (!form.dbh_cm || parseFloat(form.dbh_cm) <= 0) {
+      Alert.alert('Required', 'Please enter DBH (cm).');
+      return;
+    }
+    if (!form.height_m || parseFloat(form.height_m) <= 0) {
+      Alert.alert('Required', 'Please enter Height (m).');
+      return;
+    }
     if (!user) return;
 
     setSubmitting(true);
@@ -145,7 +222,7 @@ export default function TreeFormScreen() {
       const photoUrl = await uploadTreePhoto(photoUri, user.id);
       if (!photoUrl) throw new Error('Photo upload failed');
 
-      // 2. Insert tree record (includes event_type and quantity)
+      // 2. Insert tree record with all fields
       const { data, error } = await insertTreeRecord({
         user_id: user.id,
         project_id: form.project_id || undefined,
@@ -153,11 +230,23 @@ export default function TreeFormScreen() {
         latitude: coords.latitude,
         longitude: coords.longitude,
         species: form.species.trim(),
+        scientific_name: form.scientific_name.trim() || undefined,
         health_status: form.health_status,
         notes: form.notes.trim() || undefined,
         synced: true,
         event_type: form.event_type,
         quantity: form.quantity,
+        dbh_cm: parseFloat(form.dbh_cm) || undefined,
+        height_m: parseFloat(form.height_m) || undefined,
+        wood_density: parseFloat(form.wood_density) || undefined,
+        crown_diameter_m: parseFloat(form.crown_diameter_m) || undefined,
+        tree_condition: form.tree_condition,
+        multi_stem: form.multi_stem,
+        age_years: parseInt(form.age_years) || undefined,
+        land_type: form.land_type,
+        surveyor: form.surveyor.trim() || undefined,
+        survey_date: form.survey_date || undefined,
+        co2_kg: form.co2_kg || undefined,
       });
 
       if (error || !data) throw new Error(error ?? 'Failed to save tree record');
@@ -194,7 +283,12 @@ export default function TreeFormScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Field capture</Text>
+        <View style={styles.headerTextCol}>
+          <Text style={styles.headerTitle}>Field capture</Text>
+          <Text style={styles.headerProjectName} numberOfLines={1}>
+            {selectedProject?.name ?? 'All Projects'}
+          </Text>
+        </View>
         <View
           style={[
             styles.headerCredits,
@@ -245,68 +339,36 @@ export default function TreeFormScreen() {
 
         {/* Form */}
         <View style={styles.form}>
-          {/* Event Type */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>EVENT TYPE</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.eventTypeScroll}
-            >
-              {EVENT_TYPES.map((type) => (
-                <TouchableOpacity
-                  key={type}
-                  style={[styles.eventTypeBtn, form.event_type === type && styles.eventTypeBtnActive]}
-                  onPress={() => setForm({ ...form, event_type: type })}
-                >
-                  <Text style={[styles.eventTypeText, form.event_type === type && styles.eventTypeTextActive]}>
-                    {type}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+
+          {/* ─── SECTION: Tree Identity ─── */}
+          <View style={styles.sectionHeader}>
+            <Ionicons name="finger-print" size={16} color="#1a5c2a" />
+            <Text style={styles.sectionTitle}>Tree Identity</Text>
           </View>
 
-          {/* Quantity */}
+          {/* Tree ID — auto-generated */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>QUANTITY</Text>
-            <View style={styles.quantityRow}>
-              <TouchableOpacity
-                style={styles.quantityBtn}
-                onPress={() => setForm({ ...form, quantity: Math.max(1, form.quantity - 10) })}
-              >
-                <Text style={styles.quantityBtnText}>-</Text>
-              </TouchableOpacity>
-              <View style={styles.quantityDisplay}>
-                <Text style={styles.quantityValue}>{form.quantity}</Text>
-                <Text style={styles.quantityUnit}>saplings</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.quantityBtn}
-                onPress={() => setForm({ ...form, quantity: form.quantity + 10 })}
-              >
-                <Text style={styles.quantityBtnText}>+</Text>
-              </TouchableOpacity>
+            <Text style={styles.fieldLabel}>TREE ID</Text>
+            <View style={styles.readOnlyField}>
+              <Text style={styles.readOnlyText}>{form.tree_id}</Text>
             </View>
           </View>
 
-          {/* Species */}
+          {/* Common Name (Species) */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>SPECIES <Text style={styles.required}>· required</Text></Text>
+            <Text style={styles.fieldLabel}>COMMON NAME <Text style={styles.required}>· required</Text></Text>
             <TouchableOpacity
               style={styles.speciesInput}
               onPress={() => {
-                Keyboard.dismiss(); // keep the keyboard from covering the list
+                Keyboard.dismiss();
                 setShowSpeciesPicker(!showSpeciesPicker);
               }}
             >
               <Text style={[styles.speciesInputText, !form.species && styles.speciesPlaceholder]}>
-                {form.species || 'Type a species — free text works offline'}
+                {form.species || 'Select or type a species'}
               </Text>
               <Ionicons name={showSpeciesPicker ? 'chevron-up' : 'chevron-down'} size={18} color="#888" />
             </TouchableOpacity>
-
-            {/* Species Picker List — internally scrollable so every name is reachable */}
             {showSpeciesPicker && (
               <View style={styles.speciesList}>
                 <ScrollView
@@ -333,23 +395,143 @@ export default function TreeFormScreen() {
             )}
           </View>
 
-          {/* Health Status */}
+          {/* Scientific Name */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>HEALTH STATUS</Text>
-            <View style={styles.healthRow}>
-              {HEALTH_STATUS_OPTIONS.map((opt) => (
+            <Text style={styles.fieldLabel}>SCIENTIFIC NAME <Text style={styles.optional}>· optional</Text></Text>
+            <TextInput
+              style={styles.textInput}
+              value={form.scientific_name}
+              onChangeText={(t) => setForm({ ...form, scientific_name: t })}
+              placeholder="e.g. Azadirachta indica"
+              placeholderTextColor="#aaa"
+              onFocus={handleInputFocus}
+            />
+          </View>
+
+          {/* ─── SECTION: Location ─── */}
+          <View style={styles.sectionHeader}>
+            <Ionicons name="location" size={16} color="#1a5c2a" />
+            <Text style={styles.sectionTitle}>Location</Text>
+          </View>
+
+          {/* Lat / Long — read-only from GPS */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>LAT / LONG</Text>
+            <View style={styles.readOnlyField}>
+              <Text style={styles.readOnlyText}>
+                {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
+              </Text>
+              <Ionicons name="checkmark-circle" size={14} color="#22c55e" />
+            </View>
+          </View>
+
+          {/* Land Type */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>LAND TYPE</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eventTypeScroll}>
+              {LAND_TYPE_OPTIONS.map((lt) => (
                 <TouchableOpacity
-                  key={opt.value}
+                  key={lt}
+                  style={[styles.eventTypeBtn, form.land_type === lt && styles.eventTypeBtnActive]}
+                  onPress={() => setForm({ ...form, land_type: lt })}
+                >
+                  <Text style={[styles.eventTypeText, form.land_type === lt && styles.eventTypeTextActive]}>
+                    {lt}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* ─── SECTION: Measurements ─── */}
+          <View style={styles.sectionHeader}>
+            <Ionicons name="create-outline" size={14} color="#1a5c2a" />
+            <Text style={styles.sectionTitle}>Measurements</Text>
+          </View>
+
+          {/* 4-column compact grid */}
+          <View style={styles.measureGrid}>
+            <View style={styles.measureCell}>
+              <Text style={styles.measureLabel}>DBH (CM) <Text style={styles.required}>*</Text></Text>
+              <TextInput
+                style={styles.measureInput}
+                value={form.dbh_cm}
+                onChangeText={(t) => setForm({ ...form, dbh_cm: t.replace(/[^0-9.]/g, '') })}
+                placeholder="0.0"
+                placeholderTextColor="#bbb"
+                keyboardType="decimal-pad"
+                onFocus={handleInputFocus}
+              />
+            </View>
+            <View style={styles.measureCell}>
+              <Text style={styles.measureLabel}>HEIGHT (M) <Text style={styles.required}>*</Text></Text>
+              <TextInput
+                style={styles.measureInput}
+                value={form.height_m}
+                onChangeText={(t) => setForm({ ...form, height_m: t.replace(/[^0-9.]/g, '') })}
+                placeholder="0.0"
+                placeholderTextColor="#bbb"
+                keyboardType="decimal-pad"
+                onFocus={handleInputFocus}
+              />
+            </View>
+            <View style={styles.measureCell}>
+              <Text style={styles.measureLabel}>DENSITY (G/CM³) <Text style={styles.required}>*</Text></Text>
+              <TextInput
+                style={styles.measureInput}
+                value={form.wood_density}
+                onChangeText={(t) => setForm({ ...form, wood_density: t.replace(/[^0-9.]/g, '') })}
+                placeholder="0.0"
+                placeholderTextColor="#bbb"
+                keyboardType="decimal-pad"
+                onFocus={handleInputFocus}
+              />
+            </View>
+            <View style={styles.measureCell}>
+              <Text style={styles.measureLabel}>CROWN (M)</Text>
+              <TextInput
+                style={styles.measureInput}
+                value={form.crown_diameter_m}
+                onChangeText={(t) => setForm({ ...form, crown_diameter_m: t.replace(/[^0-9.]/g, '') })}
+                placeholder="0.0"
+                placeholderTextColor="#bbb"
+                keyboardType="decimal-pad"
+                onFocus={handleInputFocus}
+              />
+            </View>
+          </View>
+
+          {/* CO2_kg — auto-calculated */}
+          <View style={styles.co2Row}>
+            <Ionicons name="leaf" size={14} color="#22c55e" />
+            <Text style={styles.co2Label}>CO₂</Text>
+            <Text style={styles.co2Value}>{form.co2_kg > 0 ? `${form.co2_kg} kg` : '—'}</Text>
+          </View>
+
+          {/* ─── SECTION: Condition & Metadata ─── */}
+          <View style={styles.sectionHeader}>
+            <Ionicons name="information-circle" size={16} color="#1a5c2a" />
+            <Text style={styles.sectionTitle}>Condition & Metadata</Text>
+          </View>
+
+          {/* Tree Condition */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>CONDITION</Text>
+            <View style={styles.healthRow}>
+              {TREE_CONDITION_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.label}
                   style={[
                     styles.healthBtn,
+                    styles.healthBtnCompact,
                     { borderColor: opt.color },
-                    form.health_status === opt.value && { backgroundColor: opt.color },
+                    form.tree_condition === opt.label && { backgroundColor: opt.color },
                   ]}
-                  onPress={() => setForm({ ...form, health_status: opt.value })}
+                  onPress={() => setForm({ ...form, tree_condition: opt.label })}
                 >
                   <Text style={[
                     styles.healthBtnText,
-                    { color: form.health_status === opt.value ? '#fff' : opt.color },
+                    { color: form.tree_condition === opt.label ? '#fff' : opt.color },
                   ]}>
                     {opt.label}
                   </Text>
@@ -358,18 +540,72 @@ export default function TreeFormScreen() {
             </View>
           </View>
 
-          {/* Project — read-only active project display */}
+          {/* Multi Stem + Age in one row */}
+          <View style={styles.measureGrid}>
+            <View style={styles.measureCell}>
+              <Text style={styles.fieldLabel}>MULTI STEM</Text>
+              <View style={styles.multiStemRow}>
+                {(['Yes', 'No'] as MultiStemOption[]).map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.multiStemBtn, form.multi_stem === opt && styles.multiStemBtnActive]}
+                    onPress={() => setForm({ ...form, multi_stem: opt })}
+                  >
+                    <Text style={[styles.multiStemBtnText, form.multi_stem === opt && styles.multiStemBtnTextActive]}>
+                      {opt}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+            <View style={styles.measureCell}>
+              <Text style={styles.fieldLabel}>AGE (yrs)</Text>
+              <TextInput
+                style={styles.measureInput}
+                value={form.age_years}
+                onChangeText={(t) => setForm({ ...form, age_years: t.replace(/[^0-9]/g, '') })}
+                placeholder="0"
+                placeholderTextColor="#bbb"
+                keyboardType="number-pad"
+                onFocus={handleInputFocus}
+              />
+            </View>
+          </View>
+
+          {/* Event Type */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>PROJECT</Text>
-            <View style={styles.projectDropdownTrigger}>
-              <View style={styles.projectDropdownLeft}>
-                <Ionicons name="folder" size={18} color="#1a5c2a" />
-                <Text
-                  style={styles.projectDropdownText}
-                  numberOfLines={1}
+            <Text style={styles.fieldLabel}>EVENT TYPE</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.eventTypeScroll}
+            >
+              {EVENT_TYPES.map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[styles.eventTypeBtn, form.event_type === type && styles.eventTypeBtnActive]}
+                  onPress={() => setForm({ ...form, event_type: type })}
                 >
-                  {selectedProject?.name ?? 'All Projects'}
-                </Text>
+                  <Text style={[styles.eventTypeText, form.event_type === type && styles.eventTypeTextActive]}>
+                    {type}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* Surveyor + Date in one row */}
+          <View style={styles.measureGrid}>
+            <View style={styles.measureCell}>
+              <Text style={styles.fieldLabel}>SURVEYOR</Text>
+              <View style={styles.readOnlyField}>
+                <Text style={styles.readOnlyText}>{form.surveyor || '—'}</Text>
+              </View>
+            </View>
+            <View style={styles.measureCell}>
+              <Text style={styles.fieldLabel}>DATE</Text>
+              <View style={styles.readOnlyField}>
+                <Text style={styles.readOnlyText}>{form.survey_date || '—'}</Text>
               </View>
             </View>
           </View>
@@ -377,25 +613,86 @@ export default function TreeFormScreen() {
           {/* Notes */}
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>NOTE <Text style={styles.optional}>· optional</Text></Text>
-            <TextInput
-              ref={notesFieldRef}
+            <TouchableOpacity
               style={styles.notesInput}
-              value={form.notes}
-              onChangeText={(t) => setForm({ ...form, notes: t })}
-              onFocus={handleNotesFocus}
-              onSelectionChange={() => {
-                // While writing, keep the NOTE field above the keyboard at all
-                // times — as the note grows to more lines, the page follows it
-                // so the field and the keypad are visible at the same time
-                setTimeout(() => bringNotesAboveKeyboard(), 100);
-              }}
-              multiline
-              numberOfLines={3}
-              placeholder="Anything the reviewer should know"
-              placeholderTextColor="#aaa"
-              textAlignVertical="top"
-            />
+              onPress={() => { Keyboard.dismiss(); setShowNoteHelper(true); }}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.notesInputText, !form.notes && styles.speciesPlaceholder]}>
+                {form.notes || 'Tap to add a note...'}
+              </Text>
+              <Ionicons name="pencil" size={14} color="#888" />
+            </TouchableOpacity>
           </View>
+
+          {/* Note Helper Modal */}
+          <Modal
+            visible={showNoteHelper}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setShowNoteHelper(false)}
+          >
+            <View style={styles.modalBackdrop}>
+              <TouchableOpacity
+                style={styles.modalBackdropTouch}
+                activeOpacity={1}
+                onPress={() => setShowNoteHelper(false)}
+              />
+              <View style={styles.noteModalSheet}>
+                <View style={styles.noteModalHeader}>
+                  <Text style={styles.noteModalTitle}>Add Note</Text>
+                  <TouchableOpacity onPress={() => setShowNoteHelper(false)}>
+                    <Ionicons name="close" size={22} color="#333" />
+                  </TouchableOpacity>
+                </View>
+
+                <TextInput
+                  style={styles.noteModalInput}
+                  value={form.notes}
+                  onChangeText={(t) => setForm({ ...form, notes: t })}
+                  multiline
+                  numberOfLines={4}
+                  placeholder="Type your note here..."
+                  placeholderTextColor="#aaa"
+                  textAlignVertical="top"
+                  autoFocus
+                />
+
+                <Text style={styles.noteSuggestionLabel}>Quick suggestions:</Text>
+                <View style={styles.noteSuggestionChips}>
+                  {[
+                    'Tree near water source',
+                    'Needs pruning',
+                    'Pest damage visible',
+                    'Good canopy cover',
+                    'New sapling',
+                    'Marked for removal',
+                    'Fence nearby',
+                    'Irrigation required',
+                  ].map((s) => (
+                    <TouchableOpacity
+                      key={s}
+                      style={styles.noteChip}
+                      onPress={() => {
+                        const sep = form.notes.trim() ? '\n' : '';
+                        setForm({ ...form, notes: form.notes + sep + s });
+                      }}
+                    >
+                      <Text style={styles.noteChipText}>{s}</Text>
+                      <Ionicons name="add-circle" size={14} color="#1a5c2a" />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <TouchableOpacity
+                  style={styles.noteDoneBtn}
+                  onPress={() => setShowNoteHelper(false)}
+                >
+                  <Text style={styles.noteDoneBtnText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
 
           {/* Low Accuracy Warning */}
           {coords && coords.accuracy && coords.accuracy > 50 && (
@@ -445,13 +742,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerTextCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
   headerTitle: {
     color: '#fff',
     fontSize: 19,
     fontWeight: '700',
     textTransform: 'uppercase',
-    textAlign: 'center',
-    flex: 1,
+  },
+  headerProjectName: {
+    color: '#cde8d3',
+    fontSize: 12,
+    marginTop: 2,
   },
   headerCredits: {
     flexDirection: 'row',
@@ -543,6 +847,114 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     textTransform: 'none',
   },
+  // Section Headers
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingTop: 10,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E8F5E9',
+    marginTop: 2,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1a5c2a',
+    textTransform: 'uppercase',
+  },
+  // Read-only field
+  readOnlyField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 7.5,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+  },
+  readOnlyText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+    flex: 1,
+  },
+  // Text input
+  textInput: {
+    backgroundColor: '#fff',
+    borderRadius: 7.5,
+    borderWidth: 1.5,
+    borderColor: '#D4E8D0',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: '#1a1a1a',
+  },
+  // CO2 field
+  co2Field: {
+    backgroundColor: '#E8F5E9',
+    borderColor: '#C8E6C9',
+  },
+  co2Text: {
+    color: '#1a5c2a',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  // Measurement grid
+  measureGrid: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  measureCell: {
+    flex: 1,
+    gap: 4,
+  },
+  measureLabel: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#1a5c2a',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  measureInput: {
+    backgroundColor: '#fff',
+    borderRadius: 7.5,
+    borderWidth: 1.5,
+    borderColor: '#D4E8D0',
+    paddingHorizontal: 6,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#1a1a1a',
+    textAlign: 'center',
+    minHeight: 40,
+  },
+  // CO2 row
+  co2Row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 7.5,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
+  },
+  co2Label: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1a5c2a',
+  },
+  co2Value: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1a5c2a',
+    flex: 1,
+    textAlign: 'right',
+  },
   // Event Type
   eventTypeScroll: {
     flexDirection: 'row',
@@ -561,6 +973,43 @@ const styles = StyleSheet.create({
   eventTypeBtnActive: {
     backgroundColor: '#1a5c2a',
     borderColor: '#1a5c2a',
+  },
+  eventTypeBtnCompact: {
+    height: 38,
+    paddingHorizontal: 12,
+  },
+  eventTypeBtnSmall: {
+    height: 36,
+    paddingHorizontal: 10,
+    flex: 1,
+  },
+  // Multi Stem row
+  multiStemRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  multiStemBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 7.5,
+    borderWidth: 1.5,
+    borderColor: '#D4E8D0',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  multiStemBtnActive: {
+    backgroundColor: '#1a5c2a',
+    borderColor: '#1a5c2a',
+  },
+  multiStemBtnText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1a1a1a',
+  },
+  multiStemBtnTextActive: {
+    color: '#fff',
+    fontWeight: '700',
   },
   eventTypeText: {
     fontSize: 14,
@@ -675,6 +1124,10 @@ const styles = StyleSheet.create({
     borderRadius: 7.5,
     borderWidth: 2,
   },
+  healthBtnCompact: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
   healthBtnText: {
     fontSize: 13,
     fontWeight: '600',
@@ -761,9 +1214,101 @@ const styles = StyleSheet.create({
     borderColor: '#AACBA7',
     borderRadius: 7.5,
     padding: 14,
-    fontSize: 15,
     backgroundColor: '#fff',
-    minHeight: 80,
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  notesInputText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1a1a1a',
+  },
+  // Modal backdrop
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalBackdropTouch: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  // Note Helper Modal
+  noteModalSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 20,
+    paddingBottom: 40,
+    maxHeight: '70%',
+    paddingHorizontal: 20,
+  },
+  noteModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  noteModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1a1a',
+  },
+  noteModalInput: {
+    borderWidth: 1.5,
+    borderColor: '#D4E8D0',
+    borderRadius: 7.5,
+    padding: 14,
+    fontSize: 15,
+    color: '#1a1a1a',
+    backgroundColor: '#f9fdf8',
+    minHeight: 100,
+    textAlignVertical: 'top',
+    marginBottom: 14,
+  },
+  noteSuggestionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 8,
+  },
+  noteSuggestionChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  noteChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 7.5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
+  },
+  noteChipText: {
+    fontSize: 12,
+    color: '#1a5c2a',
+    fontWeight: '500',
+  },
+  noteDoneBtn: {
+    backgroundColor: '#1a5c2a',
+    borderRadius: 7.5,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  noteDoneBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
   // Accuracy Warning
   accuracyWarning: {

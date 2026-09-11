@@ -180,39 +180,44 @@ export default function CaptureScreen() {
       </LinearGradient>
 
       {/* Camera View */}
-      <CameraView
-        ref={cameraRef}
-        style={styles.camera}
-        facing={facing}
-        flash={flash}
-        onCameraReady={() => setIsReady(true)}
-      >
-        {/* GPS Chip */}
-        <View style={[styles.gpsChip, gpsStatus === 'good' && styles.gpsChipGood, gpsStatus === 'unavailable' && styles.gpsChipBad]}>
-          <View style={[styles.gpsDot, gpsStatus === 'good' && styles.gpsDotGood, gpsStatus === 'acquiring' && styles.gpsDotPulse]} />
-          <Text style={styles.gpsText}>
-            {gpsStatus === 'acquiring' ? 'Getting your location...' :
-             gpsStatus === 'good' ? `GPS ±${coords?.accuracy?.toFixed(0) ?? '?'} m · Good fix` :
-             'No GPS signal'}
-          </Text>
-        </View>
+      <View style={styles.cameraContainer}>
+        <CameraView
+          ref={cameraRef}
+          style={styles.camera}
+          facing={facing}
+          flash={flash}
+          onCameraReady={() => setIsReady(true)}
+        />
 
-        {/* Viewfinder Corners */}
-        <View style={styles.viewfinder}>
-          <View style={styles.corner} />
-          <View style={[styles.corner, styles.cornerTR]} />
-          <View style={[styles.corner, styles.cornerBL]} />
-          <View style={[styles.corner, styles.cornerBR]} />
-        </View>
-
-        {/* Coordinates + Timestamp */}
-        {coords && (
-          <View style={styles.coordsOverlay}>
-            <Text style={styles.coordsText}>{formatCoords()}</Text>
-            <Text style={styles.timestampText}>{formatTimestamp()}</Text>
+        {/* Overlay on top of camera */}
+        <View style={styles.cameraOverlay}>
+          {/* GPS Chip */}
+          <View style={[styles.gpsChip, gpsStatus === 'good' && styles.gpsChipGood, gpsStatus === 'unavailable' && styles.gpsChipBad]}>
+            <View style={[styles.gpsDot, gpsStatus === 'good' && styles.gpsDotGood, gpsStatus === 'acquiring' && styles.gpsDotPulse]} />
+            <Text style={styles.gpsText}>
+              {gpsStatus === 'acquiring' ? 'Getting your location...' :
+               gpsStatus === 'good' ? `GPS ±${coords?.accuracy?.toFixed(0) ?? '?'} m · Good fix` :
+               'No GPS signal'}
+            </Text>
           </View>
-        )}
-      </CameraView>
+
+          {/* Viewfinder Corners */}
+          <View style={styles.viewfinder}>
+            <View style={styles.corner} />
+            <View style={[styles.corner, styles.cornerTR]} />
+            <View style={[styles.corner, styles.cornerBL]} />
+            <View style={[styles.corner, styles.cornerBR]} />
+          </View>
+
+          {/* Coordinates + Timestamp */}
+          {coords && (
+            <View style={styles.coordsOverlay}>
+              <Text style={styles.coordsText}>{formatCoords()}</Text>
+              <Text style={styles.timestampText}>{formatTimestamp()}</Text>
+            </View>
+          )}
+        </View>
+      </View>
 
       {/* Capture Row */}
       <View style={styles.captureRow}>
@@ -338,9 +343,16 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   // Camera
-  camera: {
+  cameraContainer: {
     flex: 1,
     position: 'relative',
+  },
+  camera: {
+    flex: 1,
+  },
+  cameraOverlay: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 1,
   },
   // GPS Chip
   gpsChip: {

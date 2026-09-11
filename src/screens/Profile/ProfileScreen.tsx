@@ -39,6 +39,11 @@ export default function ProfileScreen() {
     }, [])
   );
 
+  // ─── Refresh credits when project changes ───────────────────────────────
+  useEffect(() => {
+    refreshCredits();
+  }, [activeProjectId]);
+
   // Filter the user's OWN trees to the ACTIVE project only
   const activeTrees = trees.filter((t) => activeProjectId ? t.project_id === activeProjectId : true);
 

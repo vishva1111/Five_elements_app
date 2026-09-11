@@ -125,7 +125,7 @@ export default function TaskScreen() {
 
   useEffect(() => {
     loadTasks();
-  }, [activeProjectId]);
+  }, [activeProjectId, loadTasks]);
 
   const onRefresh = async () => {
     setRefreshing(true);

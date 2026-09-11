@@ -106,7 +106,7 @@ export default function HomeScreen() {
       rejected: allTasks.filter((t) => t.status === 'rejected').length,
       completed: dbCompleted + treeCaptures,
     });
-  }, [userId]);
+  }, [userId, activeProjectId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -118,6 +118,7 @@ export default function HomeScreen() {
 
   // Auto-refresh when project changes
   useEffect(() => {
+    refreshCredits();
     loadTrees();
     loadTasks();
   }, [activeProjectId]);

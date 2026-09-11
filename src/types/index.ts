@@ -13,21 +13,37 @@ export interface User {
 // ─── Tree Record Types ─────────────────────────────────────────────────────────
 
 export type HealthStatus = 'healthy' | 'sick' | 'dead' | 'unknown';
+export type TreeCondition = 'Healthy' | 'Stressed' | 'Diseased' | 'Dead';
+export type MultiStemOption = 'Yes' | 'No';
+export type LandType = 'Roadside' | 'Park' | 'Residential' | 'Institutional' | 'Forest' | 'Other';
 
 export interface TreeRecord {
   id: string;
+  tree_id?: string;
   user_id: string;
   project_id?: string;
   photo_url: string;
   latitude: number;
   longitude: number;
   species: string;
+  scientific_name?: string;
   health_status: HealthStatus;
   notes?: string;
   submitted_at: string;
   synced: boolean;
   event_type?: EventType;
   quantity?: number;
+  dbh_cm?: number;
+  height_m?: number;
+  wood_density?: number;
+  crown_diameter_m?: number;
+  tree_condition?: TreeCondition;
+  multi_stem?: MultiStemOption;
+  age_years?: number;
+  land_type?: LandType;
+  surveyor?: string;
+  survey_date?: string;
+  co2_kg?: number;
   // Joined fields
   submitted_by?: string;
   project_name?: string;
@@ -40,11 +56,23 @@ export interface TreeRecordInsert {
   latitude: number;
   longitude: number;
   species: string;
+  scientific_name?: string;
   health_status: HealthStatus;
   notes?: string;
   synced?: boolean;
   event_type?: EventType;
   quantity?: number;
+  dbh_cm?: number;
+  height_m?: number;
+  wood_density?: number;
+  crown_diameter_m?: number;
+  tree_condition?: TreeCondition;
+  multi_stem?: MultiStemOption;
+  age_years?: number;
+  land_type?: LandType;
+  surveyor?: string;
+  survey_date?: string;
+  co2_kg?: number;
 }
 
 // ─── Location Types ────────────────────────────────────────────────────────────
@@ -166,11 +194,24 @@ export const EVENT_TYPES: EventType[] = [
 
 export interface TreeFormData {
   species: string;
+  scientific_name: string;
   health_status: HealthStatus;
   notes: string;
   project_id: string;
   event_type: EventType;
   quantity: number;
+  tree_id: string;
+  dbh_cm: string;
+  height_m: string;
+  wood_density: string;
+  crown_diameter_m: string;
+  tree_condition: TreeCondition;
+  multi_stem: MultiStemOption;
+  age_years: string;
+  land_type: LandType;
+  surveyor: string;
+  survey_date: string;
+  co2_kg: number;
 }
 
 export const TREE_SPECIES = [
@@ -197,4 +238,20 @@ export const HEALTH_STATUS_OPTIONS: { label: string; value: HealthStatus; color:
   { label: 'Sick', value: 'sick', color: '#f59e0b' },
   { label: 'Dead', value: 'dead', color: '#ef4444' },
   { label: 'Unknown', value: 'unknown', color: '#6b7280' },
+];
+
+export const TREE_CONDITION_OPTIONS: { label: TreeCondition; color: string }[] = [
+  { label: 'Healthy', color: '#22c55e' },
+  { label: 'Stressed', color: '#f59e0b' },
+  { label: 'Diseased', color: '#ef4444' },
+  { label: 'Dead', color: '#6b7280' },
+];
+
+export const LAND_TYPE_OPTIONS: LandType[] = [
+  'Roadside',
+  'Park',
+  'Residential',
+  'Institutional',
+  'Forest',
+  'Other',
 ];
