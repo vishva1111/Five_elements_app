@@ -4,13 +4,9 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="dashbord design update 2">
+    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="tree capture form upadte to with design or data field.">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/dist/metadata.json" beforeDir="false" afterPath="$PROJECT_DIR$/dist/metadata.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Capture/CaptureScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/CaptureScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Capture/TreeFormScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/TreeFormScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Home/HomeScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Home/HomeScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Profile/ProfileScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Profile/ProfileScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/types/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/types/index.ts" afterDir="false" />
     </list>
@@ -212,7 +208,15 @@
       <option name="project" value="LOCAL" />
       <updated>1789037870026</updated>
     </task>
-    <option name="localTasksCounter" value="17" />
+    <task id="LOCAL-00017" summary="tree capture form upadte to with design or data field.">
+      <option name="closed" value="true" />
+      <created>1789115350884</created>
+      <option name="number" value="00017" />
+      <option name="presentableId" value="LOCAL-00017" />
+      <option name="project" value="LOCAL" />
+      <updated>1789115350885</updated>
+    </task>
+    <option name="localTasksCounter" value="18" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -255,6 +259,7 @@
     <MESSAGE value="add 4 tabs in task page." />
     <MESSAGE value="4 tabs calculation with date" />
     <MESSAGE value="dashbord design update 2" />
-    <option name="LAST_COMMIT_MESSAGE" value="dashbord design update 2" />
+    <MESSAGE value="tree capture form upadte to with design or data field." />
+    <option name="LAST_COMMIT_MESSAGE" value="tree capture form upadte to with design or data field." />
   </component>
 </project>

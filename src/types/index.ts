@@ -115,6 +115,12 @@ export interface Task {
   // Joined fields
   project_name?: string;
   notes?: string;
+  // Tree capture fields (for completed tasks from tree captures)
+  latitude?: number;
+  longitude?: number;
+  tree_condition?: string;
+  tree_condition_color?: string;
+  surveyor?: string;
 }
 
 // ─── Task Store Types ──────────────────────────────────────────────────────────

@@ -270,8 +270,16 @@ export default function TaskScreen() {
       : task.status === 'rejected' ? '#ef4444'
       : '#1a5c2a';
     const isAssigned = task.status === 'assigned';
+    const isTreeCapture = task.status === 'completed' && task.tree_condition !== undefined;
+    
+    const handlePress = () => {
+      if (isTreeCapture && task.id) {
+        navigation.navigate('TreeDetail', { treeId: task.id });
+      }
+    };
+
     return (
-      <View key={task.id} style={[s.taskCard, { borderLeftColor: statusColor }]}>
+      <TouchableOpacity key={task.id} style={[s.taskCard, { borderLeftColor: statusColor }]} onPress={handlePress} activeOpacity={0.7}>
         <View style={s.taskCardTop}>
           <View style={s.taskTitleWrap}>
             <Text style={s.taskId} numberOfLines={1}>ID: {task.id.slice(0, 8).toUpperCase()}</Text>
@@ -280,7 +288,7 @@ export default function TaskScreen() {
           {isAssigned ? (
             <TouchableOpacity
               style={s.startBtn}
-              onPress={() => handleStartTask(task)}
+              onPress={(e) => { e.stopPropagation(); handleStartTask(task); }}
               activeOpacity={0.7}
             >
               <Ionicons name="play-circle-outline" size={14} color="#fff" />
@@ -295,6 +303,34 @@ export default function TaskScreen() {
         {task.notes ? (
           <Text style={s.taskNote} numberOfLines={2}>{task.notes}</Text>
         ) : null}
+        
+        {/* Extra details for tree captures (completed tasks) */}
+        {isTreeCapture && (
+          <View style={s.treeDetailRow}>
+            {task.latitude && task.longitude && (
+              <TouchableOpacity
+                style={s.detailLink}
+                onPress={(e) => { e.stopPropagation(); handleOpenMap(`${task.latitude},${task.longitude}`); }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="location-outline" size={12} color="#1a5c2a" />
+                <Text style={s.detailLinkText}>View Location</Text>
+              </TouchableOpacity>
+            )}
+            {task.tree_condition && (
+              <View style={[s.conditionBadge, { backgroundColor: task.tree_condition_color + '22' }]}>
+                <Text style={{ color: task.tree_condition_color, fontWeight: '600', fontSize: 11 }}>{task.tree_condition}</Text>
+              </View>
+            )}
+            {task.surveyor && (
+              <View style={s.surveyorRow}>
+                <Ionicons name="person-outline" size={11} color="#888" />
+                <Text style={s.surveyorText}>{task.surveyor}</Text>
+              </View>
+            )}
+          </View>
+        )}
+        
         <View style={s.taskCardBottom}>
           <View style={[s.priorityBadge, { backgroundColor: priorityColor(task.priority) + '22' }]}>
             <Text style={[s.priorityText, { color: priorityColor(task.priority) }]}>{task.priority.toUpperCase()}</Text>
@@ -306,7 +342,7 @@ export default function TaskScreen() {
             </View>
           ) : null}
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -443,6 +479,11 @@ export default function TaskScreen() {
             status: 'completed' as const,
             created_at: t.submitted_at,
             notes: t.notes,
+            latitude: t.latitude,
+            longitude: t.longitude,
+            tree_condition: t.tree_condition || 'Healthy',
+            tree_condition_color: (t.tree_condition === 'Healthy' ? '#22c55e' : t.tree_condition === 'Stressed' ? '#f59e0b' : t.tree_condition === 'Diseased' ? '#ef4444' : '#6b7280'),
+            surveyor: t.surveyor,
           }))]))}
           {activeTab === 'approved' && renderTaskList(filterByDate(approvedTasks))}
           {activeTab === 'rejected' && renderTaskList(filterByDate(rejectedTasks))}
@@ -592,6 +633,12 @@ const s = StyleSheet.create({
   priorityText: { fontSize: 9, fontWeight: '700' },
   dueRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   dueText: { fontSize: 10, color: '#888' },
+  treeDetailRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  detailLink: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#E8F5E9', borderRadius: 7.5 },
+  detailLinkText: { fontSize: 11, color: '#1a5c2a', fontWeight: '600' },
+  conditionBadge: { borderRadius: 7.5, paddingHorizontal: 8, paddingVertical: 2 },
+  surveyorRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  surveyorText: { fontSize: 11, color: '#666' },
   emptyState: { alignItems: 'center', paddingVertical: 48 },
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
   emptyText: { fontSize: 16, fontWeight: '600', color: '#555' },
