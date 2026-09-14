@@ -65,7 +65,7 @@ function HistoryNavigator() {
       }}
     >
       <HistoryStack.Screen name="HistoryList" component={HistoryScreen} options={{ title: 'MY SUBMISSIONS', headerShown: false }} />
-      <HistoryStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS' }} />
+      <HistoryStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS', headerShown: false }} />
     </HistoryStack.Navigator>
   );
 }
@@ -260,7 +260,10 @@ export default function App() {
               {!session || projectSelectionPending ? (
                 <RootStack.Screen name="Login" component={LoginScreen} />
               ) : (
-                <RootStack.Screen name="Main" component={MainTabs} />
+                <>
+                  <RootStack.Screen name="Main" component={MainTabs} />
+                  <RootStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS' }} />
+                </>
               )}
             </RootStack.Navigator>
           </NavigationContainer>

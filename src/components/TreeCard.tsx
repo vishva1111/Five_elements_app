@@ -2,57 +2,71 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { TreeRecord } from '../types';
-import StatusBadge from './StatusBadge';
 
 interface Props {
   tree: TreeRecord;
   onPress?: () => void;
 }
 
+const CONDITION_COLORS: Record<string, string> = {
+  Healthy: '#22c55e',
+  Stressed: '#f59e0b',
+  Diseased: '#ef4444',
+  Dead: '#6b7280',
+};
+
 export default function TreeCard({ tree, onPress }: Props) {
   const date = new Date(tree.submitted_at).toLocaleDateString('en-IN', {
+    weekday: 'short',
     day: 'numeric',
     month: 'short',
     year: 'numeric',
   });
 
+  const treeUniqueId = tree.id.slice(0, 8).toUpperCase();
+  const conditionColor = CONDITION_COLORS[tree.tree_condition || ''] || '#6b7280';
+
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
-      {/* Photo */}
-      {tree.photo_url ? (
-        <Image source={{ uri: tree.photo_url }} style={styles.photo} resizeMode="cover" />
-      ) : (
-        <View style={styles.photoPlaceholder}>
-          <Text style={styles.photoPlaceholderText}>🌳</Text>
-        </View>
-      )}
+      {/* Photo left */}
+      <View style={styles.photoWrap}>
+        {tree.photo_url ? (
+          <Image source={{ uri: tree.photo_url }} style={styles.photo} resizeMode="cover" />
+        ) : (
+          <View style={styles.photoPlaceholder}>
+            <Text style={styles.photoPlaceholderText}>🌳</Text>
+          </View>
+        )}
+      </View>
 
-      {/* Info */}
+      {/* Info right */}
       <View style={styles.info}>
         <View style={styles.topRow}>
-          <Text style={styles.species} numberOfLines={1}>{tree.species}</Text>
-          <StatusBadge status={tree.health_status} size="sm" />
+          <Text style={styles.taskId}>ID: {treeUniqueId}</Text>
+          <Text style={styles.taskName} numberOfLines={1}>{tree.species || 'Tree'}</Text>
         </View>
 
-        <Text style={styles.coords}>
-          📍 {tree.latitude.toFixed(5)}, {tree.longitude.toFixed(5)}
-        </Text>
-
-        <View style={styles.projectRow}>
-          <Ionicons name="folder-outline" size={12} color={tree.project_name ? '#1a5c2a' : '#aaa'} />
-          <Text
-            style={[styles.projectName, !tree.project_name && styles.projectNameEmpty]}
-            numberOfLines={1}
-          >
-            {tree.project_name ?? 'No project'}
-          </Text>
-        </View>
-
-        {tree.notes ? (
-          <Text style={styles.notes} numberOfLines={2}>{tree.notes}</Text>
+        {/* Condition badge */}
+        {tree.tree_condition ? (
+          <View style={[styles.conditionBadge, { backgroundColor: conditionColor + '20', borderColor: conditionColor }]}>
+            <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
+            <Text style={[styles.conditionText, { color: conditionColor }]}>{tree.tree_condition}</Text>
+          </View>
         ) : null}
 
-        <Text style={styles.date}>{date}</Text>
+        {/* Bottom row */}
+        <View style={styles.bottomRow}>
+          {tree.latitude && tree.longitude ? (
+            <View style={styles.locationBadge}>
+              <Ionicons name="location-outline" size={10} color="#1a5c2a" />
+              <Text style={styles.locationText}>Location</Text>
+            </View>
+          ) : null}
+          <View style={styles.dateRow}>
+            <Ionicons name="calendar-outline" size={10} color="#888" />
+            <Text style={styles.date}>{date}</Text>
+          </View>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -62,40 +76,101 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
     borderRadius: 7.5,
-    marginBottom: 12,
+    marginBottom: 10,
     overflow: 'hidden',
     elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    flexDirection: 'row',
+    borderLeftWidth: 3,
+    borderLeftColor: '#22c55e',
+    padding: 10,
   },
-  photo: { width: '100%', height: 160 },
+  photoWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 7.5,
+    overflow: 'hidden',
+    marginRight: 12,
+  },
+  photo: {
+    width: 80,
+    height: 80,
+  },
   photoPlaceholder: {
-    width: '100%',
-    height: 100,
+    width: 80,
+    height: 80,
     backgroundColor: '#e8f5e9',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  photoPlaceholderText: { fontSize: 40 },
-  info: { padding: 14 },
-  topRow: {
-    flexDirection: 'row',
+  photoPlaceholderText: { fontSize: 32 },
+  info: {
+    flex: 1,
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
   },
-  species: { fontSize: 16, fontWeight: '700', color: '#1a1a1a', flex: 1, marginRight: 8 },
-  coords: { fontSize: 12, color: '#888', marginBottom: 4 },
-  projectRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  topRow: {
     marginBottom: 4,
   },
-  projectName: { fontSize: 12, color: '#1a5c2a', fontWeight: '500' },
-  projectNameEmpty: { color: '#aaa', fontWeight: '400' },
-  notes: { fontSize: 13, color: '#555', marginBottom: 6, lineHeight: 18 },
-  date: { fontSize: 11, color: '#aaa' },
+  taskId: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#999',
+    marginBottom: 2,
+  },
+  taskName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#222',
+  },
+  conditionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 7.5,
+    borderWidth: 1,
+    marginBottom: 4,
+  },
+  conditionDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  conditionText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  locationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 7.5,
+  },
+  locationText: {
+    fontSize: 10,
+    color: '#1a5c2a',
+    fontWeight: '600',
+  },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  date: {
+    fontSize: 10,
+    color: '#888',
+  },
 });

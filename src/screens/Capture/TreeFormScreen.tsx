@@ -68,7 +68,6 @@ export default function TreeFormScreen() {
     land_type: 'Roadside',
     surveyor: user?.full_name ?? '',
     survey_date: new Date().toISOString().split('T')[0],
-    co2_kg: 0,
   });
   const [showSpeciesPicker, setShowSpeciesPicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -79,20 +78,6 @@ export default function TreeFormScreen() {
     const seq = String(Date.now()).slice(-4).padStart(4, '0');
     setForm((f) => ({ ...f, tree_id: `TREE-${seq}` }));
   }, []);
-
-  // Auto-calculate CO2_kg: 0.0673 × (WoodDensity × DBH² × Height)^0.976 × 1.20 × 0.47 × 3.67
-  useEffect(() => {
-    const dbh = parseFloat(form.dbh_cm);
-    const height = parseFloat(form.height_m);
-    const density = parseFloat(form.wood_density);
-    if (dbh > 0 && height > 0 && density > 0) {
-      const agb = 0.0673 * Math.pow(density * dbh * dbh * height, 0.976);
-      const co2 = agb * 1.20 * 0.47 * 3.67;
-      setForm((f) => ({ ...f, co2_kg: Math.round(co2 * 100) / 100 }));
-    } else {
-      setForm((f) => ({ ...f, co2_kg: 0 }));
-    }
-  }, [form.dbh_cm, form.height_m, form.wood_density]);
 
   // Refs used to keep fields visible above the keyboard while typing
   const scrollRef = useRef<ScrollView>(null);
@@ -236,6 +221,7 @@ export default function TreeFormScreen() {
         synced: true,
         event_type: form.event_type,
         quantity: form.quantity,
+        tree_id: form.tree_id || undefined,
         dbh_cm: parseFloat(form.dbh_cm) || undefined,
         height_m: parseFloat(form.height_m) || undefined,
         wood_density: parseFloat(form.wood_density) || undefined,
@@ -246,7 +232,6 @@ export default function TreeFormScreen() {
         land_type: form.land_type,
         surveyor: form.surveyor.trim() || undefined,
         survey_date: form.survey_date || undefined,
-        co2_kg: form.co2_kg || undefined,
       });
 
       if (error || !data) throw new Error(error ?? 'Failed to save tree record');
@@ -499,13 +484,6 @@ export default function TreeFormScreen() {
                 onFocus={handleInputFocus}
               />
             </View>
-          </View>
-
-          {/* CO2_kg — auto-calculated */}
-          <View style={styles.co2Row}>
-            <Ionicons name="leaf" size={14} color="#22c55e" />
-            <Text style={styles.co2Label}>CO₂</Text>
-            <Text style={styles.co2Value}>{form.co2_kg > 0 ? `${form.co2_kg} kg` : '—'}</Text>
           </View>
 
           {/* ─── SECTION: Condition & Metadata ─── */}
@@ -893,16 +871,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1a1a1a',
   },
-  // CO2 field
-  co2Field: {
-    backgroundColor: '#E8F5E9',
-    borderColor: '#C8E6C9',
-  },
-  co2Text: {
-    color: '#1a5c2a',
-    fontWeight: '700',
-    fontSize: 16,
-  },
   // Measurement grid
   measureGrid: {
     flexDirection: 'row',
@@ -930,30 +898,6 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
     textAlign: 'center',
     minHeight: 40,
-  },
-  // CO2 row
-  co2Row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#E8F5E9',
-    borderRadius: 7.5,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: '#C8E6C9',
-  },
-  co2Label: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1a5c2a',
-  },
-  co2Value: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1a5c2a',
-    flex: 1,
-    textAlign: 'right',
   },
   // Event Type
   eventTypeScroll: {

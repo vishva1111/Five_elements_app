@@ -43,7 +43,6 @@ export interface TreeRecord {
   land_type?: LandType;
   surveyor?: string;
   survey_date?: string;
-  co2_kg?: number;
   // Joined fields
   submitted_by?: string;
   project_name?: string;
@@ -51,6 +50,7 @@ export interface TreeRecord {
 
 export interface TreeRecordInsert {
   user_id: string;
+  tree_id?: string;
   project_id?: string;
   photo_url: string;
   latitude: number;
@@ -72,7 +72,6 @@ export interface TreeRecordInsert {
   land_type?: LandType;
   surveyor?: string;
   survey_date?: string;
-  co2_kg?: number;
 }
 
 // ─── Location Types ────────────────────────────────────────────────────────────
@@ -116,6 +115,7 @@ export interface Task {
   project_name?: string;
   notes?: string;
   // Tree capture fields (for completed tasks from tree captures)
+  photo_url?: string;
   latitude?: number;
   longitude?: number;
   tree_condition?: string;
@@ -217,7 +217,6 @@ export interface TreeFormData {
   land_type: LandType;
   surveyor: string;
   survey_date: string;
-  co2_kg: number;
 }
 
 export const TREE_SPECIES = [

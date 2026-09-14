@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Linking,
   FlatList,
+  Image,
 } from 'react-native';
 import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -228,7 +229,6 @@ export default function TaskScreen() {
   const rejectedCount = rejectedTasks.length;
   const reviewedCount = approvedCount + rejectedCount;
   const totalTasks = assignedCount + completedCount + approvedCount + rejectedCount;
-  const priorityColor = (p: string) => p === 'high' ? '#ef4444' : p === 'medium' ? '#f59e0b' : '#6b7280';
 
   // Extract unique dates from assigned tasks (descending, past first)
   const dates = useMemo(() => {
@@ -270,7 +270,14 @@ export default function TaskScreen() {
       : task.status === 'rejected' ? '#ef4444'
       : '#1a5c2a';
     const isAssigned = task.status === 'assigned';
-    const isTreeCapture = task.status === 'completed' && task.tree_condition !== undefined;
+    const isTreeCapture = task.status === 'completed' && task.photo_url;
+    
+    const conditionColors: Record<string, string> = {
+      Healthy: '#22c55e',
+      Stressed: '#f59e0b',
+      Diseased: '#ef4444',
+      Dead: '#6b7280',
+    };
     
     const handlePress = () => {
       if (isTreeCapture && task.id) {
@@ -280,64 +287,68 @@ export default function TaskScreen() {
 
     return (
       <TouchableOpacity key={task.id} style={[s.taskCard, { borderLeftColor: statusColor }]} onPress={handlePress} activeOpacity={0.7}>
-        <View style={s.taskCardTop}>
-          <View style={s.taskTitleWrap}>
-            <Text style={s.taskId} numberOfLines={1}>ID: {task.id.slice(0, 8).toUpperCase()}</Text>
-            <Text style={s.taskName} numberOfLines={1}>{task.name}</Text>
+        {isTreeCapture && task.photo_url ? (
+          <View style={s.taskPhotoWrap}>
+            <Image source={{ uri: task.photo_url }} style={s.taskPhoto} resizeMode="cover" />
           </View>
-          {isAssigned ? (
-            <TouchableOpacity
-              style={s.startBtn}
-              onPress={(e) => { e.stopPropagation(); handleStartTask(task); }}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="play-circle-outline" size={14} color="#fff" />
-              <Text style={s.startBtnText}>Start</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={[s.statusBadge, { backgroundColor: statusColor + '18' }]}>
-              <Text style={[s.statusText, { color: statusColor }]}>{task.status.toUpperCase()}</Text>
-            </View>
-          )}
-        </View>
-        {task.notes ? (
-          <Text style={s.taskNote} numberOfLines={2}>{task.notes}</Text>
         ) : null}
-        
-        {/* Extra details for tree captures (completed tasks) */}
-        {isTreeCapture && (
-          <View style={s.treeDetailRow}>
-            {task.latitude && task.longitude && (
+        <View style={s.taskCardContent}>
+          <View style={s.taskCardTop}>
+            <View style={s.taskTitleWrap}>
+              <Text style={s.taskId} numberOfLines={1}>ID: {task.id.slice(0, 8).toUpperCase()}</Text>
+              <Text style={s.taskName} numberOfLines={1}>{task.name}</Text>
+            </View>
+            {isAssigned ? (
               <TouchableOpacity
-                style={s.detailLink}
-                onPress={(e) => { e.stopPropagation(); handleOpenMap(`${task.latitude},${task.longitude}`); }}
+                style={s.startBtn}
+                onPress={(e) => { e.stopPropagation(); handleStartTask(task); }}
                 activeOpacity={0.7}
               >
-                <Ionicons name="location-outline" size={12} color="#1a5c2a" />
-                <Text style={s.detailLinkText}>View Location</Text>
+                <Ionicons name="play-circle-outline" size={14} color="#fff" />
+                <Text style={s.startBtnText}>Start</Text>
               </TouchableOpacity>
-            )}
-            {task.tree_condition && (
-              <View style={[s.conditionBadge, { backgroundColor: task.tree_condition_color + '22' }]}>
-                <Text style={{ color: task.tree_condition_color, fontWeight: '600', fontSize: 11 }}>{task.tree_condition}</Text>
-              </View>
-            )}
-            {task.surveyor && (
-              <View style={s.surveyorRow}>
-                <Ionicons name="person-outline" size={11} color="#888" />
-                <Text style={s.surveyorText}>{task.surveyor}</Text>
+            ) : (
+              <View style={[s.statusBadge, { backgroundColor: statusColor + '18' }]}>
+                <Text style={[s.statusText, { color: statusColor }]}>{task.status.toUpperCase()}</Text>
               </View>
             )}
           </View>
-        )}
-        
-        <View style={s.taskCardBottom}>
-          <View style={[s.priorityBadge, { backgroundColor: priorityColor(task.priority) + '22' }]}>
-            <Text style={[s.priorityText, { color: priorityColor(task.priority) }]}>{task.priority.toUpperCase()}</Text>
-          </View>
+          {task.notes ? (
+            <Text style={s.taskNote} numberOfLines={2}>{task.notes}</Text>
+          ) : null}
+          
+          {/* Extra details for tree captures */}
+          {isTreeCapture && (
+            <View style={s.treeDetailRow}>
+              {task.tree_condition && (
+                <View style={[s.conditionBadge, { backgroundColor: (conditionColors[task.tree_condition] || '#6b7280') + '20', borderColor: conditionColors[task.tree_condition] || '#6b7280' }]}>
+                  <View style={[s.conditionDot, { backgroundColor: conditionColors[task.tree_condition] || '#6b7280' }]} />
+                  <Text style={{ color: conditionColors[task.tree_condition] || '#6b7280', fontWeight: '600', fontSize: 10 }}>{task.tree_condition}</Text>
+                </View>
+              )}
+              {task.latitude && task.longitude && (
+                <TouchableOpacity
+                  style={s.detailLink}
+                  onPress={(e) => { e.stopPropagation(); handleOpenMap(`${task.latitude},${task.longitude}`); }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="location-outline" size={11} color="#1a5c2a" />
+                  <Text style={s.detailLinkText}>Location</Text>
+                </TouchableOpacity>
+              )}
+              {task.surveyor && (
+                <View style={s.surveyorRow}>
+                  <Ionicons name="person-outline" size={10} color="#888" />
+                  <Text style={s.surveyorText}>{task.surveyor}</Text>
+                </View>
+              )}
+            </View>
+          )}
+          
+          {/* Date only - no priority badge */}
           {createdDate ? (
             <View style={s.dueRow}>
-              <Ionicons name="calendar-outline" size={11} color="#888" />
+              <Ionicons name="calendar-outline" size={10} color="#888" />
               <Text style={s.dueText}>{dayName}, {dateStr}</Text>
             </View>
           ) : null}
@@ -479,6 +490,7 @@ export default function TaskScreen() {
             status: 'completed' as const,
             created_at: t.submitted_at,
             notes: t.notes,
+            photo_url: t.photo_url,
             latitude: t.latitude,
             longitude: t.longitude,
             tree_condition: t.tree_condition || 'Healthy',
@@ -610,6 +622,21 @@ const s = StyleSheet.create({
     shadowRadius: 4,
     borderLeftWidth: 3,
     borderLeftColor: '#1a5c2a',
+    flexDirection: 'row',
+  },
+  taskPhotoWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 7.5,
+    overflow: 'hidden',
+    marginRight: 12,
+  },
+  taskPhoto: {
+    width: 80,
+    height: 80,
+  },
+  taskCardContent: {
+    flex: 1,
   },
   taskCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   taskTitleWrap: { flex: 1 },
@@ -627,18 +654,16 @@ const s = StyleSheet.create({
     paddingHorizontal: 10,
   },
   startBtnText: { color: '#fff', fontWeight: '700', fontSize: 11 },
-  taskNote: { fontSize: 12, color: '#666', marginTop: 6, lineHeight: 16 },
-  taskCardBottom: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
-  priorityBadge: { borderRadius: 7.5, paddingHorizontal: 7, paddingVertical: 2 },
-  priorityText: { fontSize: 9, fontWeight: '700' },
-  dueRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  taskNote: { fontSize: 12, color: '#666', marginTop: 4, lineHeight: 16 },
+  dueRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4 },
   dueText: { fontSize: 10, color: '#888' },
-  treeDetailRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
-  detailLink: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#E8F5E9', borderRadius: 7.5 },
-  detailLinkText: { fontSize: 11, color: '#1a5c2a', fontWeight: '600' },
-  conditionBadge: { borderRadius: 7.5, paddingHorizontal: 8, paddingVertical: 2 },
-  surveyorRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  surveyorText: { fontSize: 11, color: '#666' },
+  treeDetailRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  detailLink: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#E8F5E9', borderRadius: 7.5 },
+  detailLinkText: { fontSize: 10, color: '#1a5c2a', fontWeight: '600' },
+  conditionBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7.5, borderWidth: 1 },
+  conditionDot: { width: 6, height: 6, borderRadius: 3 },
+  surveyorRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  surveyorText: { fontSize: 10, color: '#666' },
   emptyState: { alignItems: 'center', paddingVertical: 48 },
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
   emptyText: { fontSize: 16, fontWeight: '600', color: '#555' },
