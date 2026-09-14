@@ -119,17 +119,20 @@ export default function HistoryScreen() {
 
   // Trees
   trees.forEach((t) => {
+    let meta: Record<string, any> = {};
+    const metaMatch = (t.notes || '').match(/##META##({.*})/s);
+    if (metaMatch) { try { meta = JSON.parse(metaMatch[1]); } catch {} }
     allItems.push({
       id: t.id,
       type: 'tree',
       title: t.species || 'Tree',
       photo_url: t.photo_url,
-      condition: t.tree_condition,
+      condition: t.tree_condition || meta.tree_condition,
       status: 'completed',
       date: t.submitted_at,
       latitude: t.latitude,
       longitude: t.longitude,
-      surveyor: t.surveyor,
+      surveyor: t.surveyor || meta.surveyor,
       project_id: t.project_id,
     });
   });
@@ -249,7 +252,7 @@ export default function HistoryScreen() {
 
           {/* Condition badge */}
           {item.condition ? (
-            <View style={[styles.conditionBadge, { backgroundColor: conditionColor + '20', borderColor: conditionColor }]}>
+            <View style={[styles.conditionBadge, { backgroundColor: conditionColor + '15', borderColor: conditionColor + '40' }]}>
               <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
               <Text style={[styles.conditionText, { color: conditionColor }]}>{item.condition}</Text>
             </View>

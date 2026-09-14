@@ -82,6 +82,33 @@ export default function TreeDetailScreen() {
   const displayId = tree.tree_id || `TREE-${tree.id.slice(0, 8).toUpperCase()}`;
   const conditionColor = CONDITION_COLORS[tree.tree_condition || ''] || '#6b7280';
 
+  // Parse ##META## JSON from notes (fallback for old records before DB columns existed)
+  let meta: Record<string, any> = {};
+  let cleanNotes = tree.notes || '';
+  const metaMatch = (tree.notes || '').match(/##META##({.*})/s);
+  if (metaMatch) {
+    try { meta = JSON.parse(metaMatch[1]); } catch {}
+    cleanNotes = tree.notes!.replace(/##META##{.*}/s, '').trim();
+  }
+
+  // Use meta as fallback for missing columns
+  const treeIdParam = tree.tree_id || meta.tree_id || displayId;
+  const scientificName = tree.scientific_name || meta.scientific_name || '';
+  const dbhCm = tree.dbh_cm || meta.dbh_cm;
+  const heightM = tree.height_m || meta.height_m;
+  const woodDensity = tree.wood_density || meta.wood_density;
+  const crownDiam = tree.crown_diameter_m || meta.crown_diameter_m;
+  const treeCondition = tree.tree_condition || meta.tree_condition;
+  const multiStem = tree.multi_stem || meta.multi_stem;
+  const ageYears = tree.age_years || meta.age_years;
+  const landType = tree.land_type || meta.land_type;
+  const eventType = tree.event_type || meta.event_type;
+  const quantity = tree.quantity || meta.quantity;
+  const surveyor = tree.surveyor || meta.surveyor;
+  const surveyDate = tree.survey_date || meta.survey_date;
+
+  const fallbackConditionColor = CONDITION_COLORS[treeCondition || ''] || '#6b7280';
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -110,19 +137,19 @@ export default function TreeDetailScreen() {
         <View style={styles.idRow}>
           <View style={styles.idBadge}>
             <Ionicons name="finger-print" size={14} color="#1a5c2a" />
-            <Text style={styles.idText}>{displayId}</Text>
+            <Text style={styles.idText}>{treeIdParam}</Text>
           </View>
-          {tree.tree_condition ? (
-            <View style={[styles.conditionBadge, { backgroundColor: conditionColor + '20', borderColor: conditionColor }]}>
-              <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
-              <Text style={[styles.conditionText, { color: conditionColor }]}>{tree.tree_condition}</Text>
+          {treeCondition ? (
+            <View style={[styles.conditionBadge, { backgroundColor: fallbackConditionColor + '20', borderColor: fallbackConditionColor }]}>
+              <View style={[styles.conditionDot, { backgroundColor: fallbackConditionColor }]} />
+              <Text style={[styles.conditionText, { color: fallbackConditionColor }]}>{treeCondition}</Text>
             </View>
           ) : null}
         </View>
 
         <Text style={styles.species}>{tree.species}</Text>
-        {tree.scientific_name ? (
-          <Text style={styles.scientificName}>{tree.scientific_name}</Text>
+        {scientificName ? (
+          <Text style={styles.scientificName}>{scientificName}</Text>
         ) : null}
 
         {/* Measurements Card */}
@@ -133,21 +160,21 @@ export default function TreeDetailScreen() {
           </View>
           <View style={styles.measureGrid}>
             <View style={styles.measureCell}>
-              <Text style={[styles.measureValue, !tree.dbh_cm && styles.measureEmpty]}>{tree.dbh_cm ?? '—'}</Text>
+              <Text style={[styles.measureValue, !dbhCm && styles.measureEmpty]}>{dbhCm ?? '—'}</Text>
               <Text style={styles.measureLabel}>DBH (cm)</Text>
             </View>
             <View style={styles.measureCell}>
-              <Text style={[styles.measureValue, !tree.height_m && styles.measureEmpty]}>{tree.height_m ?? '—'}</Text>
+              <Text style={[styles.measureValue, !heightM && styles.measureEmpty]}>{heightM ?? '—'}</Text>
               <Text style={styles.measureLabel}>Height (m)</Text>
             </View>
           </View>
           <View style={styles.measureGrid}>
             <View style={styles.measureCell}>
-              <Text style={[styles.measureValue, !tree.wood_density && styles.measureEmpty]}>{tree.wood_density ?? '—'}</Text>
+              <Text style={[styles.measureValue, !woodDensity && styles.measureEmpty]}>{woodDensity ?? '—'}</Text>
               <Text style={styles.measureLabel}>Density</Text>
             </View>
             <View style={styles.measureCell}>
-              <Text style={[styles.measureValue, !tree.crown_diameter_m && styles.measureEmpty]}>{tree.crown_diameter_m ?? '—'}</Text>
+              <Text style={[styles.measureValue, !crownDiam && styles.measureEmpty]}>{crownDiam ?? '—'}</Text>
               <Text style={styles.measureLabel}>Crown (m)</Text>
             </View>
           </View>
@@ -161,10 +188,10 @@ export default function TreeDetailScreen() {
               <Ionicons name="information-circle" size={14} color="#1a5c2a" />
               <Text style={styles.cardTitleSmall}>Tree Info</Text>
             </View>
-            <HalfDetailRow label="Tree ID" value={tree.tree_id ?? displayId} />
-            <HalfDetailRow label="Multi Stem" value={tree.multi_stem ?? '—'} />
-            <HalfDetailRow label="Age" value={tree.age_years ? `${tree.age_years}y` : '—'} />
-            <HalfDetailRow label="Land Type" value={tree.land_type ?? '—'} />
+            <HalfDetailRow label="Tree ID" value={treeIdParam} />
+            <HalfDetailRow label="Multi Stem" value={multiStem ?? '—'} />
+            <HalfDetailRow label="Age" value={ageYears ? `${ageYears}y` : '—'} />
+            <HalfDetailRow label="Land Type" value={landType ?? '—'} />
           </View>
 
           {/* Survey Details Card */}
@@ -173,21 +200,22 @@ export default function TreeDetailScreen() {
               <Ionicons name="clipboard" size={14} color="#1a5c2a" />
               <Text style={styles.cardTitleSmall}>Survey</Text>
             </View>
-            <HalfDetailRow label="Event" value={tree.event_type ?? '—'} />
-            <HalfDetailRow label="Qty" value={tree.quantity ? `${tree.quantity}` : '—'} />
-            <HalfDetailRow label="Surveyor" value={tree.surveyor ?? '—'} />
-            <HalfDetailRow label="Date" value={tree.survey_date ?? '—'} />
+            <HalfDetailRow label="Event" value={eventType ?? '—'} />
+            <HalfDetailRow label="Qty" value={quantity ? `${quantity}` : '—'} />
+            <HalfDetailRow label="Surveyor" value={surveyor ?? '—'} />
+            <HalfDetailRow label="Date" value={surveyDate ?? '—'} />
           </View>
         </View>
 
-        {/* Project + Notes Card */}
+        {/* Project & Notes Card */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Ionicons name="folder" size={16} color="#1a5c2a" />
             <Text style={styles.cardTitle}>Project & Notes</Text>
           </View>
           <DetailRow icon="folder-outline" label="Project" value={tree.project_name ?? 'No project'} />
-          {tree.notes ? <DetailRow icon="document-text" label="Notes" value={tree.notes} /> : null}
+          <DetailRow icon="calendar" label="Submitted" value={date} />
+          {cleanNotes ? <DetailRow icon="document-text" label="Notes" value={cleanNotes} /> : null}
         </View>
 
         {/* Location Card */}
