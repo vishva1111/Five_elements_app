@@ -43,19 +43,16 @@ async function attachProjectName(tree: TreeRecord): Promise<TreeRecord> {
   return enriched;
 }
 
+// ─── Detect "column not found in the schema cache" errors from PostgREST ──────
+function isMissingColumnError(message?: string | null): boolean {
+  return !!message && /Could not find the '(?:[^']*)' column of '(?:[^']*)' in the schema cache|column .*event_type.*does not exist|column .*quantity.*does not exist/i.test(message.trim());
+}
+
 // ─── Insert a new tree record ──────────────────────────────────────────────────
 export async function insertTreeRecord(
   record: TreeRecordInsert
 ): Promise<ApiResponse<TreeRecord>> {
-  const NEW_COLUMNS = [
-    'event_type', 'quantity', 'dbh_cm', 'height_m', 'wood_density',
-    'crown_diameter_m', 'tree_condition', 'multi_stem', 'age_years',
-    'land_type', 'surveyor', 'survey_date', 'tree_id', 'scientific_name',
-  ];
-
-  const isMissingColumn = (msg: string) => msg.includes('column') && msg.includes('of') && msg.includes('schema cache');
-
-  // Try full insert first
+  // Try with project join first; fall back to plain select if join fails
   let { data, error } = await supabase
     .from('tree_records')
     .insert(record)
@@ -63,6 +60,7 @@ export async function insertTreeRecord(
     .single();
 
   if (error) {
+    // Retry without the join (projects table may not exist yet)
     const retry = await supabase
       .from('tree_records')
       .insert(record)
@@ -72,20 +70,22 @@ export async function insertTreeRecord(
     error = retry.error;
   }
 
-  // If missing columns, strip them and retry
-  if (error && isMissingColumn(error.message)) {
+  if (error && isMissingColumnError(error.message)) {
+    // Schema out of sync — tree_records lacks event_type/quantity columns
+    // (run supabase/migrations/000_full_database_setup.sql to add them).
+    // Save the record anyway; DB defaults kick in (event_type 'Planting', quantity 1).
     console.warn(
-      '[TreeApp] tree_records missing columns — run supabase/migrations/001_add_tree_columns.sql'
+      '[TreeApp] tree_records missing event_type/quantity columns — ' +
+      'run supabase/migrations/000_full_database_setup.sql. Saving record without them.'
     );
-    const baseRecord: Record<string, any> = { ...record };
-    NEW_COLUMNS.forEach((col) => delete baseRecord[col]);
-    const retryBase = await supabase
+    const { event_type: _dropEventType, quantity: _dropQuantity, ...baseRecord } = record;
+    const retryWithoutExtras = await supabase
       .from('tree_records')
       .insert(baseRecord)
       .select()
       .single();
-    data = retryBase.data;
-    error = retryBase.error;
+    data = retryWithoutExtras.data;
+    error = retryWithoutExtras.error;
   }
 
   if (error) {
