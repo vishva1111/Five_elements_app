@@ -19,7 +19,7 @@
       "splash": {
         "image": "./assets/splash-icon.png",
         "resizeMode": "contain",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#123f24"
       },
       "infoPlist": {
         "NSCameraUsageDescription": "TreeApp needs camera access to photograph trees in the field.",
@@ -32,17 +32,13 @@
       "splash": {
         "image": "./assets/splash-icon.png",
         "resizeMode": "contain",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#123f24"
       },
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#123f24"
       },
-      "config": {
-        "googleMaps": {
-          "apiKey": "REPLACE_WITH_YOUR_GOOGLE_MAPS_API_KEY"
-        }
-      },
+      "config": {},
       "permissions": [
         "CAMERA",
         "ACCESS_FINE_LOCATION",
@@ -62,7 +58,7 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#123f24"
         }
       ],
       [
@@ -77,7 +73,14 @@
           "locationAlwaysAndWhenInUsePermission": "TreeApp needs your location to tag the GPS coordinates of each tree."
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "TreeApp needs photo library access to save tree photos.",
+          "savePhotosPermission": "TreeApp needs permission to save tree photos to your gallery."
+        }
+      ]
     ],
     "scheme": "treeapp",
     "extra": {
