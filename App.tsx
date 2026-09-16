@@ -83,16 +83,54 @@ function MainTabs() {
           else if (route.name === 'Task') iconName = focused ? 'clipboard' : 'clipboard-outline';
           else if (route.name === 'History') iconName = focused ? 'list' : 'list-outline';
           else if (route.name === 'Profile') iconName = focused ? 'person' : 'person-outline';
-          return <Ionicons name={iconName} size={size} color={color} />;
+          return (
+            <View style={{
+              backgroundColor: focused ? 'rgba(26,92,42,0.12)' : 'transparent',
+              borderRadius: 14,
+              paddingHorizontal: 16,
+              paddingVertical: 6,
+            }}>
+              <Ionicons name={iconName} size={focused ? 24 : 22} color={color} />
+            </View>
+          );
+        },
+        tabBarLabel: ({ focused, color }) => {
+          const labels: Record<string, string> = {
+            Home: 'Home',
+            Map: 'Map',
+            Task: 'Tasks',
+            History: 'History',
+            Profile: 'Profile',
+          };
+          return (
+            <Text style={{
+              fontSize: 10,
+              fontWeight: focused ? '700' : '500',
+              color,
+              marginBottom: 2,
+              letterSpacing: 0.3,
+            }}>
+              {labels[route.name] ?? route.name}
+            </Text>
+          );
         },
         tabBarActiveTintColor: '#1a5c2a',
-        tabBarInactiveTintColor: '#888',
-        // Respect the gesture/navigation bar inset so tabs stay fully visible
-        // and tappable on devices with on-screen navigation bars.
+        tabBarInactiveTintColor: '#999',
+        tabBarShowLabel: true,
         tabBarStyle: {
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 6,
-          paddingTop: 6,
-          height: 60 + (insets.bottom > 0 ? insets.bottom : 6),
+          backgroundColor: '#fff',
+          borderTopWidth: 0,
+          elevation: 20,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.1,
+          shadowRadius: 12,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
+          paddingTop: 8,
+          height: 68 + (insets.bottom > 0 ? insets.bottom : 8),
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
+          position: 'absolute',
         },
         headerStyle: { backgroundColor: '#1a5c2a' },
         headerTintColor: '#fff',

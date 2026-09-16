@@ -4,13 +4,9 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="Add Tree Markers, Geotagging, Geofencing &amp; Location Lock">
+    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="location detch bug solve and project according tree fanching show.">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/App.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/hooks/useLocation.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/hooks/useLocation.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Capture/CaptureScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/CaptureScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Capture/MapPickerScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/MapPickerScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/treeService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/treeService.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -244,7 +240,15 @@
       <option name="project" value="LOCAL" />
       <updated>1789545388589</updated>
     </task>
-    <option name="localTasksCounter" value="21" />
+    <task id="LOCAL-00021" summary="location detch bug solve and project according tree fanching show.">
+      <option name="closed" value="true" />
+      <created>1789551340293</created>
+      <option name="number" value="00021" />
+      <option name="presentableId" value="LOCAL-00021" />
+      <option name="project" value="LOCAL" />
+      <updated>1789551340294</updated>
+    </task>
+    <option name="localTasksCounter" value="22" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -258,7 +262,14 @@
                   <entry key="branch">
                     <value>
                       <list>
-                        <option value="project_task" />
+                        <option value="origin/feature/project-tree-photo-upload" />
+                      </list>
+                    </value>
+                  </entry>
+                  <entry key="text">
+                    <value>
+                      <list>
+                        <option value="task" />
                       </list>
                     </value>
                   </entry>
@@ -293,6 +304,7 @@
     <MESSAGE value="add logo or apk build upadte" />
     <MESSAGE value="add logo or apk build upadte" />
     <MESSAGE value="Add Tree Markers, Geotagging, Geofencing &amp; Location Lock" />
-    <option name="LAST_COMMIT_MESSAGE" value="Add Tree Markers, Geotagging, Geofencing &amp; Location Lock" />
+    <MESSAGE value="location detch bug solve and project according tree fanching show." />
+    <option name="LAST_COMMIT_MESSAGE" value="location detch bug solve and project according tree fanching show." />
   </component>
 </project>

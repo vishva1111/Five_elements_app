@@ -1,2 +1,8 @@
 .env
 node_modules
+
+# Build artifacts / binaries - GitHub rejects files larger than 100 MB
+*.apk
+*.aab
+*.ipa
+build-local/

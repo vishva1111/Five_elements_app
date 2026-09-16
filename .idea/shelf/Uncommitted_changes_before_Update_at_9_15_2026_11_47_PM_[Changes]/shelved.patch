@@ -1,0 +1,385 @@
+Index: src/components/MapPreview.tsx
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import React from 'react';\r\nimport { View, Text, StyleSheet, TouchableOpacity } from 'react-native';\r\nimport MapView, { Marker, UrlTile, Callout } from 'react-native-maps';\r\nimport { Coordinates } from '../types';\r\n\r\ninterface Props {\r\n  coords: Coordinates;\r\n  onPress?: () => void;\r\n  height?: number;\r\n  interactive?: boolean;\r\n}\r\n\r\n// OpenStreetMap tile URL — 100% FREE, no API key needed\r\nconst OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';\r\n\r\nexport default function MapPreview({\r\n  coords,\r\n  onPress,\r\n  height = 180,\r\n  interactive = false,\r\n}: Props) {\r\n  const region = {\r\n    latitude: Number(coords.latitude) || 0,\r\n    longitude: Number(coords.longitude) || 0,\r\n    latitudeDelta: 0.005,\r\n    longitudeDelta: 0.005,\r\n  };\r\n\r\n  return (\r\n    <TouchableOpacity\r\n      style={[styles.container, { height }]}\r\n      onPress={onPress}\r\n      activeOpacity={onPress ? 0.85 : 1}\r\n      disabled={!onPress}\r\n    >\r\n      <MapView\r\n        style={StyleSheet.absoluteFill}\r\n        region={region}\r\n        scrollEnabled={interactive}\r\n        zoomEnabled={interactive}\r\n        rotateEnabled={false}\r\n        pitchEnabled={false}\r\n        mapType=\"none\"\r\n      >\r\n        {/* OpenStreetMap tiles — FREE */}\r\n        <UrlTile\r\n          urlTemplate={OSM_TILE_URL}\r\n          maximumZ={19}\r\n          flipY={false}\r\n        />\r\n        <Marker\r\n          coordinate={{ latitude: coords.latitude, longitude: coords.longitude }}\r\n        >\r\n          <Callout>\r\n            <View>\r\n              <Text>\uD83D\uDCCD Tree Location</Text>\r\n              <Text>{Number(coords.latitude ?? 0).toFixed(5)}, {Number(coords.longitude ?? 0).toFixed(5)}</Text>\r\n            </View>\r\n          </Callout>\r\n        </Marker>\r\n      </MapView>\r\n\r\n      {/* Coords overlay */}\r\n      <View style={styles.coordsOverlay}>\r\n        <Text style={styles.coordsText}>\r\n          \uD83D\uDCCD {Number(coords.latitude ?? 0).toFixed(5)}, {Number(coords.longitude ?? 0).toFixed(5)}\r\n        </Text>\r\n      </View>\r\n\r\n      {onPress && (\r\n        <View style={styles.tapHint}>\r\n          <Text style={styles.tapHintText}>Tap to adjust location</Text>\r\n        </View>\r\n      )}\r\n    </TouchableOpacity>\r\n  );\r\n}\r\n\r\nconst styles = StyleSheet.create({\r\n  container: {\r\n    borderRadius: 7.5,\r\n    overflow: 'hidden',\r\n    backgroundColor: '#e8f5e9',\r\n  },\r\n  coordsOverlay: {\r\n    position: 'absolute',\r\n    bottom: 8,\r\n    left: 8,\r\n    backgroundColor: 'rgba(0,0,0,0.55)',\r\n    borderRadius: 7.5,\r\n    paddingHorizontal: 8,\r\n    paddingVertical: 4,\r\n  },\r\n  coordsText: { color: '#fff', fontSize: 11 },\r\n  tapHint: {\r\n    position: 'absolute',\r\n    top: 8,\r\n    right: 8,\r\n    backgroundColor: 'rgba(26,92,42,0.85)',\r\n    borderRadius: 7.5,\r\n    paddingHorizontal: 8,\r\n    paddingVertical: 4,\r\n  },\r\n  tapHintText: { color: '#fff', fontSize: 11, fontWeight: '600' },\r\n});
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/components/MapPreview.tsx b/src/components/MapPreview.tsx
+--- a/src/components/MapPreview.tsx	(revision b047bd695c4e928fc867fcd7c0310dea962d93dd)
++++ b/src/components/MapPreview.tsx	(date 1789458300247)
+@@ -1,6 +1,6 @@
+-import React from 'react';
+-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+-import MapView, { Marker, UrlTile, Callout } from 'react-native-maps';
++import React, { useMemo } from 'react';
++import { View, Text, StyleSheet } from 'react-native';
++import { WebView } from 'react-native-webview';
+ import { Coordinates } from '../types';
+ 
+ interface Props {
+@@ -10,69 +10,46 @@
+   interactive?: boolean;
+ }
+ 
+-// OpenStreetMap tile URL — 100% FREE, no API key needed
+-const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+-
+ export default function MapPreview({
+   coords,
+-  onPress,
+   height = 180,
+-  interactive = false,
+ }: Props) {
+-  const region = {
+-    latitude: Number(coords.latitude) || 0,
+-    longitude: Number(coords.longitude) || 0,
+-    latitudeDelta: 0.005,
+-    longitudeDelta: 0.005,
+-  };
++  const lat = Number(coords.latitude) || 0;
++  const lng = Number(coords.longitude) || 0;
++
++  const html = useMemo(() => `<!DOCTYPE html>
++<html>
++<head>
++<meta charset="utf-8"/>
++<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
++<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
++<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
++<style>html,body,#map{margin:0;padding:0;width:100%;height:100%;}</style>
++</head>
++<body>
++<div id="map"></div>
++<script>
++var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([${lat},${lng}],17);
++L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
++L.marker([${lat},${lng}]).addTo(map);
++</script>
++</body>
++</html>`, [lat, lng]);
+ 
+   return (
+-    <TouchableOpacity
+-      style={[styles.container, { height }]}
+-      onPress={onPress}
+-      activeOpacity={onPress ? 0.85 : 1}
+-      disabled={!onPress}
+-    >
+-      <MapView
+-        style={StyleSheet.absoluteFill}
+-        region={region}
+-        scrollEnabled={interactive}
+-        zoomEnabled={interactive}
+-        rotateEnabled={false}
+-        pitchEnabled={false}
+-        mapType="none"
+-      >
+-        {/* OpenStreetMap tiles — FREE */}
+-        <UrlTile
+-          urlTemplate={OSM_TILE_URL}
+-          maximumZ={19}
+-          flipY={false}
+-        />
+-        <Marker
+-          coordinate={{ latitude: coords.latitude, longitude: coords.longitude }}
+-        >
+-          <Callout>
+-            <View>
+-              <Text>📍 Tree Location</Text>
+-              <Text>{Number(coords.latitude ?? 0).toFixed(5)}, {Number(coords.longitude ?? 0).toFixed(5)}</Text>
+-            </View>
+-          </Callout>
+-        </Marker>
+-      </MapView>
+-
+-      {/* Coords overlay */}
++    <View style={[styles.container, { height }]}>
++      <WebView
++        source={{ html }}
++        style={styles.webview}
++        scrollEnabled={false}
++        pointerEvents="none"
++      />
+       <View style={styles.coordsOverlay}>
+         <Text style={styles.coordsText}>
+-          📍 {Number(coords.latitude ?? 0).toFixed(5)}, {Number(coords.longitude ?? 0).toFixed(5)}
++          {lat.toFixed(5)}, {lng.toFixed(5)}
+         </Text>
+       </View>
+-
+-      {onPress && (
+-        <View style={styles.tapHint}>
+-          <Text style={styles.tapHintText}>Tap to adjust location</Text>
+-        </View>
+-      )}
+-    </TouchableOpacity>
++    </View>
+   );
+ }
+ 
+@@ -82,6 +59,9 @@
+     overflow: 'hidden',
+     backgroundColor: '#e8f5e9',
+   },
++  webview: {
++    flex: 1,
++  },
+   coordsOverlay: {
+     position: 'absolute',
+     bottom: 8,
+@@ -92,14 +72,4 @@
+     paddingVertical: 4,
+   },
+   coordsText: { color: '#fff', fontSize: 11 },
+-  tapHint: {
+-    position: 'absolute',
+-    top: 8,
+-    right: 8,
+-    backgroundColor: 'rgba(26,92,42,0.85)',
+-    borderRadius: 7.5,
+-    paddingHorizontal: 8,
+-    paddingVertical: 4,
+-  },
+-  tapHintText: { color: '#fff', fontSize: 11, fontWeight: '600' },
+-});
+\ No newline at end of file
++});
+Index: src/screens/Capture/MapPickerScreen.tsx
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import React, { useState, useRef } from 'react';\r\nimport {\r\n  View,\r\n  Text,\r\n  StyleSheet,\r\n  TouchableOpacity,\r\n  Alert,\r\n  ActivityIndicator,\r\n} from 'react-native';\r\nimport MapView, { Marker, UrlTile, Callout, MapPressEvent } from 'react-native-maps';\r\nimport { useNavigation, useRoute, RouteProp } from '@react-navigation/native';\r\nimport { NativeStackNavigationProp } from '@react-navigation/native-stack';\r\nimport { Ionicons } from '@expo/vector-icons';\r\nimport { LinearGradient } from 'expo-linear-gradient';\r\nimport { CaptureStackParamList, Coordinates } from '../../types';\r\nimport { useLocation } from '../../hooks/useLocation';\r\n\r\ntype Nav = NativeStackNavigationProp<CaptureStackParamList, 'MapPicker'>;\r\ntype Route = RouteProp<CaptureStackParamList, 'MapPicker'>;\r\n\r\nconst OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';\r\n\r\nconst DEFAULT_COORDS: Coordinates = { latitude: 20.5937, longitude: 78.9629 }; // India center\r\n\r\nexport default function MapPickerScreen() {\r\n  const navigation = useNavigation<Nav>();\r\n  const route = useRoute<Route>();\r\n  const { photoUri, initialCoords } = route.params;\r\n\r\n  const [coords, setCoords] = useState<Coordinates>(initialCoords ?? DEFAULT_COORDS);\r\n  const [locating, setLocating] = useState(false);\r\n  const mapRef = useRef<MapView>(null);\r\n  const { requestLocation } = useLocation();\r\n\r\n  const handleMapPress = (e: MapPressEvent) => {\r\n    const { latitude, longitude } = e.nativeEvent.coordinate;\r\n    setCoords({ latitude, longitude });\r\n  };\r\n\r\n  const handleRelocate = async () => {\r\n    setLocating(true);\r\n    const loc = await requestLocation();\r\n    if (loc) {\r\n      setCoords(loc);\r\n      mapRef.current?.animateToRegion({\r\n        latitude: loc.latitude,\r\n        longitude: loc.longitude,\r\n        latitudeDelta: 0.005,\r\n        longitudeDelta: 0.005,\r\n      }, 800);\r\n    } else {\r\n      Alert.alert('Location Error', 'Could not get your current location. Please tap on the map to set it manually.');\r\n    }\r\n    setLocating(false);\r\n  };\r\n\r\n  const handleConfirm = () => {\r\n    navigation.navigate('TreeForm', { photoUri, coords });\r\n  };\r\n\r\n  return (\r\n    <View style={styles.container}>\r\n      {/* Header */}\r\n      <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={styles.header}>\r\n        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>\r\n          <Ionicons name=\"arrow-back\" size={24} color=\"#fff\" />\r\n        </TouchableOpacity>\r\n        <Text style={styles.headerTitle}>Confirm Location</Text>\r\n        <View style={{ width: 44 }} />\r\n      </LinearGradient>\r\n\r\n      {/* Map */}\r\n      <MapView\r\n        ref={mapRef}\r\n        style={styles.map}\r\n        initialRegion={{\r\n          latitude: coords.latitude,\r\n          longitude: coords.longitude,\r\n          latitudeDelta: 0.005,\r\n          longitudeDelta: 0.005,\r\n        }}\r\n        onPress={handleMapPress}\r\n        mapType=\"none\"\r\n      >\r\n        <UrlTile urlTemplate={OSM_TILE_URL} maximumZ={19} flipY={false} />\r\n        <Marker\r\n          coordinate={{ latitude: coords.latitude, longitude: coords.longitude }}\r\n          draggable\r\n          onDragEnd={(e) => {\r\n            const { latitude, longitude } = e.nativeEvent.coordinate;\r\n            setCoords({ latitude, longitude });\r\n          }}\r\n        >\r\n          <Callout>\r\n            <View>\r\n              <Text>\uD83D\uDCCD Tree Location</Text>\r\n              <Text>{coords.latitude.toFixed(6)}, {coords.longitude.toFixed(6)}</Text>\r\n            </View>\r\n          </Callout>\r\n        </Marker>\r\n      </MapView>\r\n\r\n      {/* Instruction */}\r\n      <View style={styles.instruction}>\r\n        <Text style={styles.instructionText}>\r\n          Tap on map or drag the pin to set exact tree location\r\n        </Text>\r\n      </View>\r\n\r\n      {/* Bottom Panel */}\r\n      <View style={styles.bottomPanel}>\r\n        <View style={styles.coordsBox}>\r\n          <Text style={styles.coordsLabel}>Selected Coordinates</Text>\r\n          <Text style={styles.coordsValue}>\r\n            {coords.latitude.toFixed(6)}, {coords.longitude.toFixed(6)}\r\n          </Text>\r\n        </View>\r\n\r\n        <View style={styles.btnRow}>\r\n          <TouchableOpacity\r\n            style={styles.relocateBtn}\r\n            onPress={handleRelocate}\r\n            disabled={locating}\r\n          >\r\n            {locating ? (\r\n              <ActivityIndicator color=\"#1a5c2a\" size=\"small\" />\r\n            ) : (\r\n              <Ionicons name=\"locate\" size={20} color=\"#1a5c2a\" />\r\n            )}\r\n            <Text style={styles.relocateBtnText}>My Location</Text>\r\n          </TouchableOpacity>\r\n\r\n          <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm}>\r\n            <Text style={styles.confirmBtnText}>Confirm Location</Text>\r\n            <Ionicons name=\"arrow-forward\" size={18} color=\"#fff\" />\r\n          </TouchableOpacity>\r\n        </View>\r\n      </View>\r\n    </View>\r\n  );\r\n}\r\n\r\nconst styles = StyleSheet.create({\r\n  container: { flex: 1, backgroundColor: '#000' },\r\n  header: {\r\n    flexDirection: 'row',\r\n    alignItems: 'center',\r\n    justifyContent: 'space-between',\r\n    paddingTop: 48,\r\n    paddingBottom: 14,\r\n    paddingHorizontal: 16,\r\n  },\r\n  backBtn: {\r\n    width: 44,\r\n    height: 44,\r\n    alignItems: 'center',\r\n    justifyContent: 'center',\r\n  },\r\n  headerTitle: { color: '#fff', fontSize: 19, fontWeight: '700', textTransform: 'uppercase', textAlign: 'center', flex: 1 },\r\n  map: { flex: 1 },\r\n  instruction: {\r\n    backgroundColor: 'rgba(0,0,0,0.65)',\r\n    paddingVertical: 8,\r\n    paddingHorizontal: 16,\r\n    alignItems: 'center',\r\n  },\r\n  instructionText: { color: '#fff', fontSize: 12 },\r\n  bottomPanel: {\r\n    backgroundColor: '#fff',\r\n    padding: 20,\r\n    paddingBottom: 36,\r\n    borderTopLeftRadius: 20,\r\n    borderTopRightRadius: 20,\r\n    elevation: 8,\r\n  },\r\n  coordsBox: {\r\n    backgroundColor: '#f0fdf4',\r\n    borderRadius: 7.5,\r\n    padding: 12,\r\n    marginBottom: 16,\r\n    borderWidth: 1,\r\n    borderColor: '#bbf7d0',\r\n  },\r\n  coordsLabel: { fontSize: 11, color: '#888', marginBottom: 4 },\r\n  coordsValue: { fontSize: 14, fontWeight: '600', color: '#1a5c2a', fontFamily: 'monospace' },\r\n  btnRow: { flexDirection: 'row', gap: 12 },\r\n  relocateBtn: {\r\n    flex: 1,\r\n    flexDirection: 'row',\r\n    alignItems: 'center',\r\n    justifyContent: 'center',\r\n    gap: 6,\r\n    borderWidth: 2,\r\n    borderColor: '#1a5c2a',\r\n    borderRadius: 7.5,\r\n    paddingVertical: 14,\r\n  },\r\n  relocateBtnText: { color: '#1a5c2a', fontWeight: '600', fontSize: 14 },\r\n  confirmBtn: {\r\n    flex: 2,\r\n    flexDirection: 'row',\r\n    alignItems: 'center',\r\n    justifyContent: 'center',\r\n    gap: 8,\r\n    backgroundColor: '#1a5c2a',\r\n    borderRadius: 7.5,\r\n    paddingVertical: 14,\r\n  },\r\n  confirmBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },\r\n});
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/screens/Capture/MapPickerScreen.tsx b/src/screens/Capture/MapPickerScreen.tsx
+--- a/src/screens/Capture/MapPickerScreen.tsx	(revision b047bd695c4e928fc867fcd7c0310dea962d93dd)
++++ b/src/screens/Capture/MapPickerScreen.tsx	(date 1789458300273)
+@@ -1,4 +1,4 @@
+-import React, { useState, useRef } from 'react';
++import React, { useState, useRef, useCallback } from 'react';
+ import {
+   View,
+   Text,
+@@ -6,8 +6,9 @@
+   TouchableOpacity,
+   Alert,
+   ActivityIndicator,
++  BackHandler,
+ } from 'react-native';
+-import MapView, { Marker, UrlTile, Callout, MapPressEvent } from 'react-native-maps';
++import { WebView } from 'react-native-webview';
+ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+ import { Ionicons } from '@expo/vector-icons';
+@@ -18,36 +19,68 @@
+ type Nav = NativeStackNavigationProp<CaptureStackParamList, 'MapPicker'>;
+ type Route = RouteProp<CaptureStackParamList, 'MapPicker'>;
+ 
+-const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
++const DEFAULT_COORDS: Coordinates = { latitude: 20.5937, longitude: 78.9629 };
+ 
+-const DEFAULT_COORDS: Coordinates = { latitude: 20.5937, longitude: 78.9629 }; // India center
++function buildMapHtml(lat: number, lng: number): string {
++  return `<!DOCTYPE html>
++<html>
++<head>
++<meta charset="utf-8"/>
++<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
++<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
++<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
++<style>
++html,body,#map{margin:0;padding:0;width:100%;height:100%;}
++.leaflet-container{cursor:crosshair !important;}
++</style>
++</head>
++<body>
++<div id="map"></div>
++<script>
++var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([${lat},${lng}],17);
++L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
++var marker=L.marker([${lat},${lng}],{draggable:true}).addTo(map);
++marker.on('dragend',function(e){
++  var p=e.target.getLatLng();
++  window.ReactNativeWebView.postMessage(JSON.stringify({lat:p.lat,lng:p.lng}));
++});
++map.on('click',function(e){
++  marker.setLatLng(e.latlng);
++  window.ReactNativeWebView.postMessage(JSON.stringify({lat:e.latlng.lat,lng:e.latlng.lng}));
++});
++window.setMarkerPosition=function(lat,lng){
++  map.setView([lat,lng],17);
++  marker.setLatLng([lat,lng]);
++};
++</script>
++</body>
++</html>`;
++}
+ 
+ export default function MapPickerScreen() {
+   const navigation = useNavigation<Nav>();
+   const route = useRoute<Route>();
+   const { photoUri, initialCoords } = route.params;
+-
+   const [coords, setCoords] = useState<Coordinates>(initialCoords ?? DEFAULT_COORDS);
+   const [locating, setLocating] = useState(false);
+-  const mapRef = useRef<MapView>(null);
++  const webViewRef = useRef<WebView>(null);
+   const { requestLocation } = useLocation();
+ 
+-  const handleMapPress = (e: MapPressEvent) => {
+-    const { latitude, longitude } = e.nativeEvent.coordinate;
+-    setCoords({ latitude, longitude });
+-  };
++  const handleWebViewMessage = useCallback((event: any) => {
++    try {
++      const data = JSON.parse(event.nativeEvent.data);
++      if (data.lat !== undefined && data.lng !== undefined) {
++        setCoords({ latitude: data.lat, longitude: data.lng });
++      }
++    } catch {}
++  }, []);
+ 
+   const handleRelocate = async () => {
+     setLocating(true);
+     const loc = await requestLocation();
+     if (loc) {
+       setCoords(loc);
+-      mapRef.current?.animateToRegion({
+-        latitude: loc.latitude,
+-        longitude: loc.longitude,
+-        latitudeDelta: 0.005,
+-        longitudeDelta: 0.005,
+-      }, 800);
++      webViewRef.current?.postMessage(JSON.stringify({ action: 'setMarker', lat: loc.latitude, lng: loc.longitude }));
+     } else {
+       Alert.alert('Location Error', 'Could not get your current location. Please tap on the map to set it manually.');
+     }
+@@ -60,7 +93,6 @@
+ 
+   return (
+     <View style={styles.container}>
+-      {/* Header */}
+       <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={styles.header}>
+         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+           <Ionicons name="arrow-back" size={24} color="#fff" />
+@@ -69,45 +101,20 @@
+         <View style={{ width: 44 }} />
+       </LinearGradient>
+ 
+-      {/* Map */}
+-      <MapView
+-        ref={mapRef}
++      <WebView
++        ref={webViewRef}
++        source={{ html: buildMapHtml(coords.latitude, coords.longitude) }}
+         style={styles.map}
+-        initialRegion={{
+-          latitude: coords.latitude,
+-          longitude: coords.longitude,
+-          latitudeDelta: 0.005,
+-          longitudeDelta: 0.005,
+-        }}
+-        onPress={handleMapPress}
+-        mapType="none"
+-      >
+-        <UrlTile urlTemplate={OSM_TILE_URL} maximumZ={19} flipY={false} />
+-        <Marker
+-          coordinate={{ latitude: coords.latitude, longitude: coords.longitude }}
+-          draggable
+-          onDragEnd={(e) => {
+-            const { latitude, longitude } = e.nativeEvent.coordinate;
+-            setCoords({ latitude, longitude });
+-          }}
+-        >
+-          <Callout>
+-            <View>
+-              <Text>📍 Tree Location</Text>
+-              <Text>{coords.latitude.toFixed(6)}, {coords.longitude.toFixed(6)}</Text>
+-            </View>
+-          </Callout>
+-        </Marker>
+-      </MapView>
++        onMessage={handleWebViewMessage}
++        javaScriptEnabled={true}
++      />
+ 
+-      {/* Instruction */}
+       <View style={styles.instruction}>
+         <Text style={styles.instructionText}>
+           Tap on map or drag the pin to set exact tree location
+         </Text>
+       </View>
+ 
+-      {/* Bottom Panel */}
+       <View style={styles.bottomPanel}>
+         <View style={styles.coordsBox}>
+           <Text style={styles.coordsLabel}>Selected Coordinates</Text>
+@@ -207,4 +214,4 @@
+     paddingVertical: 14,
+   },
+   confirmBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+-});
+\ No newline at end of file
++});
+Index: .idea/workspace.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<project version=\"4\">\r\n  <component name=\"AutoImportSettings\">\r\n    <option name=\"autoReloadType\" value=\"NONE\" />\r\n  </component>\r\n  <component name=\"ChangeListManager\">\r\n    <list default=\"true\" id=\"675aa35d-d0b4-403e-b95f-bac4ab2efb41\" name=\"Changes\" comment=\"fatch data to tree details.\">\r\n      <change beforePath=\"$PROJECT_DIR$/.expo/dev/logs/export.log\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/.expo/dev/logs/export.log\" afterDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/.expo/dev/logs/start.log\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/.expo/dev/logs/start.log\" afterDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/.idea/workspace.xml\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/.idea/workspace.xml\" afterDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/dist/_expo/static/js/android/index-3c6a006085ae65ea5e474efb2f4ce85e.hbc\" beforeDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/dist/_expo/static/js/android/index-985b22f813f4f434ceecabf353f21098.hbc\" beforeDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/dist/metadata.json\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/dist/metadata.json\" afterDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/src/screens/History/HistoryScreen.tsx\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/src/screens/History/HistoryScreen.tsx\" afterDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx\" afterDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx\" afterDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/src/services/treeService.ts\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/src/services/treeService.ts\" afterDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/supabase/migrations/001_add_tree_columns.sql\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/supabase/migrations/001_add_tree_columns.sql\" afterDir=\"false\" />\r\n    </list>\r\n    <option name=\"SHOW_DIALOG\" value=\"false\" />\r\n    <option name=\"HIGHLIGHT_CONFLICTS\" value=\"true\" />\r\n    <option name=\"HIGHLIGHT_NON_ACTIVE_CHANGELIST\" value=\"false\" />\r\n    <option name=\"LAST_RESOLUTION\" value=\"IGNORE\" />\r\n  </component>\r\n  <component name=\"ClangdSettings\">\r\n    <option name=\"formatViaClangd\" value=\"false\" />\r\n  </component>\r\n  <component name=\"Git.Settings\">\r\n    <option name=\"INCOMING_COMMITS_CHECK_STRATEGY\" value=\"FETCH\" />\r\n    <option name=\"PUSH_AUTO_UPDATE\" value=\"true\" />\r\n    <option name=\"RECENT_BRANCH_BY_REPOSITORY\">\r\n      <map>\r\n        <entry key=\"$PROJECT_DIR$\" value=\"feature/project-tree-photo-upload\" />\r\n      </map>\r\n    </option>\r\n    <option name=\"RECENT_GIT_ROOT_PATH\" value=\"$PROJECT_DIR$\" />\r\n    <option name=\"RESET_MODE\" value=\"HARD\" />\r\n    <option name=\"UPDATE_TYPE\" value=\"REBASE\" />\r\n  </component>\r\n  <component name=\"GitHubPullRequestSearchHistory\">{\r\n  &quot;lastFilter&quot;: {}\r\n}</component>\r\n  <component name=\"GithubPullRequestsUISettings\">{\r\n  &quot;selectedUrlAndAccountId&quot;: {\r\n    &quot;url&quot;: &quot;https://github.com/vishva1111/Five_elements_app.git&quot;,\r\n    &quot;accountId&quot;: &quot;166ab3e3-d5e1-4163-a838-b74233a4f6f8&quot;\r\n  }\r\n}</component>\r\n  <component name=\"ProblemsViewState\">\r\n    <option name=\"selectedTabId\" value=\"ProjectErrors\" />\r\n  </component>\r\n  <component name=\"ProjectColorInfo\">{\r\n  &quot;associatedIndex&quot;: 0,\r\n  &quot;fromUser&quot;: false\r\n}</component>\r\n  <component name=\"ProjectId\" id=\"3IiVbnV7yMJLGhF1MYoZSnGdrDh\" />\r\n  <component name=\"ProjectViewState\">\r\n    <option name=\"hideEmptyMiddlePackages\" value=\"true\" />\r\n    <option name=\"showLibraryContents\" value=\"true\" />\r\n  </component>\r\n  <component name=\"PropertiesComponent\">{\r\n  &quot;keyToString&quot;: {\r\n    &quot;AnalyzeApkAction.lastApkPath&quot;: &quot;D:/5eliment/app/treeapp&quot;,\r\n    &quot;Lightbuild Test.run.executor&quot;: &quot;Run&quot;,\r\n    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,\r\n    &quot;Notification.DisplayName-DoNotAsk-vcs.project.update.finished&quot;: &quot;&quot;,\r\n    &quot;Notification.DoNotAsk-vcs.project.update.finished&quot;: &quot;true&quot;,\r\n    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,\r\n    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,\r\n    &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,\r\n    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,\r\n    &quot;RunOnceActivity.readMode.enableVisualFormatting&quot;: &quot;true&quot;,\r\n    &quot;cf.first.check.clang-format&quot;: &quot;false&quot;,\r\n    &quot;cidr.known.project.marker&quot;: &quot;true&quot;,\r\n    &quot;dart.analysis.tool.window.visible&quot;: &quot;false&quot;,\r\n    &quot;deletionFromPopupRequiresConfirmation&quot;: &quot;false&quot;,\r\n    &quot;git-widget-placeholder&quot;: &quot;project__task&quot;,\r\n    &quot;git.auto.fetch.suggestion.counter&quot;: &quot;3&quot;,\r\n    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,\r\n    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,\r\n    &quot;show.migrate.to.gradle.popup&quot;: &quot;false&quot;\r\n  }\r\n}</component>\r\n  <component name=\"TaskManager\">\r\n    <task active=\"true\" id=\"Default\" summary=\"Default task\">\r\n      <changelist id=\"675aa35d-d0b4-403e-b95f-bac4ab2efb41\" name=\"Changes\" comment=\"\" />\r\n      <created>1788247451170</created>\r\n      <option name=\"number\" value=\"Default\" />\r\n      <option name=\"presentableId\" value=\"Default\" />\r\n      <updated>1788247451170</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00001\" summary=\"update features\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1788260474400</created>\r\n      <option name=\"number\" value=\"00001\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00001\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1788260474402</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00002\" summary=\"update features 2\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1788262599997</created>\r\n      <option name=\"number\" value=\"00002\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00002\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1788262599997</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00003\" summary=\"project according to login\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1788264146363</created>\r\n      <option name=\"number\" value=\"00003\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00003\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1788264146363</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00004\" summary=\"login session bug fixed.\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1788265768741</created>\r\n      <option name=\"number\" value=\"00004\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00004\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1788265768741</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00005\" summary=\"credit logic update\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1788332240636</created>\r\n      <option name=\"number\" value=\"00005\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00005\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1788332240636</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00006\" summary=\"design bug\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1788333451671</created>\r\n      <option name=\"number\" value=\"00006\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00006\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1788333451671</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00007\" summary=\"design bug 2\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1788334001514</created>\r\n      <option name=\"number\" value=\"00007\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00007\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1788334001514</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00008\" summary=\"new Feature- entire app work only with the selected project\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1788342085403</created>\r\n      <option name=\"number\" value=\"00008\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00008\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1788342085403</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00009\" summary=\"clean project\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1788343397350</created>\r\n      <option name=\"number\" value=\"00009\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00009\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1788343397351</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00010\" summary=\"small design bug\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1788343785346</created>\r\n      <option name=\"number\" value=\"00010\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00010\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1788343785347</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00011\" summary=\"project selection logic and redesign the interface.\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1788426569425</created>\r\n      <option name=\"number\" value=\"00011\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00011\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1788426569428</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00012\" summary=\"task feature\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1788503499647</created>\r\n      <option name=\"number\" value=\"00012\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00012\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1788503499647</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00013\" summary=\"add task page and chnage design.\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1788937068975</created>\r\n      <option name=\"number\" value=\"00013\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00013\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1788937068975</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00014\" summary=\"add 4 tabs in task page.\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1789026784009</created>\r\n      <option name=\"number\" value=\"00014\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00014\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1789026784009</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00015\" summary=\"4 tabs calculation with date\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1789029005799</created>\r\n      <option name=\"number\" value=\"00015\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00015\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1789029005799</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00016\" summary=\"dashbord design update 2\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1789037870026</created>\r\n      <option name=\"number\" value=\"00016\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00016\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1789037870026</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00017\" summary=\"tree capture form upadte to with design or data field.\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1789115350884</created>\r\n      <option name=\"number\" value=\"00017\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00017\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1789115350885</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00018\" summary=\"fatch data to tree details.\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1789381463880</created>\r\n      <option name=\"number\" value=\"00018\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00018\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1789381463880</updated>\r\n    </task>\r\n    <option name=\"localTasksCounter\" value=\"19\" />\r\n    <servers />\r\n  </component>\r\n  <component name=\"Vcs.Log.Tabs.Properties\">\r\n    <option name=\"TAB_STATES\">\r\n      <map>\r\n        <entry key=\"MAIN\">\r\n          <value>\r\n            <State>\r\n              <option name=\"FILTERS\">\r\n                <map>\r\n                  <entry key=\"branch\">\r\n                    <value>\r\n                      <list>\r\n                        <option value=\"project_task\" />\r\n                      </list>\r\n                    </value>\r\n                  </entry>\r\n                </map>\r\n              </option>\r\n            </State>\r\n          </value>\r\n        </entry>\r\n      </map>\r\n    </option>\r\n  </component>\r\n  <component name=\"VcsManagerConfiguration\">\r\n    <MESSAGE value=\"update features\" />\r\n    <MESSAGE value=\"update features 2\" />\r\n    <MESSAGE value=\"project according to login\" />\r\n    <MESSAGE value=\"login session bug fixed.\" />\r\n    <MESSAGE value=\"credit logic update\" />\r\n    <MESSAGE value=\"design bug\" />\r\n    <MESSAGE value=\"design bug 2\" />\r\n    <MESSAGE value=\"new Feature- entire app work only with the selected project\" />\r\n    <MESSAGE value=\"clean project\" />\r\n    <MESSAGE value=\"small design bug\" />\r\n    <MESSAGE value=\"project selection logic and redesign the interface.\" />\r\n    <MESSAGE value=\"task feature\" />\r\n    <MESSAGE value=\"add task page and chnage design.\" />\r\n    <MESSAGE value=\"add 4 tabs in task page.\" />\r\n    <MESSAGE value=\"4 tabs calculation with date\" />\r\n    <MESSAGE value=\"dashbord design update 2\" />\r\n    <MESSAGE value=\"tree capture form upadte to with design or data field.\" />\r\n    <MESSAGE value=\"fatch data to tree details.\" />\r\n    <option name=\"LAST_COMMIT_MESSAGE\" value=\"fatch data to tree details.\" />\r\n  </component>\r\n</project>
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/workspace.xml b/.idea/workspace.xml
+--- a/.idea/workspace.xml	(revision b047bd695c4e928fc867fcd7c0310dea962d93dd)
++++ b/.idea/workspace.xml	(date 1789537377593)
+@@ -5,17 +5,9 @@
+   </component>
+   <component name="ChangeListManager">
+     <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="fatch data to tree details.">
+-      <change beforePath="$PROJECT_DIR$/.expo/dev/logs/export.log" beforeDir="false" afterPath="$PROJECT_DIR$/.expo/dev/logs/export.log" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/.expo/dev/logs/start.log" beforeDir="false" afterPath="$PROJECT_DIR$/.expo/dev/logs/start.log" afterDir="false" />
+       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/dist/_expo/static/js/android/index-3c6a006085ae65ea5e474efb2f4ce85e.hbc" beforeDir="false" />
+-      <change beforePath="$PROJECT_DIR$/dist/_expo/static/js/android/index-985b22f813f4f434ceecabf353f21098.hbc" beforeDir="false" />
+-      <change beforePath="$PROJECT_DIR$/dist/metadata.json" beforeDir="false" afterPath="$PROJECT_DIR$/dist/metadata.json" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/src/screens/History/HistoryScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/HistoryScreen.tsx" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/src/services/treeService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/treeService.ts" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/supabase/migrations/001_add_tree_columns.sql" beforeDir="false" afterPath="$PROJECT_DIR$/supabase/migrations/001_add_tree_columns.sql" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/src/components/MapPreview.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/MapPreview.tsx" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/src/screens/Capture/MapPickerScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/MapPickerScreen.tsx" afterDir="false" />
+     </list>
+     <option name="SHOW_DIALOG" value="false" />
+     <option name="HIGHLIGHT_CONFLICTS" value="true" />
+@@ -233,7 +225,15 @@
+       <option name="project" value="LOCAL" />
+       <updated>1789381463880</updated>
+     </task>
+-    <option name="localTasksCounter" value="19" />
++    <task id="LOCAL-00019" summary="fatch data to tree details.">
++      <option name="closed" value="true" />
++      <created>1789458210652</created>
++      <option name="number" value="00019" />
++      <option name="presentableId" value="LOCAL-00019" />
++      <option name="project" value="LOCAL" />
++      <updated>1789458210652</updated>
++    </task>
++    <option name="localTasksCounter" value="20" />
+     <servers />
+   </component>
+   <component name="Vcs.Log.Tabs.Properties">
+@@ -277,7 +277,10 @@
+     <MESSAGE value="4 tabs calculation with date" />
+     <MESSAGE value="dashbord design update 2" />
+     <MESSAGE value="tree capture form upadte to with design or data field." />
+-    <MESSAGE value="fatch data to tree details." />
+-    <option name="LAST_COMMIT_MESSAGE" value="fatch data to tree details." />
++    <MESSAGE value="add logo or apk build file update" />
++    <MESSAGE value="add logo or apk build file update" />
++    <MESSAGE value="add logo or apk build upadte" />
++    <MESSAGE value="add logo or apk build upadte" />
++    <option name="LAST_COMMIT_MESSAGE" value="add logo or apk build upadte" />
+   </component>
+ </project>
+\ No newline at end of file
