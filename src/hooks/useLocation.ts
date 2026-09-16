@@ -14,12 +14,14 @@ export function useLocation() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setError('Location permission denied. Please enable location in settings.');
+        setError('Permission denied');
+        setLoading(false);
         return null;
       }
 
+      // Use lowest accuracy = fastest, network-based, works indoors
       const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
+        accuracy: Location.Accuracy.Low,
       });
 
       const result: Coordinates = {
@@ -30,8 +32,8 @@ export function useLocation() {
 
       setCoords(result);
       return result;
-    } catch (err) {
-      setError('Failed to get location. Please try again.');
+    } catch {
+      setError('GPS unavailable');
       return null;
     } finally {
       setLoading(false);

@@ -136,6 +136,34 @@ export async function fetchMyTrees(
   return { data: trees, error: null };
 }
 
+// ─── Fetch trees by project ──────────────────────────────────────────────────
+export async function fetchTreesByProject(
+  projectId: string
+): Promise<ApiResponse<TreeRecord[]>> {
+  let { data, error } = await supabase
+    .from('tree_records')
+    .select('*, projects(name)')
+    .eq('project_id', projectId)
+    .order('submitted_at', { ascending: false });
+
+  if (error) {
+    const retry = await supabase
+      .from('tree_records')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('submitted_at', { ascending: false });
+    data = retry.data;
+    error = retry.error;
+  }
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  const trees = await attachProjectNames((data ?? []).map(mapTreeRecord));
+  return { data: trees, error: null };
+}
+
 // ─── Fetch single tree record ──────────────────────────────────────────────────
 export async function fetchTreeById(
   id: string

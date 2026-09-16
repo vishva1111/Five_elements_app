@@ -12,11 +12,13 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Location from 'expo-location';
 import { CaptureStackParamList, Coordinates } from '../../types';
-import { useLocation } from '../../hooks/useLocation';
 
 type Nav = NativeStackNavigationProp<CaptureStackParamList, 'MapPicker'>;
 type Route = RouteProp<CaptureStackParamList, 'MapPicker'>;
+
+const DEFAULT_COORDS: Coordinates = { latitude: 21.1458, longitude: 79.0882 };
 
 function buildMapHtml(lat: number, lng: number): string {
   return `<!DOCTYPE html>
@@ -34,26 +36,26 @@ html,body,#map{margin:0;padding:0;width:100%;height:100%;}
 <body>
 <div id="map"></div>
 <script>
-var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([${lat},${lng}],17);
+var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([${lat},${lng}],15);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
 var marker=L.marker([${lat},${lng}],{draggable:true}).addTo(map);
 marker.on('dragend',function(e){
   var p=e.target.getLatLng();
-  window.ReactNativeWebView.postMessage(JSON.stringify({lat:p.lat,lng:p.lng}));
+  window.ReactNativeWebView.postMessage(JSON.stringify({lat:p.lat,lng:p.lng,src:'drag'}));
 });
 map.on('click',function(e){
   marker.setLatLng(e.latlng);
-  window.ReactNativeWebView.postMessage(JSON.stringify({lat:e.latlng.lat,lng:e.latlng.lng}));
+  window.ReactNativeWebView.postMessage(JSON.stringify({lat:e.latlng.lat,lng:e.latlng.lng,src:'tap'}));
 });
-window.setMarkerPosition=function(lat,lng){
-  map.setView([lat,lng],17);
+window.moveTo=function(lat,lng){
+  map.setView([lat,lng],18);
   marker.setLatLng([lat,lng]);
 };
 window.addEventListener('message',function(e){
   try{
     var d=JSON.parse(e.data);
-    if(d.action==='setMarker'&&d.lat!==undefined&&d.lng!==undefined){
-      window.setMarkerPosition(d.lat,d.lng);
+    if(d.action==='move'&&d.lat!==undefined&&d.lng!==undefined){
+      window.moveTo(d.lat,d.lng);
     }
   }catch(err){}
 });
@@ -65,54 +67,104 @@ window.addEventListener('message',function(e){
 export default function MapPickerScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const { photoUri, initialCoords } = route.params;
-  const [coords, setCoords] = useState<Coordinates | null>(initialCoords ?? null);
-  const [gpsReady, setGpsReady] = useState(false);
+  const { photoUri } = route.params;
+
+  const [coords, setCoords] = useState<Coordinates | null>(null);
   const [locating, setLocating] = useState(false);
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const webViewRef = useRef<WebView>(null);
-  const { requestLocation } = useLocation();
+  const mountedRef = useRef(true);
 
-  // Auto-acquire GPS on mount — this ensures the map always opens at the real location
   useEffect(() => {
-    let cancelled = false;
+    mountedRef.current = true;
+    requestPermissionAndGetLocation();
+    return () => { mountedRef.current = false; };
+  }, []);
 
-    const acquireGps = async () => {
-      // If we already have good coords from the capture screen, use them
-      if (initialCoords && initialCoords.accuracy && initialCoords.accuracy < 30) {
-        setCoords(initialCoords);
-        setGpsReady(true);
+  const requestPermissionAndGetLocation = async () => {
+    if (mountedRef.current) setLocating(true);
+
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status !== 'granted') {
+        if (mountedRef.current) {
+          setHasPermission(false);
+          setLocating(false);
+        }
         return;
       }
 
-      // Otherwise, request fresh GPS
-      setLocating(true);
-      try {
-        const loc = await requestLocation();
-        if (!cancelled && loc) {
-          setCoords(loc);
-          setGpsReady(true);
-          // Move the marker on the map if WebView is already mounted
-          webViewRef.current?.postMessage(
-            JSON.stringify({ action: 'setMarker', lat: loc.latitude, lng: loc.longitude })
-          );
-        } else if (!cancelled) {
-          // GPS failed — use fallback but mark as ready so user can proceed
-          setCoords((prev) => prev ?? { latitude: 20.5937, longitude: 78.9629 });
-          setGpsReady(true);
-        }
-      } catch {
-        if (!cancelled) {
-          setCoords((prev) => prev ?? { latitude: 20.5937, longitude: 78.9629 });
-          setGpsReady(true);
-        }
-      } finally {
-        if (!cancelled) setLocating(false);
-      }
-    };
+      if (mountedRef.current) setHasPermission(true);
 
-    acquireGps();
-    return () => { cancelled = true; };
-  }, []);
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const result: Coordinates = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        accuracy: location.coords.accuracy ?? undefined,
+      };
+
+      if (mountedRef.current) {
+        setCoords(result);
+        setLocating(false);
+      }
+
+      webViewRef.current?.postMessage(
+        JSON.stringify({ action: 'move', lat: result.latitude, lng: result.longitude })
+      );
+    } catch (err) {
+      if (mountedRef.current) setLocating(false);
+    }
+  };
+
+  const handleRelocate = async () => {
+    if (locating) return;
+    setLocating(true);
+
+    try {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        const { status: newStatus } = await Location.requestForegroundPermissionsAsync();
+        if (newStatus !== 'granted') {
+          setHasPermission(false);
+          setLocating(false);
+          Alert.alert(
+            'Location Permission',
+            'Please enable location permission in device Settings > Apps > Five Elements > Permissions > Location.',
+          );
+          return;
+        }
+      }
+
+      setHasPermission(true);
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      const result: Coordinates = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        accuracy: location.coords.accuracy ?? undefined,
+      };
+
+      setCoords(result);
+      setLocating(false);
+
+      webViewRef.current?.postMessage(
+        JSON.stringify({ action: 'move', lat: result.latitude, lng: result.longitude })
+      );
+    } catch (err) {
+      setLocating(false);
+      Alert.alert(
+        'GPS Error',
+        'Could not get your location. Please make sure GPS is turned on in device settings and try again.',
+      );
+    }
+  };
 
   const handleWebViewMessage = useCallback((event: any) => {
     try {
@@ -123,27 +175,15 @@ export default function MapPickerScreen() {
     } catch {}
   }, []);
 
-  const handleRelocate = async () => {
-    setLocating(true);
-    const loc = await requestLocation();
-    if (loc) {
-      setCoords(loc);
-      webViewRef.current?.postMessage(
-        JSON.stringify({ action: 'setMarker', lat: loc.latitude, lng: loc.longitude })
-      );
-    } else {
-      Alert.alert('Location Error', 'Could not get your current location. Please tap on the map to set it manually.');
-    }
-    setLocating(false);
-  };
-
   const handleConfirm = () => {
     if (!coords) {
-      Alert.alert('Wait', 'Getting your location...');
+      Alert.alert('Location Required', 'Tap "My Location" or tap on the map first.');
       return;
     }
     navigation.navigate('TreeForm', { photoUri, coords });
   };
+
+  const mapCoords = coords ?? DEFAULT_COORDS;
 
   return (
     <View style={styles.container}>
@@ -155,50 +195,30 @@ export default function MapPickerScreen() {
         <View style={{ width: 44 }} />
       </LinearGradient>
 
-      {/* Map — only render once we have coordinates */}
-      {coords ? (
-        <WebView
-          ref={webViewRef}
-          source={{ html: buildMapHtml(coords.latitude, coords.longitude) }}
-          style={styles.map}
-          onMessage={handleWebViewMessage}
-          javaScriptEnabled={true}
-        />
-      ) : (
-        <View style={[styles.map, styles.mapLoading]}>
-          <ActivityIndicator size="large" color="#1a5c2a" />
-          <Text style={styles.mapLoadingText}>Acquiring GPS location...</Text>
-        </View>
-      )}
-
-      {/* GPS acquiring overlay */}
-      {locating && (
-        <View style={styles.gpsOverlay}>
-          <ActivityIndicator size="small" color="#fff" />
-          <Text style={styles.gpsOverlayText}>Getting your location...</Text>
-        </View>
-      )}
-
-      <View style={styles.instruction}>
-        <Text style={styles.instructionText}>
-          Tap on map or drag the pin to set exact tree location
-        </Text>
-      </View>
+      <WebView
+        ref={webViewRef}
+        source={{ html: buildMapHtml(mapCoords.latitude, mapCoords.longitude) }}
+        style={styles.map}
+        onMessage={handleWebViewMessage}
+        javaScriptEnabled={true}
+      />
 
       <View style={styles.bottomPanel}>
         <View style={styles.coordsBox}>
           <Text style={styles.coordsLabel}>Selected Coordinates</Text>
           <Text style={styles.coordsValue}>
-            {coords ? `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}` : 'Waiting for GPS...'}
+            {coords
+              ? `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`
+              : 'Tap "My Location" or tap on map'}
           </Text>
-          {coords?.accuracy !== undefined && (
-            <Text style={styles.accuracyText}>GPS accuracy: ±{coords.accuracy.toFixed(0)}m</Text>
+          {coords?.accuracy && (
+            <Text style={styles.accuracyText}>Accuracy: ~{Math.round(coords.accuracy)}m</Text>
           )}
         </View>
 
         <View style={styles.btnRow}>
           <TouchableOpacity
-            style={[styles.relocateBtn, locating && styles.relocateBtnDisabled]}
+            style={[styles.relocateBtn, locating && styles.btnDisabled]}
             onPress={handleRelocate}
             disabled={locating}
           >
@@ -207,11 +227,13 @@ export default function MapPickerScreen() {
             ) : (
               <Ionicons name="locate" size={20} color="#1a5c2a" />
             )}
-            <Text style={styles.relocateBtnText}>My Location</Text>
+            <Text style={styles.relocateBtnText}>
+              {locating ? 'Locating...' : 'My Location'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.confirmBtn, !coords && styles.confirmBtnDisabled]}
+            style={[styles.confirmBtn, !coords && styles.btnDisabled]}
             onPress={handleConfirm}
             disabled={!coords}
           >
@@ -234,45 +256,9 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     paddingHorizontal: 16,
   },
-  backBtn: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { color: '#fff', fontSize: 19, fontWeight: '700', textTransform: 'uppercase', textAlign: 'center', flex: 1 },
   map: { flex: 1 },
-  mapLoading: {
-    backgroundColor: '#e8f5e9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mapLoadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#1a5c2a',
-    fontWeight: '600',
-  },
-  gpsOverlay: {
-    position: 'absolute',
-    top: 110,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(26,92,42,0.9)',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  gpsOverlayText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  instruction: {
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  instructionText: { color: '#fff', fontSize: 12 },
   bottomPanel: {
     backgroundColor: '#fff',
     padding: 20,
@@ -304,7 +290,6 @@ const styles = StyleSheet.create({
     borderRadius: 7.5,
     paddingVertical: 14,
   },
-  relocateBtnDisabled: { opacity: 0.6 },
   relocateBtnText: { color: '#1a5c2a', fontWeight: '600', fontSize: 14 },
   confirmBtn: {
     flex: 2,
@@ -316,6 +301,6 @@ const styles = StyleSheet.create({
     borderRadius: 7.5,
     paddingVertical: 14,
   },
-  confirmBtnDisabled: { backgroundColor: '#aaa' },
   confirmBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  btnDisabled: { opacity: 0.5 },
 });

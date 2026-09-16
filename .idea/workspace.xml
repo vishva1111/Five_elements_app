@@ -4,16 +4,13 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="fatch data to tree details.">
+    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="Add Tree Markers, Geotagging, Geofencing &amp; Location Lock">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/App.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/MapPreview.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/MapPreview.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/hooks/useLocation.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/hooks/useLocation.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/Capture/CaptureScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/CaptureScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/Capture/MapPickerScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/MapPickerScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/services/treeService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/treeService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/store/treeStore.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/treeStore.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/types/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/types/index.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -239,7 +236,15 @@
       <option name="project" value="LOCAL" />
       <updated>1789458210652</updated>
     </task>
-    <option name="localTasksCounter" value="20" />
+    <task id="LOCAL-00020" summary="Add Tree Markers, Geotagging, Geofencing &amp; Location Lock">
+      <option name="closed" value="true" />
+      <created>1789545388589</created>
+      <option name="number" value="00020" />
+      <option name="presentableId" value="LOCAL-00020" />
+      <option name="project" value="LOCAL" />
+      <updated>1789545388589</updated>
+    </task>
+    <option name="localTasksCounter" value="21" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -287,6 +292,7 @@
     <MESSAGE value="add logo or apk build file update" />
     <MESSAGE value="add logo or apk build upadte" />
     <MESSAGE value="add logo or apk build upadte" />
-    <option name="LAST_COMMIT_MESSAGE" value="add logo or apk build upadte" />
+    <MESSAGE value="Add Tree Markers, Geotagging, Geofencing &amp; Location Lock" />
+    <option name="LAST_COMMIT_MESSAGE" value="Add Tree Markers, Geotagging, Geofencing &amp; Location Lock" />
   </component>
 </project>

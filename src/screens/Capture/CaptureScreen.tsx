@@ -14,7 +14,6 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCamera } from '../../hooks/useCamera';
-import { useLocation } from '../../hooks/useLocation';
 import { CaptureStackParamList, Project } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import { fetchAllProjects } from '../../services/treeService';
@@ -25,21 +24,15 @@ export default function CaptureScreen() {
   const navigation = useNavigation<Nav>();
   const [permission, requestPermission] = useCameraPermissions();
   const { cameraRef, flash, facing, setIsReady, takePicture, toggleFlash, toggleFacing } = useCamera();
-  const { coords, requestLocation } = useLocation();
   const { user, activeProjectId } = useAuthStore();
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [capturing, setCapturing] = useState(false);
-  const [gpsStatus, setGpsStatus] = useState<'acquiring' | 'good' | 'unavailable'>('acquiring');
   const [mediaPermission, setMediaPermission] = useState(false);
 
   useEffect(() => {
     if (!permission?.granted) {
       requestPermission();
     }
-    // Start GPS acquisition
-    requestLocation().then((result) => {
-      setGpsStatus(result ? 'good' : 'unavailable');
-    });
   }, []);
 
   // Load ALL projects so the header can show the ACTIVE project's name —
@@ -55,17 +48,6 @@ export default function CaptureScreen() {
     };
   }, []);
 
-  useEffect(() => {
-    if (coords) {
-      // Consider GPS "good" only if accuracy is under 50m
-      if (coords.accuracy && coords.accuracy > 50) {
-        setGpsStatus('acquiring'); // still searching for better fix
-      } else {
-        setGpsStatus('good');
-      }
-    }
-  }, [coords]);
-
   const handleCapture = async () => {
     setCapturing(true);
     try {
@@ -75,15 +57,8 @@ export default function CaptureScreen() {
         return;
       }
 
-      // Get GPS location (use existing or request new)
-      let currentCoords = coords;
-      if (!currentCoords) {
-        currentCoords = await requestLocation();
-      }
-
       navigation.navigate('MapPicker', {
         photoUri,
-        initialCoords: currentCoords ?? undefined,
       });
     } catch (err) {
       Alert.alert('Error', 'Something went wrong. Please try again.');
@@ -114,15 +89,8 @@ export default function CaptureScreen() {
     if (!result.canceled && result.assets && result.assets.length > 0) {
       const photoUri = result.assets[0].uri;
 
-      // Get GPS location for the gallery image
-      let currentCoords = coords;
-      if (!currentCoords) {
-        currentCoords = await requestLocation();
-      }
-
       navigation.navigate('MapPicker', {
         photoUri,
-        initialCoords: currentCoords ?? undefined,
       });
     }
   };
@@ -147,20 +115,6 @@ export default function CaptureScreen() {
       </View>
     );
   }
-
-  const formatCoords = () => {
-    if (!coords) return 'Acquiring location...';
-    const lat = coords.latitude.toFixed(4);
-    const lng = coords.longitude.toFixed(4);
-    return `${lat}° N, ${lng}° E`;
-  };
-
-  const formatTimestamp = () => {
-    const now = new Date();
-    const date = now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-    const time = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-    return `${date} · ${time}`;
-  };
 
   // Show the ACTIVE project in the header — the one the user is currently working in
   const activeProject = allProjects.find((p) => p.id === activeProjectId);
@@ -196,17 +150,6 @@ export default function CaptureScreen() {
 
         {/* Overlay on top of camera */}
         <View style={styles.cameraOverlay}>
-          {/* GPS Chip */}
-          <View style={[styles.gpsChip, gpsStatus === 'good' && styles.gpsChipGood, gpsStatus === 'unavailable' && styles.gpsChipBad, gpsStatus === 'acquiring' && coords?.accuracy && coords.accuracy > 50 && styles.gpsChipWarn]}>
-            <View style={[styles.gpsDot, gpsStatus === 'good' && styles.gpsDotGood, gpsStatus === 'acquiring' && styles.gpsDotPulse]} />
-            <Text style={styles.gpsText}>
-              {gpsStatus === 'acquiring' ? 'Getting your location...' :
-               gpsStatus === 'good' && coords?.accuracy && coords.accuracy > 50 ? `GPS ±${coords.accuracy.toFixed(0)} m · Low accuracy` :
-               gpsStatus === 'good' ? `GPS ±${coords?.accuracy?.toFixed(0) ?? '?'} m · Good fix` :
-               'No GPS signal'}
-            </Text>
-          </View>
-
           {/* Viewfinder Corners */}
           <View style={styles.viewfinder}>
             <View style={styles.corner} />
@@ -214,14 +157,6 @@ export default function CaptureScreen() {
             <View style={[styles.corner, styles.cornerBL]} />
             <View style={[styles.corner, styles.cornerBR]} />
           </View>
-
-          {/* Coordinates + Timestamp */}
-          {coords && (
-            <View style={styles.coordsOverlay}>
-              <Text style={styles.coordsText}>{formatCoords()}</Text>
-              <Text style={styles.timestampText}>{formatTimestamp()}</Text>
-            </View>
-          )}
         </View>
       </View>
 
@@ -268,7 +203,6 @@ export default function CaptureScreen() {
       {/* Hint */}
       <View style={styles.hintBar}>
         <Text style={styles.hintText}>Position the tree in frame</Text>
-        <Text style={styles.gpsHintText}>GPS auto-captured</Text>
       </View>
     </View>
   );
