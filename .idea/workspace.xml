@@ -5,17 +5,15 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="fatch data to tree details.">
-      <change beforePath="$PROJECT_DIR$/.expo/dev/logs/export.log" beforeDir="false" afterPath="$PROJECT_DIR$/.expo/dev/logs/export.log" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.expo/dev/logs/start.log" beforeDir="false" afterPath="$PROJECT_DIR$/.expo/dev/logs/start.log" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/dist/_expo/static/js/android/index-3c6a006085ae65ea5e474efb2f4ce85e.hbc" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/dist/_expo/static/js/android/index-985b22f813f4f434ceecabf353f21098.hbc" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/dist/metadata.json" beforeDir="false" afterPath="$PROJECT_DIR$/dist/metadata.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/History/HistoryScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/HistoryScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/App.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/MapPreview.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/MapPreview.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/Capture/CaptureScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/CaptureScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/Capture/MapPickerScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/MapPickerScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/services/treeService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/treeService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/supabase/migrations/001_add_tree_columns.sql" beforeDir="false" afterPath="$PROJECT_DIR$/supabase/migrations/001_add_tree_columns.sql" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/store/treeStore.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/treeStore.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/types/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/types/index.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -233,7 +231,15 @@
       <option name="project" value="LOCAL" />
       <updated>1789381463880</updated>
     </task>
-    <option name="localTasksCounter" value="19" />
+    <task id="LOCAL-00019" summary="fatch data to tree details.">
+      <option name="closed" value="true" />
+      <created>1789458210652</created>
+      <option name="number" value="00019" />
+      <option name="presentableId" value="LOCAL-00019" />
+      <option name="project" value="LOCAL" />
+      <updated>1789458210652</updated>
+    </task>
+    <option name="localTasksCounter" value="20" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -277,7 +283,10 @@
     <MESSAGE value="4 tabs calculation with date" />
     <MESSAGE value="dashbord design update 2" />
     <MESSAGE value="tree capture form upadte to with design or data field." />
-    <MESSAGE value="fatch data to tree details." />
-    <option name="LAST_COMMIT_MESSAGE" value="fatch data to tree details." />
+    <MESSAGE value="add logo or apk build file update" />
+    <MESSAGE value="add logo or apk build file update" />
+    <MESSAGE value="add logo or apk build upadte" />
+    <MESSAGE value="add logo or apk build upadte" />
+    <option name="LAST_COMMIT_MESSAGE" value="add logo or apk build upadte" />
   </component>
 </project>

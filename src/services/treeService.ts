@@ -360,3 +360,133 @@ export function buildUserFromProfile(
     credits: credits ?? profile?.credits ?? INITIAL_CREDITS,
   };
 }
+
+// ─── Lock a tree record (enforced at DB level — cannot be undone via UI) ──────
+// When locked=true, the tree cannot be edited or deleted. This is enforced both
+// here in the data layer AND via Supabase RLS policies (if configured).
+export async function lockTree(
+  treeId: string,
+  locked: boolean = true
+): Promise<ApiResponse<TreeRecord>> {
+  const { data, error } = await supabase
+    .from('tree_records')
+    .update({ locked })
+    .eq('id', treeId)
+    .select('*, projects(name)')
+    .single();
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  return { data: await attachProjectName(mapTreeRecord(data)), error: null };
+}
+
+// ─── Update a tree record (blocked if locked) ────────────────────────────────
+// Checks the locked flag BEFORE attempting the update. Even if the DB has an RLS
+// policy, this client-side check prevents wasted network calls and gives the user
+// immediate feedback.
+export async function updateTree(
+  treeId: string,
+  updates: Partial<TreeRecordInsert>
+): Promise<ApiResponse<TreeRecord>> {
+  // First check if the tree is locked
+  const { data: existing, error: fetchError } = await supabase
+    .from('tree_records')
+    .select('locked')
+    .eq('id', treeId)
+    .single();
+
+  if (fetchError) {
+    return { data: null, error: fetchError.message };
+  }
+
+  if (existing?.locked) {
+    return { data: null, error: 'This tree record is locked and cannot be modified.' };
+  }
+
+  const { data, error } = await supabase
+    .from('tree_records')
+    .update(updates)
+    .eq('id', treeId)
+    .select('*, projects(name)')
+    .single();
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  return { data: await attachProjectName(mapTreeRecord(data)), error: null };
+}
+
+// ─── Delete a tree record (blocked if locked) ────────────────────────────────
+export async function deleteTree(treeId: string): Promise<ApiResponse<null>> {
+  const { data: existing, error: fetchError } = await supabase
+    .from('tree_records')
+    .select('locked')
+    .eq('id', treeId)
+    .single();
+
+  if (fetchError) {
+    return { data: null, error: fetchError.message };
+  }
+
+  if (existing?.locked) {
+    return { data: null, error: 'This tree record is locked and cannot be deleted.' };
+  }
+
+  const { error } = await supabase
+    .from('tree_records')
+    .delete()
+    .eq('id', treeId);
+
+  return { data: null, error: error?.message ?? null };
+}
+
+// ─── Fetch ALL trees (for map view — not filtered by user) ────────────────────
+export async function fetchAllTrees(): Promise<ApiResponse<TreeRecord[]>> {
+  let { data, error } = await supabase
+    .from('tree_records')
+    .select('*, projects(name)')
+    .order('submitted_at', { ascending: false });
+
+  if (error) {
+    const retry = await supabase
+      .from('tree_records')
+      .select('*')
+      .order('submitted_at', { ascending: false });
+    data = retry.data;
+    error = retry.error;
+  }
+
+  if (error) {
+    return { data: [], error: error.message };
+  }
+
+  const trees = await attachProjectNames((data ?? []).map(mapTreeRecord));
+  return { data: trees, error: null };
+}
+
+// ─── Fetch trees within a bounding box (for map viewport queries) ─────────────
+export async function fetchTreesInBounds(
+  north: number,
+  south: number,
+  east: number,
+  west: number
+): Promise<ApiResponse<TreeRecord[]>> {
+  const { data, error } = await supabase
+    .from('tree_records')
+    .select('*, projects(name)')
+    .gte('latitude', south)
+    .lte('latitude', north)
+    .gte('longitude', west)
+    .lte('longitude', east)
+    .order('submitted_at', { ascending: false });
+
+  if (error) {
+    return { data: [], error: error.message };
+  }
+
+  const trees = await attachProjectNames((data ?? []).map(mapTreeRecord));
+  return { data: trees, error: null };
+}

@@ -1,6 +1,6 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import MapView, { Marker, UrlTile, Callout } from 'react-native-maps';
+import React, { useMemo } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { Coordinates } from '../types';
 
 interface Props {
@@ -10,69 +10,46 @@ interface Props {
   interactive?: boolean;
 }
 
-// OpenStreetMap tile URL — 100% FREE, no API key needed
-const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-
 export default function MapPreview({
   coords,
-  onPress,
   height = 180,
-  interactive = false,
 }: Props) {
-  const region = {
-    latitude: Number(coords.latitude) || 0,
-    longitude: Number(coords.longitude) || 0,
-    latitudeDelta: 0.005,
-    longitudeDelta: 0.005,
-  };
+  const lat = Number(coords.latitude) || 0;
+  const lng = Number(coords.longitude) || 0;
+
+  const html = useMemo(() => `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>html,body,#map{margin:0;padding:0;width:100%;height:100%;}</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([${lat},${lng}],17);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+L.marker([${lat},${lng}]).addTo(map);
+</script>
+</body>
+</html>`, [lat, lng]);
 
   return (
-    <TouchableOpacity
-      style={[styles.container, { height }]}
-      onPress={onPress}
-      activeOpacity={onPress ? 0.85 : 1}
-      disabled={!onPress}
-    >
-      <MapView
-        style={StyleSheet.absoluteFill}
-        region={region}
-        scrollEnabled={interactive}
-        zoomEnabled={interactive}
-        rotateEnabled={false}
-        pitchEnabled={false}
-        mapType="none"
-      >
-        {/* OpenStreetMap tiles — FREE */}
-        <UrlTile
-          urlTemplate={OSM_TILE_URL}
-          maximumZ={19}
-          flipY={false}
-        />
-        <Marker
-          coordinate={{ latitude: coords.latitude, longitude: coords.longitude }}
-        >
-          <Callout>
-            <View>
-              <Text>📍 Tree Location</Text>
-              <Text>{Number(coords.latitude ?? 0).toFixed(5)}, {Number(coords.longitude ?? 0).toFixed(5)}</Text>
-            </View>
-          </Callout>
-        </Marker>
-      </MapView>
-
-      {/* Coords overlay */}
+    <View style={[styles.container, { height }]}>
+      <WebView
+        source={{ html }}
+        style={styles.webview}
+        scrollEnabled={false}
+        pointerEvents="none"
+      />
       <View style={styles.coordsOverlay}>
         <Text style={styles.coordsText}>
-          📍 {Number(coords.latitude ?? 0).toFixed(5)}, {Number(coords.longitude ?? 0).toFixed(5)}
+          {lat.toFixed(5)}, {lng.toFixed(5)}
         </Text>
       </View>
-
-      {onPress && (
-        <View style={styles.tapHint}>
-          <Text style={styles.tapHintText}>Tap to adjust location</Text>
-        </View>
-      )}
-    </TouchableOpacity>
+    </View>
   );
 }
 
@@ -81,6 +58,9 @@ const styles = StyleSheet.create({
     borderRadius: 7.5,
     overflow: 'hidden',
     backgroundColor: '#e8f5e9',
+  },
+  webview: {
+    flex: 1,
   },
   coordsOverlay: {
     position: 'absolute',
@@ -92,14 +72,4 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   coordsText: { color: '#fff', fontSize: 11 },
-  tapHint: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(26,92,42,0.85)',
-    borderRadius: 7.5,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  tapHintText: { color: '#fff', fontSize: 11, fontWeight: '600' },
 });

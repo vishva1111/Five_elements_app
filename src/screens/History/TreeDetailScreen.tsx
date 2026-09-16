@@ -120,7 +120,14 @@ export default function TreeDetailScreen() {
           <Text style={styles.headerTitle}>TREE DETAILS</Text>
           <Text style={styles.headerSubtitle}>{displayId}</Text>
         </View>
-        <View style={styles.headerRight} />
+        {tree.locked ? (
+          <View style={styles.lockBadge}>
+            <Ionicons name="lock-closed" size={14} color="#F09125" />
+            <Text style={styles.lockBadgeText}>LOCKED</Text>
+          </View>
+        ) : (
+          <View style={styles.headerRight} />
+        )}
       </LinearGradient>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
@@ -231,9 +238,18 @@ export default function TreeDetailScreen() {
             }}
             height={180}
           />
-          <TouchableOpacity style={styles.mapsBtn} onPress={openInMaps}>
-            <Ionicons name="map" size={16} color="#1a5c2a" />
-            <Text style={styles.mapsBtnText}>Open in Maps</Text>
+          <TouchableOpacity
+            style={styles.mapsBtn}
+            onPress={() => {
+              navigation.getParent()?.navigate('Map', { focusTreeId: tree.id });
+            }}
+          >
+            <Ionicons name="map" size={16} color="#fff" />
+            <Text style={styles.mapsBtnText}>View on Map</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.mapsBtnOutline} onPress={openInMaps}>
+            <Ionicons name="open-outline" size={16} color="#1a5c2a" />
+            <Text style={styles.mapsBtnOutlineText}>Open in Browser</Text>
           </TouchableOpacity>
           <View style={styles.coordsRow}>
             <View style={styles.coordCell}>
@@ -319,6 +335,16 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: '700', textTransform: 'uppercase' },
   headerSubtitle: { color: '#cde8d3', fontSize: 11, marginTop: 2 },
   headerRight: { width: 40 },
+  lockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(240,145,37,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 7.5,
+  },
+  lockBadgeText: { color: '#F09125', fontSize: 10, fontWeight: '700' },
   scroll: { flex: 1 },
   scrollContent: { padding: 16, gap: 12, paddingBottom: 40 },
   photo: { width: '100%', height: 220, borderRadius: 7.5 },
@@ -417,14 +443,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    paddingVertical: 12,
+    backgroundColor: '#1a5c2a',
+    borderRadius: 7.5,
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  mapsBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  mapsBtnOutline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     paddingVertical: 10,
     borderWidth: 1.5,
     borderColor: '#1a5c2a',
     borderRadius: 7.5,
     justifyContent: 'center',
-    marginTop: 8,
+    marginTop: 6,
   },
-  mapsBtnText: { color: '#1a5c2a', fontWeight: '600', fontSize: 13 },
+  mapsBtnOutlineText: { color: '#1a5c2a', fontWeight: '600', fontSize: 13 },
   coordsRow: {
     flexDirection: 'row',
     gap: 10,

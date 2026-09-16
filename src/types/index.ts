@@ -43,6 +43,7 @@ export interface TreeRecord {
   land_type?: LandType;
   surveyor?: string;
   survey_date?: string;
+  locked: boolean;
   // Joined fields
   submitted_by?: string;
   project_name?: string;
@@ -72,6 +73,7 @@ export interface TreeRecordInsert {
   land_type?: LandType;
   surveyor?: string;
   survey_date?: string;
+  locked?: boolean;
 }
 
 // ─── Location Types ────────────────────────────────────────────────────────────
@@ -176,6 +178,8 @@ export interface TreeState {
   trees: TreeRecord[];
   setTrees: (trees: TreeRecord[]) => void;
   addTree: (tree: TreeRecord) => void;
+  updateTree: (id: string, updates: Partial<TreeRecord>) => void;
+  removeTree: (id: string) => void;
 }
 
 // ─── API Response Types ────────────────────────────────────────────────────────
@@ -260,3 +264,33 @@ export const LAND_TYPE_OPTIONS: LandType[] = [
   'Forest',
   'Other',
 ];
+
+// ─── Geofence Types ──────────────────────────────────────────────────────────
+
+export interface GeofenceZone {
+  id: string;
+  treeId: string;
+  latitude: number;
+  longitude: number;
+  radius: number; // meters
+  label?: string;
+}
+
+export type GeofenceEvent = 'enter' | 'exit';
+
+export interface GeofenceAlert {
+  zone: GeofenceZone;
+  event: GeofenceEvent;
+  timestamp: number;
+}
+
+// ─── Map Screen Navigation ──────────────────────────────────────────────────
+
+export type MainTabParamList = {
+  Home: undefined;
+  Capture: undefined;
+  Map: { focusTreeId?: string } | undefined;
+  Task: undefined;
+  History: undefined;
+  Profile: undefined;
+};

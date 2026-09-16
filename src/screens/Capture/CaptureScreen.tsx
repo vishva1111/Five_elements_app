@@ -57,7 +57,12 @@ export default function CaptureScreen() {
 
   useEffect(() => {
     if (coords) {
-      setGpsStatus('good');
+      // Consider GPS "good" only if accuracy is under 50m
+      if (coords.accuracy && coords.accuracy > 50) {
+        setGpsStatus('acquiring'); // still searching for better fix
+      } else {
+        setGpsStatus('good');
+      }
     }
   }, [coords]);
 
@@ -192,10 +197,11 @@ export default function CaptureScreen() {
         {/* Overlay on top of camera */}
         <View style={styles.cameraOverlay}>
           {/* GPS Chip */}
-          <View style={[styles.gpsChip, gpsStatus === 'good' && styles.gpsChipGood, gpsStatus === 'unavailable' && styles.gpsChipBad]}>
+          <View style={[styles.gpsChip, gpsStatus === 'good' && styles.gpsChipGood, gpsStatus === 'unavailable' && styles.gpsChipBad, gpsStatus === 'acquiring' && coords?.accuracy && coords.accuracy > 50 && styles.gpsChipWarn]}>
             <View style={[styles.gpsDot, gpsStatus === 'good' && styles.gpsDotGood, gpsStatus === 'acquiring' && styles.gpsDotPulse]} />
             <Text style={styles.gpsText}>
               {gpsStatus === 'acquiring' ? 'Getting your location...' :
+               gpsStatus === 'good' && coords?.accuracy && coords.accuracy > 50 ? `GPS ±${coords.accuracy.toFixed(0)} m · Low accuracy` :
                gpsStatus === 'good' ? `GPS ±${coords?.accuracy?.toFixed(0) ?? '?'} m · Good fix` :
                'No GPS signal'}
             </Text>
@@ -372,6 +378,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#EAF3DE',
   },
   gpsChipBad: {
+    backgroundColor: '#FEF0E3',
+  },
+  gpsChipWarn: {
     backgroundColor: '#FEF0E3',
   },
   gpsDot: {
