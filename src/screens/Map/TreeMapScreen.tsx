@@ -20,6 +20,12 @@ import { useAuthStore } from '../../store/authStore';
 import { useGeofencing } from '../../hooks/useGeofencing';
 import { TreeRecord, GeofenceAlert, Project } from '../../types';
 import * as Location from 'expo-location';
+import {
+  getMapboxToken,
+  MAPBOX_GL_JS_CDN,
+  MAPBOX_GL_CSS_CDN,
+  DEFAULT_STYLE,
+} from '../../services/mapboxConfig';
 
 type Nav = NativeStackNavigationProp<any>;
 type Route = RouteProp<{ Map: { focusTreeId?: string } }, 'Map'>;
@@ -32,46 +38,47 @@ const CONDITION_COLORS: Record<string, string> = {
   Dead: '#6b7280',
 };
 
-// ─── Build Leaflet HTML with tree markers ────────────────────────────────────
+// ─── Build map HTML with tree markers ────────────────────────────────────────
 function buildMapHtml(
   trees: TreeRecord[],
   userLat: number,
   userLng: number,
   focusTreeId?: string
 ): string {
+  const token = getMapboxToken();
   const focusTree = focusTreeId ? trees.find((t) => t.id === focusTreeId) : null;
   const centerLat = focusTree?.latitude ?? userLat;
   const centerLng = focusTree?.longitude ?? userLng;
   const centerZoom = focusTree ? 18 : 14;
 
-  const markersJs = trees
-    .filter((t) => t.latitude && t.longitude)
-    .map((t) => {
-      const color = CONDITION_COLORS[t.tree_condition || ''] || '#6b7280';
-      const species = (t.species || 'Unknown').replace(/'/g, "\\'");
-      const treeId = (t.tree_id || t.id.slice(0, 8)).replace(/'/g, "\\'");
-      const condition = (t.tree_condition || 'N/A').replace(/'/g, "\\'");
-      const date = t.survey_date || t.submitted_at?.split('T')[0] || '';
-      const popup = `${t.locked ? '🔒 ' : ''}<b>${species}</b><br/>ID: ${treeId}<br/>Condition: ${condition}<br/>Date: ${date}`;
+  if (!token) {
+    // Leaflet fallback
+    const markersJs = trees
+      .filter((t) => t.latitude && t.longitude)
+      .map((t) => {
+        const color = CONDITION_COLORS[t.tree_condition || ''] || '#6b7280';
+        const species = (t.species || 'Unknown').replace(/'/g, "\\'");
+        const treeId = (t.tree_id || t.id.slice(0, 8)).replace(/'/g, "\\'");
+        const condition = (t.tree_condition || 'N/A').replace(/'/g, "\\'");
+        const date = t.survey_date || t.submitted_at?.split('T')[0] || '';
+        const popup = `${t.locked ? '🔒 ' : ''}<b>${species}</b><br/>ID: ${treeId}<br/>Condition: ${condition}<br/>Date: ${date}`;
+        const isFocused = focusTreeId && t.id === focusTreeId;
+        const size = isFocused ? 36 : 28;
 
-      // Highlight the focused tree with a larger marker
-      const isFocused = focusTreeId && t.id === focusTreeId;
-      const size = isFocused ? 36 : 28;
+        return `L.marker([${t.latitude}, ${t.longitude}], {
+          icon: L.divIcon({
+            className: 'tree-marker',
+            html: '<div style="background:${color};width:${size}px;height:${size}px;border-radius:50%;border:3px solid ${isFocused ? '#F09125' : '#fff'};box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:${isFocused ? 20 : 16}px;${isFocused ? 'animation:pulse 1.5s infinite;' : ''}">${t.locked ? '🔒' : '🌳'}</div>',
+            iconSize: [${size}, ${size}],
+            iconAnchor: [${size / 2}, ${size / 2}],
+          })
+        }).addTo(map).bindPopup(\`${popup}\`).on('click',function(){
+          window.ReactNativeWebView.postMessage(JSON.stringify({type:'markerTap',treeId:'${t.id}'}));
+        });`;
+      })
+      .join('\n');
 
-      return `L.marker([${t.latitude}, ${t.longitude}], {
-        icon: L.divIcon({
-          className: 'tree-marker',
-          html: '<div style="background:${color};width:${size}px;height:${size}px;border-radius:50%;border:3px solid ${isFocused ? '#F09125' : '#fff'};box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:${isFocused ? 20 : 16}px;${isFocused ? 'animation:pulse 1.5s infinite;' : ''}">${t.locked ? '🔒' : '🌳'}</div>',
-          iconSize: [${size}, ${size}],
-          iconAnchor: [${size / 2}, ${size / 2}],
-        })
-      }).addTo(map).bindPopup(\`${popup}\`).on('click',function(){
-        window.ReactNativeWebView.postMessage(JSON.stringify({type:'markerTap',treeId:'${t.id}'}));
-      });`;
-    })
-    .join('\n');
-
-  return `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8"/>
@@ -93,8 +100,6 @@ var map=L.map('map',{zoomControl:false,attributionControl:false})
   .setView([${centerLat},${centerLng}],${centerZoom});
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
 L.control.zoom({position:'bottomright'}).addTo(map);
-
-// User location marker
 L.marker([${userLat},${userLng}],{
   icon:L.divIcon({
     className:'user-marker',
@@ -103,16 +108,10 @@ L.marker([${userLat},${userLng}],{
     iconAnchor:[8,8],
   })
 }).addTo(map).bindPopup('📍 Your location');
-
-// Tree markers
 ${markersJs}
-
-// If focusing on a specific tree, show a pulsing circle around it
 ${focusTree ? `L.circle([${focusTree.latitude},${focusTree.longitude}],{
   radius:50,color:'#F09125',fillColor:'#F09125',fillOpacity:0.15,weight:2,dashArray:'5,10'
 }).addTo(map);` : ''}
-
-// Fit map to show all markers (unless focusing on one tree)
 ${!focusTree ? `var bounds=L.latLngBounds([
 ${trees
   .filter((t) => t.latitude && t.longitude)
@@ -120,6 +119,144 @@ ${trees
   .join(',')}
 ]);
 if(bounds.isValid()){map.fitBounds(bounds.pad(0.2));}` : ''}
+</script>
+</body>
+</html>`;
+  }
+
+  // Mapbox GL JS
+  const treeFeatures = trees
+    .filter((t) => t.latitude && t.longitude)
+    .map((t) => {
+      const color = CONDITION_COLORS[t.tree_condition || ''] || '#6b7280';
+      const species = (t.species || 'Unknown').replace(/"/g, '\\"');
+      const treeId = (t.tree_id || t.id.slice(0, 8)).replace(/"/g, '\\"');
+      const condition = (t.tree_condition || 'N/A').replace(/"/g, '\\"');
+      const date = t.survey_date || t.submitted_at?.split('T')[0] || '';
+      const isFocused = focusTreeId && t.id === focusTreeId;
+
+      return `{
+        "type":"Feature",
+        "geometry":{"type":"Point","coordinates":[${t.longitude},${t.latitude}]},
+        "properties":{
+          "id":"${t.id}",
+          "species":"${species}",
+          "treeId":"${treeId}",
+          "condition":"${condition}",
+          "date":"${date}",
+          "color":"${color}",
+          "locked":${!!t.locked},
+          "focused":${!!isFocused}
+        }
+      }`;
+    })
+    .join(',');
+
+  const fitBoundsJs = focusTree
+    ? ''
+    : `map.fitBounds([[${trees.filter((t) => t.latitude && t.longitude).map((t) => `${t.longitude},${t.latitude}`).join('],[')}]],{padding:60});`;
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<link rel="stylesheet" href="${MAPBOX_GL_CSS_CDN}"/>
+<script src="${MAPBOX_GL_JS_CDN}"></script>
+<style>
+html,body,#map{margin:0;padding:0;width:100%;height:100%;}
+.mapboxgl-ctrl-bottom-left,.mapboxgl-ctrl-bottom-right{display:none !important;}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+mapboxgl.accessToken='${token}';
+function post(msg){try{window.ReactNativeWebView.postMessage(JSON.stringify(msg));}catch(e){}}
+var map=new mapboxgl.Map({
+  container:'map',
+  style:'${DEFAULT_STYLE}',
+  center:[${centerLng},${centerLat}],
+  zoom:${centerZoom},
+  renderWorldCopies:false,
+  maxPitch:60,
+  fadeDuration:0
+});
+map.addControl(new mapboxgl.NavigationControl({showCompass:false}),'bottom-right');
+
+var treesGeoJSON={
+  "type":"FeatureCollection",
+  "features":[${treeFeatures}]
+};
+
+map.on('load',function(){
+  map.addSource('trees',{type:'geojson',data:treesGeoJSON});
+  map.addLayer({
+    id:'tree-circles',
+    type:'circle',
+    source:'trees',
+    paint:{
+      'circle-radius':['case',['get','focused'],18,12],
+      'circle-color':['get','color'],
+      'circle-stroke-color':['case',['get','focused'],'#F09125','#ffffff'],
+      'circle-stroke-width':['case',['get','focused'],3,2],
+      'circle-opacity':0.9
+    }
+  });
+  map.addLayer({
+    id:'tree-labels',
+    type:'symbol',
+    source:'trees',
+    layout:{
+      'text-field':['get','species'],
+      'text-size':11,
+      'text-offset':[0,1.5],
+      'text-anchor':'top'
+    },
+    paint:{
+      'text-color':'#ffffff',
+      'text-halo-color':'rgba(0,0,0,0.7)',
+      'text-halo-width':1
+    }
+  });
+
+  var userEl=document.createElement('div');
+  userEl.style.cssText='width:20px;height:20px;background:#4285f4;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  new mapboxgl.Marker({element:userEl})
+    .setLngLat([${userLng},${userLat}])
+    .setPopup(new mapboxgl.Popup({offset:25}).setText('Your location'))
+    .addTo(map);
+
+  ${focusTree ? `new mapboxgl.Marker({color:'#F09125'})
+    .setLngLat([${focusTree.longitude},${focusTree.latitude}])
+    .addTo(map);` : ''}
+
+  ${fitBoundsJs}
+
+  map.on('click','tree-circles',function(e){
+    if(e.features&&e.features.length>0){
+      var f=e.features[0];
+      var props=f.properties;
+      var coords=f.geometry.coordinates.slice();
+      var popupHtml='<div style="font:13px/1.5 -apple-system,sans-serif;min-width:150px;">'+
+        '<b>'+props.species+'</b><br/>'+
+        'ID: '+props.treeId+'<br/>'+
+        '<span style="color:'+props.color+'">&#9679;</span> '+props.condition+'<br/>'+
+        'Date: '+props.date+
+        (props.locked?'<br/>Locked':'')+'</div>';
+      new mapboxgl.Popup({offset:15})
+        .setLngLat(coords)
+        .setHTML(popupHtml)
+        .addTo(map);
+      post({type:'markerTap',treeId:props.id});
+    }
+  });
+
+  map.on('mouseenter','tree-circles',function(){map.getCanvas().style.cursor='pointer';});
+  map.on('mouseleave','tree-circles',function(){map.getCanvas().style.cursor='';});
+
+  post({type:'ready',count:${trees.filter((t) => t.latitude && t.longitude).length}});
+});
 </script>
 </body>
 </html>`;

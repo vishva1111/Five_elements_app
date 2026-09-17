@@ -362,3 +362,170 @@
 {"_e":"metro:client_log","_t":1789552184637,"level":"log","data":["[Geofence] User entered zone \"Mango (Keri)\" (8128bf60-8442-49fc-9348-d5bb0fd9819c)"]}
 {"_e":"metro:client_log","_t":1789552184637,"level":"log","data":["[Geofence] User entered zone \"Banyan (Vad)\" (25ea5c40-6616-46f0-9a95-bd4babf4ef53)"]}
 {"_e":"metro:client_log","_t":1789552184637,"level":"log","data":["[Geofence] User entered zone \"Banyan (Vad)\" (37bf706f-a764-4235-99ea-2d760017e3f1)"]}
+{"_e":"root:init","_t":1789629810065,"format":"v0-jsonl","version":"57.0.25"}
+{"_e":"env:mode","_t":1789629810066,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1789629810071,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_MAPPLS_KEY":"rwlsydxyvkxrnqodnxarypwhpuiiztusavqo","EXPO_PUBLIC_SUPABASE_ANON_KEY":"your_supabase_anon_key_here","EXPO_PUBLIC_SUPABASE_URL":"https://iauhmhkmreojmfahvxxh.supabase.co"}}
+{"_e":"devserver:start","_t":1789629810792,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1789629811411,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1789629811833,"plugins":[]}
+{"_e":"metro:instantiate","_t":1789629818320,"atlas":false,"workers":10,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1789629821241,"id":"3","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1789629821242,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789629821246,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789629821346,"id":"3","progress":0.005794949773110954,"total":289,"current":22}
+{"_e":"metro:bundling:progress","_t":1789629821446,"id":"3","progress":0.05748777401593652,"total":342,"current":82}
+{"_e":"metro:bundling:progress","_t":1789629821546,"id":"3","progress":0.09716654120200978,"total":478,"current":149}
+{"_e":"metro:bundling:progress","_t":1789629821647,"id":"3","progress":0.12249999999999998,"total":560,"current":196}
+{"_e":"metro:bundling:progress","_t":1789629821756,"id":"3","progress":0.18937413518537852,"total":671,"current":292}
+{"_e":"metro:bundling:progress","_t":1789629821856,"id":"3","progress":0.2507057159510704,"total":709,"current":355}
+{"_e":"metro:bundling:progress","_t":1789629821956,"id":"3","progress":0.3910206697644608,"total":790,"current":494}
+{"_e":"metro:bundling:progress","_t":1789629822057,"id":"3","progress":0.4033785898069552,"total":951,"current":604}
+{"_e":"metro:bundling:progress","_t":1789629822157,"id":"3","progress":0.48648872503219615,"total":995,"current":694}
+{"_e":"metro:bundling:progress","_t":1789629822257,"id":"3","progress":0.6378845487258835,"total":1058,"current":845}
+{"_e":"metro:bundling:progress","_t":1789629822357,"id":"3","progress":0.7494787049407535,"total":1132,"current":980}
+{"_e":"metro:bundling:progress","_t":1789629822457,"id":"3","progress":0.7494787049407535,"total":1175,"current":1009}
+{"_e":"metro:bundling:progress","_t":1789629822557,"id":"3","progress":0.8068552045920417,"total":1258,"current":1130}
+{"_e":"metro:bundling:progress","_t":1789629822657,"id":"3","progress":0.8068552045920417,"total":1372,"current":1181}
+{"_e":"metro:bundling:progress","_t":1789629822757,"id":"3","progress":0.9062203670633192,"total":1457,"current":1387}
+{"_e":"metro:bundling:progress","_t":1789629822865,"id":"3","progress":0.999,"total":1500,"current":1500}
+{"_e":"metro:bundling:done","_t":1789629822941,"id":"3","total":1500,"ms":1699.4709}
+{"_e":"metro:client_log","_t":1789629837894,"level":"log","data":["[Geofence] User entered zone \"Gulmohar\" (89cf352e-b3a5-462c-a73b-b4ddaaba2b8d)"]}
+{"_e":"metro:client_log","_t":1789629837901,"level":"log","data":["[Geofence] User entered zone \"Teak (Sagwan)\" (82953b05-f081-4319-9c2b-6b52779cf4d5)"]}
+{"_e":"metro:client_log","_t":1789629837902,"level":"log","data":["[Geofence] User entered zone \"Acacia\" (925f49d6-8a2b-4643-af54-1d15dc7c567c)"]}
+{"_e":"metro:client_log","_t":1789629837902,"level":"log","data":["[Geofence] User entered zone \"Peepal\" (638016f8-660a-48fe-aa76-3faf5492d6c6)"]}
+{"_e":"metro:client_log","_t":1789629837902,"level":"log","data":["[Geofence] User entered zone \"Mango (Keri)\" (0f8b08a2-d5df-4f1f-922a-fab9bcec1fe2)"]}
+{"_e":"root:init","_t":1789634960205,"format":"v0-jsonl","version":"57.0.25"}
+{"_e":"env:mode","_t":1789634960207,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1789634960211,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_MAPBOX_TOKEN":"","EXPO_PUBLIC_SUPABASE_ANON_KEY":"your_supabase_anon_key_here","EXPO_PUBLIC_SUPABASE_URL":"https://iauhmhkmreojmfahvxxh.supabase.co"}}
+{"_e":"devserver:start","_t":1789634960947,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1789634961536,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1789634961948,"plugins":[]}
+{"_e":"metro:instantiate","_t":1789634968498,"atlas":false,"workers":10,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1789635143629,"id":"2","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1789635143630,"id":"2","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789635143637,"id":"2","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789635143742,"id":"2","progress":0.005163326042525726,"total":167,"current":12}
+{"_e":"metro:bundling:progress","_t":1789635143843,"id":"2","progress":0.005316840277777779,"total":288,"current":21}
+{"_e":"metro:bundling:progress","_t":1789635143942,"id":"2","progress":0.026195328945170238,"total":346,"current":56}
+{"_e":"metro:bundling:progress","_t":1789635144043,"id":"2","progress":0.06612244897959182,"total":420,"current":108}
+{"_e":"metro:bundling:progress","_t":1789635144143,"id":"2","progress":0.118804889090086,"total":470,"current":162}
+{"_e":"metro:bundling:progress","_t":1789635144247,"id":"2","progress":0.13485907625522678,"total":531,"current":195}
+{"_e":"metro:bundling:progress","_t":1789635144348,"id":"2","progress":0.15767463730236492,"total":617,"current":245}
+{"_e":"metro:bundling:progress","_t":1789635144447,"id":"2","progress":0.19107892000430277,"total":668,"current":292}
+{"_e":"metro:bundling:progress","_t":1789635144548,"id":"2","progress":0.25,"total":794,"current":397}
+{"_e":"metro:bundling:progress","_t":1789635144648,"id":"2","progress":0.2620326822617737,"total":883,"current":452}
+{"_e":"metro:bundling:progress","_t":1789635144748,"id":"2","progress":0.3469339451757034,"total":910,"current":536}
+{"_e":"metro:bundling:progress","_t":1789635144858,"id":"2","progress":0.44675744831669983,"total":962,"current":643}
+{"_e":"metro:bundling:progress","_t":1789635144958,"id":"2","progress":0.4932546297097694,"total":991,"current":696}
+{"_e":"metro:bundling:progress","_t":1789635145059,"id":"2","progress":0.5352226804278588,"total":1032,"current":755}
+{"_e":"metro:bundling:progress","_t":1789635145158,"id":"2","progress":0.6585299554685397,"total":1061,"current":861}
+{"_e":"metro:bundling:progress","_t":1789635145258,"id":"2","progress":0.745370487909748,"total":1105,"current":954}
+{"_e":"metro:bundling:progress","_t":1789635145379,"id":"2","progress":0.745370487909748,"total":1110,"current":958}
+{"_e":"metro:bundling:progress","_t":1789635145380,"id":"2","progress":0.7464337310283256,"total":1110,"current":959}
+{"_e":"metro:bundling:progress","_t":1789635145480,"id":"2","progress":0.7996486686390534,"total":1144,"current":1023}
+{"_e":"metro:bundling:progress","_t":1789635145584,"id":"2","progress":0.8518278523175079,"total":1168,"current":1078}
+{"_e":"metro:bundling:progress","_t":1789635145687,"id":"2","progress":0.8518278523175079,"total":1201,"current":1100}
+{"_e":"metro:bundling:progress","_t":1789635145788,"id":"2","progress":0.8518278523175079,"total":1212,"current":1107}
+{"_e":"metro:bundling:progress","_t":1789635145893,"id":"2","progress":0.86415616,"total":1250,"current":1162}
+{"_e":"metro:bundling:progress","_t":1789635145995,"id":"2","progress":0.86415616,"total":1306,"current":1208}
+{"_e":"metro:bundling:progress","_t":1789635146095,"id":"2","progress":0.86415616,"total":1397,"current":1231}
+{"_e":"metro:bundling:progress","_t":1789635146212,"id":"2","progress":0.8662023610048558,"total":1443,"current":1343}
+{"_e":"metro:bundling:progress","_t":1789635146318,"id":"2","progress":0.9986688853388557,"total":1502,"current":1501}
+{"_e":"metro:bundling:done","_t":1789635146493,"id":"2","total":1502,"ms":2863.92}
+{"_e":"metro:bundling:started","_t":1789635224120,"id":"4","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1789635224120,"id":"4","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789635224122,"id":"4","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789635224228,"id":"4","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789635224462,"id":"4","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789635224562,"id":"4","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789635224662,"id":"4","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789635224762,"id":"4","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789635224862,"id":"4","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:done","_t":1789635224996,"id":"4","total":1,"ms":875.93}
+{"_e":"metro:client_log","_t":1789635285524,"level":"log","data":["[Geofence] User entered zone \"Gulmohar\" (89cf352e-b3a5-462c-a73b-b4ddaaba2b8d)"]}
+{"_e":"metro:client_log","_t":1789635285527,"level":"log","data":["[Geofence] User entered zone \"Teak (Sagwan)\" (82953b05-f081-4319-9c2b-6b52779cf4d5)"]}
+{"_e":"metro:client_log","_t":1789635285527,"level":"log","data":["[Geofence] User entered zone \"Acacia\" (925f49d6-8a2b-4643-af54-1d15dc7c567c)"]}
+{"_e":"metro:client_log","_t":1789635285527,"level":"log","data":["[Geofence] User entered zone \"Peepal\" (638016f8-660a-48fe-aa76-3faf5492d6c6)"]}
+{"_e":"metro:client_log","_t":1789635285527,"level":"log","data":["[Geofence] User entered zone \"Mango (Keri)\" (0f8b08a2-d5df-4f1f-922a-fab9bcec1fe2)"]}
+{"_e":"root:init","_t":1789635856024,"format":"v0-jsonl","version":"57.0.25"}
+{"_e":"env:mode","_t":1789635856025,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1789635856029,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_MAPBOX_TOKEN":"","EXPO_PUBLIC_SUPABASE_ANON_KEY":"your_supabase_anon_key_here","EXPO_PUBLIC_SUPABASE_URL":"https://iauhmhkmreojmfahvxxh.supabase.co"}}
+{"_e":"devserver:start","_t":1789635856659,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1789635857119,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1789635857469,"plugins":[]}
+{"_e":"metro:instantiate","_t":1789635863682,"atlas":false,"workers":10,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1789635881951,"id":"1","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1789635881951,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789635881955,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789635882054,"id":"1","progress":0.0030602082390221814,"total":235,"current":13}
+{"_e":"metro:bundling:progress","_t":1789635882154,"id":"1","progress":0.03869927438860521,"total":366,"current":72}
+{"_e":"metro:bundling:progress","_t":1789635882254,"id":"1","progress":0.06842099622770918,"total":432,"current":113}
+{"_e":"metro:bundling:progress","_t":1789635882354,"id":"1","progress":0.14873279850970497,"total":516,"current":199}
+{"_e":"metro:bundling:progress","_t":1789635882454,"id":"1","progress":0.15975693129220905,"total":658,"current":263}
+{"_e":"metro:bundling:progress","_t":1789635882554,"id":"1","progress":0.23652542625936873,"total":732,"current":356}
+{"_e":"metro:bundling:progress","_t":1789635882654,"id":"1","progress":0.3036234902124114,"total":833,"current":459}
+{"_e":"metro:bundling:progress","_t":1789635882754,"id":"1","progress":0.3483365657908442,"total":898,"current":530}
+{"_e":"metro:bundling:progress","_t":1789635882854,"id":"1","progress":0.47852162822829203,"total":970,"current":671}
+{"_e":"metro:bundling:progress","_t":1789635882955,"id":"1","progress":0.5580621475105063,"total":1012,"current":756}
+{"_e":"metro:bundling:progress","_t":1789635883054,"id":"1","progress":0.6583284292805643,"total":1055,"current":856}
+{"_e":"metro:bundling:progress","_t":1789635883154,"id":"1","progress":0.734250288804873,"total":1104,"current":946}
+{"_e":"metro:bundling:progress","_t":1789635883256,"id":"1","progress":0.7767361396647875,"total":1146,"current":1010}
+{"_e":"metro:bundling:progress","_t":1789635883356,"id":"1","progress":0.8020677085853455,"total":1245,"current":1115}
+{"_e":"metro:bundling:progress","_t":1789635883456,"id":"1","progress":0.8020677085853455,"total":1324,"current":1155}
+{"_e":"metro:bundling:progress","_t":1789635883556,"id":"1","progress":0.8909581916958894,"total":1444,"current":1363}
+{"_e":"metro:bundling:progress","_t":1789635883658,"id":"1","progress":0.999,"total":1502,"current":1502}
+{"_e":"metro:bundling:done","_t":1789635883730,"id":"1","total":1502,"ms":1779.103}
+{"_e":"metro:client_log","_t":1789635899376,"level":"log","data":["[Geofence] User entered zone \"Gulmohar\" (89cf352e-b3a5-462c-a73b-b4ddaaba2b8d)"]}
+{"_e":"metro:client_log","_t":1789635899379,"level":"log","data":["[Geofence] User entered zone \"Teak (Sagwan)\" (82953b05-f081-4319-9c2b-6b52779cf4d5)"]}
+{"_e":"metro:client_log","_t":1789635899379,"level":"log","data":["[Geofence] User entered zone \"Acacia\" (925f49d6-8a2b-4643-af54-1d15dc7c567c)"]}
+{"_e":"metro:client_log","_t":1789635899379,"level":"log","data":["[Geofence] User entered zone \"Peepal\" (638016f8-660a-48fe-aa76-3faf5492d6c6)"]}
+{"_e":"metro:client_log","_t":1789635899379,"level":"log","data":["[Geofence] User entered zone \"Mango (Keri)\" (0f8b08a2-d5df-4f1f-922a-fab9bcec1fe2)"]}
+{"_e":"metro:client_log","_t":1789635944523,"level":"log","data":["[Geofence] User entered zone \"Gulmohar\" (89cf352e-b3a5-462c-a73b-b4ddaaba2b8d)"]}
+{"_e":"metro:client_log","_t":1789635944526,"level":"log","data":["[Geofence] User entered zone \"Teak (Sagwan)\" (82953b05-f081-4319-9c2b-6b52779cf4d5)"]}
+{"_e":"metro:client_log","_t":1789635944527,"level":"log","data":["[Geofence] User entered zone \"Acacia\" (925f49d6-8a2b-4643-af54-1d15dc7c567c)"]}
+{"_e":"metro:client_log","_t":1789635944527,"level":"log","data":["[Geofence] User entered zone \"Peepal\" (638016f8-660a-48fe-aa76-3faf5492d6c6)"]}
+{"_e":"metro:client_log","_t":1789635944527,"level":"log","data":["[Geofence] User entered zone \"Mango (Keri)\" (0f8b08a2-d5df-4f1f-922a-fab9bcec1fe2)"]}
+{"_e":"root:init","_t":1789636192013,"format":"v0-jsonl","version":"57.0.25"}
+{"_e":"env:mode","_t":1789636192014,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1789636192016,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_MAPBOX_TOKEN":"","EXPO_PUBLIC_SUPABASE_ANON_KEY":"your_supabase_anon_key_here","EXPO_PUBLIC_SUPABASE_URL":"https://iauhmhkmreojmfahvxxh.supabase.co"}}
+{"_e":"devserver:start","_t":1789636192410,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1789636192716,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1789636192952,"plugins":[]}
+{"_e":"metro:instantiate","_t":1789636199319,"atlas":false,"workers":10,"host":"::","port":8081}
+{"_e":"root:init","_t":1789638980641,"format":"v0-jsonl","version":"57.0.25"}
+{"_e":"env:mode","_t":1789638980660,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1789638980682,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_MAPBOX_TOKEN":"","EXPO_PUBLIC_SUPABASE_ANON_KEY":"your_supabase_anon_key_here","EXPO_PUBLIC_SUPABASE_URL":"https://iauhmhkmreojmfahvxxh.supabase.co"}}
+{"_e":"devserver:start","_t":1789638989192,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1789638996787,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1789639000190,"plugins":[]}
+{"_e":"metro:instantiate","_t":1789639010917,"atlas":false,"workers":10,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1789639014961,"id":"3","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1789639014963,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789639014970,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789639015071,"id":"3","progress":0.019469983775013522,"total":43,"current":6}
+{"_e":"metro:bundling:progress","_t":1789639015176,"id":"3","progress":0.019469983775013522,"total":305,"current":32}
+{"_e":"metro:bundling:progress","_t":1789639015275,"id":"3","progress":0.06316312533243751,"total":378,"current":95}
+{"_e":"metro:bundling:progress","_t":1789639015375,"id":"3","progress":0.11211891648410145,"total":442,"current":148}
+{"_e":"metro:bundling:progress","_t":1789639015475,"id":"3","progress":0.17549306062819575,"total":518,"current":217}
+{"_e":"metro:bundling:progress","_t":1789639015575,"id":"3","progress":0.1895789931549186,"total":627,"current":273}
+{"_e":"metro:bundling:progress","_t":1789639015675,"id":"3","progress":0.20050920894554042,"total":699,"current":313}
+{"_e":"metro:bundling:progress","_t":1789639015775,"id":"3","progress":0.23933457327395177,"total":742,"current":363}
+{"_e":"metro:bundling:progress","_t":1789639015875,"id":"3","progress":0.2623743880058106,"total":818,"current":419}
+{"_e":"metro:bundling:progress","_t":1789639015976,"id":"3","progress":0.31941547784370655,"total":890,"current":503}
+{"_e":"metro:bundling:progress","_t":1789639016076,"id":"3","progress":0.3963306343288572,"total":907,"current":571}
+{"_e":"metro:bundling:progress","_t":1789639016178,"id":"3","progress":0.4821757743944803,"total":998,"current":693}
+{"_e":"metro:bundling:progress","_t":1789639016278,"id":"3","progress":0.6197688339544783,"total":1067,"current":840}
+{"_e":"metro:bundling:progress","_t":1789639016378,"id":"3","progress":0.7529464460681391,"total":1134,"current":984}
+{"_e":"metro:bundling:progress","_t":1789639016478,"id":"3","progress":0.8102970569334161,"total":1212,"current":1091}
+{"_e":"metro:bundling:progress","_t":1789639016578,"id":"3","progress":0.8102970569334161,"total":1359,"current":1168}
+{"_e":"metro:bundling:progress","_t":1789639016678,"id":"3","progress":0.8809518823816442,"total":1433,"current":1345}
+{"_e":"metro:bundling:progress","_t":1789639016778,"id":"3","progress":0.9918809537489226,"total":1475,"current":1469}
+{"_e":"metro:bundling:progress","_t":1789639016878,"id":"3","progress":0.9959636771757984,"total":1485,"current":1482}
+{"_e":"metro:bundling:progress","_t":1789639019968,"id":"3","progress":0.9973082111802651,"total":1485,"current":1483}
+{"_e":"metro:bundling:progress","_t":1789639020083,"id":"3","progress":0.999,"total":1502,"current":1502}
+{"_e":"metro:bundling:done","_t":1789639020210,"id":"3","total":1502,"ms":5246.8597}
+{"_e":"metro:client_log","_t":1789639033309,"level":"log","data":["[Geofence] User entered zone \"Gulmohar\" (89cf352e-b3a5-462c-a73b-b4ddaaba2b8d)"]}
+{"_e":"metro:client_log","_t":1789639033317,"level":"log","data":["[Geofence] User entered zone \"Teak (Sagwan)\" (82953b05-f081-4319-9c2b-6b52779cf4d5)"]}
+{"_e":"metro:client_log","_t":1789639033317,"level":"log","data":["[Geofence] User entered zone \"Acacia\" (925f49d6-8a2b-4643-af54-1d15dc7c567c)"]}
+{"_e":"metro:client_log","_t":1789639033317,"level":"log","data":["[Geofence] User entered zone \"Peepal\" (638016f8-660a-48fe-aa76-3faf5492d6c6)"]}
+{"_e":"metro:client_log","_t":1789639033317,"level":"log","data":["[Geofence] User entered zone \"Mango (Keri)\" (0f8b08a2-d5df-4f1f-922a-fab9bcec1fe2)"]}

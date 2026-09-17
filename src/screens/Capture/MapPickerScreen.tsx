@@ -14,6 +14,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { CaptureStackParamList, Coordinates } from '../../types';
+import {
+  getMapboxToken,
+  MAPBOX_GL_JS_CDN,
+  MAPBOX_GL_CSS_CDN,
+  DEFAULT_STYLE,
+} from '../../services/mapboxConfig';
 
 type Nav = NativeStackNavigationProp<CaptureStackParamList, 'MapPicker'>;
 type Route = RouteProp<CaptureStackParamList, 'MapPicker'>;
@@ -21,7 +27,9 @@ type Route = RouteProp<CaptureStackParamList, 'MapPicker'>;
 const DEFAULT_COORDS: Coordinates = { latitude: 21.1458, longitude: 79.0882 };
 
 function buildMapHtml(lat: number, lng: number): string {
-  return `<!DOCTYPE html>
+  const token = getMapboxToken();
+  if (!token) {
+    return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8"/>
@@ -59,6 +67,61 @@ window.addEventListener('message',function(e){
     }
   }catch(err){}
 });
+</script>
+</body>
+</html>`;
+  }
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<link rel="stylesheet" href="${MAPBOX_GL_CSS_CDN}"/>
+<script src="${MAPBOX_GL_JS_CDN}"></script>
+<style>
+html,body,#map{margin:0;padding:0;width:100%;height:100%;}
+.mapboxgl-ctrl-bottom-left,.mapboxgl-ctrl-bottom-right{display:none !important;}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+mapboxgl.accessToken='${token}';
+function post(msg){try{window.ReactNativeWebView.postMessage(JSON.stringify(msg));}catch(e){}}
+var map=new mapboxgl.Map({
+  container:'map',
+  style:'${DEFAULT_STYLE}',
+  center:[${lng},${lat}],
+  zoom:15,
+  renderWorldCopies:false,
+  maxPitch:60,
+  fadeDuration:0
+});
+map.addControl(new mapboxgl.NavigationControl({showCompass:false}),'bottom-right');
+var marker=new mapboxgl.Marker({draggable:true,color:'#1a5c2a'})
+  .setLngLat([${lng},${lat}])
+  .addTo(map);
+marker.on('dragend',function(){
+  var lngLat=marker.getLngLat();
+  post({lat:lngLat.lat,lng:lngLat.lng,src:'drag'});
+});
+map.on('click',function(e){
+  marker.setLngLat(e.lngLat);
+  post({lat:e.lngLat.lat,lng:e.lngLat.lng,src:'tap'});
+});
+window.moveTo=function(lat,lng){
+  map.jumpTo({center:[lng,lat],zoom:18});
+  marker.setLngLat([lng,lat]);
+};
+window.addEventListener('message',function(e){
+  try{
+    var d=JSON.parse(e.data);
+    if(d.action==='move'&&d.lat!==undefined&&d.lng!==undefined){
+      window.moveTo(d.lat,d.lng);
+    }
+  }catch(err){}
+});
+map.on('load',function(){post({type:'ready'});});
 </script>
 </body>
 </html>`;
