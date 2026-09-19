@@ -56,7 +56,7 @@ function buildMapHtml(
     const markersJs = trees
       .filter((t) => t.latitude && t.longitude)
       .map((t) => {
-        const color = CONDITION_COLORS[t.tree_condition || ''] || '#6b7280';
+        const color = CONDITION_COLORS[t.tree_condition || 'Healthy'] || '#16a34a';
         const species = (t.species || 'Unknown').replace(/'/g, "\\'");
         const treeId = (t.tree_id || t.id.slice(0, 8)).replace(/'/g, "\\'");
         const condition = (t.tree_condition || 'N/A').replace(/'/g, "\\'");
@@ -128,7 +128,7 @@ if(bounds.isValid()){map.fitBounds(bounds.pad(0.2));}` : ''}
   const treeFeatures = trees
     .filter((t) => t.latitude && t.longitude)
     .map((t) => {
-      const color = CONDITION_COLORS[t.tree_condition || ''] || '#6b7280';
+      const color = CONDITION_COLORS[t.tree_condition || 'Healthy'] || '#16a34a';
       const species = (t.species || 'Unknown').replace(/"/g, '\\"');
       const treeId = (t.tree_id || t.id.slice(0, 8)).replace(/"/g, '\\"');
       const condition = (t.tree_condition || 'N/A').replace(/"/g, '\\"');
@@ -486,7 +486,7 @@ export default function TreeMapScreen() {
               const height = selectedTree.height_m || meta.height_m;
               const condition = selectedTree.tree_condition || meta.tree_condition;
               const date = selectedTree.survey_date || meta.survey_date || selectedTree.submitted_at?.split('T')[0] || '';
-              const condColor = CONDITION_COLORS[condition || ''] || '#6b7280';
+              const condColor = CONDITION_COLORS[condition || 'Healthy'] || '#16a34a';
 
               return (
                 <>

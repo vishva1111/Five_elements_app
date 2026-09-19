@@ -428,7 +428,7 @@ export default function TaskScreen() {
               return (
                 <TouchableOpacity
                   key={tab.key}
-                  style={[s.tabBtn, active && { backgroundColor: tab.color + '15', borderColor: tab.color }, !active && { borderColor: '#E0ECDD' }]}
+                  style={[s.tabBtn, active && { backgroundColor: tab.color + '15', borderColor: tab.color }, !active && { borderColor: tab.color + '40' }]}
                   onPress={() => setActiveTab(tab.key)}
                   activeOpacity={0.7}
                 >
@@ -500,7 +500,7 @@ export default function TaskScreen() {
               const m = (t.notes || '').match(/##META##({.*})/s);
               if (m) try { meta = JSON.parse(m[1]); } catch {}
               const c = t.tree_condition || meta.tree_condition || 'Healthy';
-              return c === 'Healthy' ? '#22c55e' : c === 'Stressed' ? '#f59e0b' : c === 'Diseased' ? '#ef4444' : '#6b7280';
+              return c === 'Healthy' ? '#16a34a' : c === 'Stressed' ? '#d97706' : c === 'Diseased' ? '#dc2626' : '#4b5563';
             })(),
             surveyor: t.surveyor || (() => {
               let meta: Record<string, any> = {};
@@ -581,17 +581,12 @@ const s = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 4,
     borderWidth: 1.5,
-    borderColor: '#E8E8E8',
-    elevation: 3,
-    shadowColor: '#1a5c2a',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
+    borderColor: '#E0ECDD',
   },
   tabBtnActive: {},
   tabText: { fontSize: 11, fontWeight: '800', color: '#888' },
   tabCountText: { fontSize: 13, fontWeight: '800' },
-  dateSelectorWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 4, gap: 8 },
+  dateSelectorWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 8, gap: 8 },
   dateAllBtn: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -599,17 +594,10 @@ const s = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderWidth: 1.5,
-    borderColor: '#E0ECDD',
     minWidth: 56,
     height: 68,
-    elevation: 2,
-    shadowColor: '#1a5c2a',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
   },
-  dateAllBtnActive: { backgroundColor: '#1a5c2a', borderColor: '#1a5c2a' },
+  dateAllBtnActive: { backgroundColor: '#1a5c2a' },
   dateAllText: { fontSize: 12, fontWeight: '800', color: '#1a5c2a' },
   dateAllTextActive: { color: '#fff' },
   dateList: { gap: 8 },
@@ -620,17 +608,10 @@ const s = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderWidth: 1.5,
-    borderColor: '#E8E8E8',
     minWidth: 56,
     height: 68,
-    elevation: 2,
-    shadowColor: '#1a5c2a',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
   },
-  dateItemActive: { backgroundColor: '#1a5c2a', borderColor: '#1a5c2a' },
+  dateItemActive: { backgroundColor: '#1a5c2a' },
   dateLabel: { fontSize: 9, fontWeight: '800', color: '#888', letterSpacing: 0.5 },
   dateLabelActive: { color: '#fff' },
   dateDay: { fontSize: 18, fontWeight: '800', color: '#222', marginTop: 1 },

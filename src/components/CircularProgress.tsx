@@ -27,7 +27,7 @@ export default function CircularProgress({
 
   return (
     <View style={[styles.container, { width: size, height: size }]}>
-      <Svg width={size} height={size}>
+      <Svg width={size} height={size} style={{ backgroundColor: 'transparent' }}>
         <Circle
           cx={size / 2}
           cy={size / 2}

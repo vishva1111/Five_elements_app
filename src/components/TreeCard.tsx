@@ -24,7 +24,7 @@ export default function TreeCard({ tree, onPress }: Props) {
   });
 
   const treeUniqueId = tree.id.slice(0, 8).toUpperCase();
-  const conditionColor = CONDITION_COLORS[tree.tree_condition || ''] || '#6b7280';
+  const conditionColor = CONDITION_COLORS[tree.tree_condition || 'Healthy'] || '#16a34a';
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>

@@ -122,12 +122,14 @@ export default function HistoryScreen() {
     let meta: Record<string, any> = {};
     const metaMatch = (t.notes || '').match(/##META##({.*})/s);
     if (metaMatch) { try { meta = JSON.parse(metaMatch[1]); } catch {} }
+    const rawCondition = t.tree_condition || meta.tree_condition || 'Healthy';
+    const normalizedCondition = rawCondition.charAt(0).toUpperCase() + rawCondition.slice(1).toLowerCase();
     allItems.push({
       id: t.id,
       type: 'tree',
       title: t.species || 'Tree',
       photo_url: t.photo_url,
-      condition: t.tree_condition || meta.tree_condition,
+      condition: normalizedCondition,
       status: 'completed',
       date: t.submitted_at,
       latitude: t.latitude,
@@ -140,12 +142,14 @@ export default function HistoryScreen() {
   // Tasks (approved/rejected/completed with tree data)
   tasks.forEach((t) => {
     if (t.status === 'approved' || t.status === 'rejected') {
+      const rawCondition = t.tree_condition || '';
+      const normalizedCondition = rawCondition.charAt(0).toUpperCase() + rawCondition.slice(1).toLowerCase();
       allItems.push({
         id: t.id,
         type: 'task',
         title: t.name || 'Task',
         photo_url: t.photo_url,
-        condition: t.tree_condition,
+        condition: normalizedCondition,
         status: t.status,
         date: t.created_at,
         latitude: t.latitude,
@@ -159,7 +163,9 @@ export default function HistoryScreen() {
   // Filter
   const filtered = allItems.filter((item) => {
     const projectMatch = activeProjectId ? item.project_id === activeProjectId : true;
-    const conditionMatch = conditionFilter === 'all' || item.condition === conditionFilter;
+    const itemCondition = (item.condition || '').toLowerCase();
+    const filterCondition = (conditionFilter || 'all').toLowerCase();
+    const conditionMatch = filterCondition === 'all' || itemCondition === filterCondition;
     const statusMatch = statusFilter === 'all' || item.status === statusFilter;
     return projectMatch && conditionMatch && statusMatch;
   });
@@ -261,12 +267,10 @@ export default function HistoryScreen() {
           </View>
 
           {/* Condition badge */}
-          {item.condition ? (
-            <View style={[styles.conditionBadge, { backgroundColor: conditionColor + '15', borderColor: conditionColor + '40' }]}>
-              <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
-              <Text style={[styles.conditionText, { color: conditionColor }]}>{item.condition}</Text>
-            </View>
-          ) : null}
+          <View style={[styles.conditionBadge, { backgroundColor: conditionColor + '15', borderColor: conditionColor + '40' }]}>
+            <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
+            <Text style={[styles.conditionText, { color: conditionColor }]}>{item.condition || 'Unknown'}</Text>
+          </View>
 
           {/* Location + Date */}
           <View style={styles.bottomRow}>

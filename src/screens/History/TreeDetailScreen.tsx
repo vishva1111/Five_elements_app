@@ -80,7 +80,7 @@ export default function TreeDetailScreen() {
   });
 
   const displayId = tree.tree_id || `TREE-${tree.id.slice(0, 8).toUpperCase()}`;
-  const conditionColor = CONDITION_COLORS[tree.tree_condition || ''] || '#6b7280';
+  const conditionColor = CONDITION_COLORS[tree.tree_condition || 'Healthy'] || '#16a34a';
 
   // Parse ##META## JSON from notes (fallback for old records before DB columns existed)
   let meta: Record<string, any> = {};
@@ -107,7 +107,7 @@ export default function TreeDetailScreen() {
   const surveyor = tree.surveyor || meta.surveyor;
   const surveyDate = tree.survey_date || meta.survey_date;
 
-  const fallbackConditionColor = CONDITION_COLORS[treeCondition || ''] || '#6b7280';
+  const fallbackConditionColor = CONDITION_COLORS[treeCondition || 'Healthy'] || '#16a34a';
 
   return (
     <View style={styles.container}>
