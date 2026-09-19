@@ -134,7 +134,7 @@ export default function HomeScreen() {
     <View style={styles.container}>
     <ScrollView
       style={styles.scroll}
-      contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 88 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a5c2a" />}
     >
       <View style={styles.bannerWrap}>
@@ -175,7 +175,7 @@ export default function HomeScreen() {
             </View>
           </TouchableOpacity>
         </LinearGradient>
-        <CurveDivider height={30} color="#f5f5f5" cornerRadius={24} style={styles.curveDivider} />
+        <CurveDivider height={30} color="#f0f4f1" cornerRadius={24} style={styles.curveDivider} />
       </View>
 
       <View style={styles.contentSection}>
@@ -363,7 +363,7 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: '#f0f4f1' },
   scroll: { flex: 1 },
   bannerWrap: { zIndex: 5 },
   banner: {
@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   contentSection: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f0f4f1',
     paddingBottom: 8,
     marginTop: -4,
   },
@@ -395,77 +395,87 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 7.5,
+    borderRadius: 14,
     alignSelf: 'flex-start',
+    elevation: 2,
+    shadowColor: '#F09125',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   creditsPillText: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
     color: '#F09125',
   },
-  greeting: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
-  bannerSub: { fontSize: 13, color: '#cde8d3', marginTop: 2 },
+  greeting: { fontSize: 24, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
+  bannerSub: { fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
   captureCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#1a5c2a',
     marginHorizontal: 16,
     marginTop: 8,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 16,
     gap: 12,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    elevation: 4,
+    shadowColor: '#1a5c2a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   captureIconWrap: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  captureIconEmoji: { fontSize: 28 },
+  captureIconEmoji: { fontSize: 26 },
   captureInfo: { flex: 1 },
-  captureTitle: { fontSize: 17, fontWeight: '700', color: '#fff' },
-  captureSub: { fontSize: 12, color: '#cde8d3', marginTop: 2 },
+  captureTitle: { fontSize: 17, fontWeight: '800', color: '#fff' },
+  captureSub: { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
   captureBadge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 7.5,
+    borderRadius: 10,
   },
   captureBadgeText: { fontSize: 12, fontWeight: '700', color: '#fff' },
   activeProjectCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 14,
+    padding: 14,
     marginTop: 14,
-    gap: 10,
+    gap: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
   },
   activeProjectIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     backgroundColor: '#E8F5E9',
     alignItems: 'center',
     justifyContent: 'center',
   },
   activeProjectInfo: { flex: 1 },
-  activeProjectLabel: { fontSize: 9, fontWeight: '700', color: '#888', letterSpacing: 0.5 },
+  activeProjectLabel: { fontSize: 10, fontWeight: '700', color: '#999', letterSpacing: 0.5 },
   activeProjectName: { fontSize: 15, fontWeight: '700', color: '#1a1a1a', marginTop: 1 },
   activeProjectArrow: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 10,
     backgroundColor: '#E8F5E9',
     alignItems: 'center',
     justifyContent: 'center',
@@ -484,8 +494,8 @@ const styles = StyleSheet.create({
   },
   modalSheet: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     paddingTop: 20,
     paddingBottom: 40,
     maxHeight: '60%',
@@ -497,7 +507,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginBottom: 16,
   },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a1a' },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#1a1a1a' },
   modalOption: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -507,9 +517,9 @@ const styles = StyleSheet.create({
   },
   modalOptionActive: { backgroundColor: '#1a5c2a' },
   modalOptionIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 11,
     backgroundColor: '#E8F5E9',
     alignItems: 'center',
     justifyContent: 'center',
@@ -529,7 +539,7 @@ const styles = StyleSheet.create({
   treeStatCard: {
     flex: 1,
     backgroundColor: '#fff',
-    borderRadius: 10,
+    borderRadius: 14,
     paddingVertical: 14,
     paddingHorizontal: 8,
     alignItems: 'center',
@@ -540,8 +550,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 4,
   },
-  treeStatNumber: { fontSize: 22, fontWeight: 'bold' },
-  treeStatLabel: { fontSize: 10, color: '#888', marginTop: 4 },
+  treeStatNumber: { fontSize: 22, fontWeight: '800' },
+  treeStatLabel: { fontSize: 10, color: '#888', marginTop: 4, fontWeight: '600' },
   taskStatsContainer: {
     marginHorizontal: 16,
     marginTop: 8,
@@ -554,10 +564,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   taskStatsHeaderText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    textTransform: 'capitalize',
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#555',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
   taskStatsRow: {
     flexDirection: 'row',
@@ -566,18 +577,18 @@ const styles = StyleSheet.create({
   taskStatCard: {
     flex: 1,
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 16,
     alignItems: 'center',
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.06,
     shadowRadius: 4,
   },
   taskStatNumber: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: '#1a1a1a',
   },
   taskStatLabel: {

@@ -32,10 +32,10 @@ type Route = RouteProp<{ Map: { focusTreeId?: string } }, 'Map'>;
 
 // ─── Condition color map ─────────────────────────────────────────────────────
 const CONDITION_COLORS: Record<string, string> = {
-  Healthy: '#22c55e',
-  Stressed: '#f59e0b',
-  Diseased: '#ef4444',
-  Dead: '#6b7280',
+  Healthy: '#16a34a',
+  Stressed: '#d97706',
+  Diseased: '#dc2626',
+  Dead: '#4b5563',
 };
 
 // ─── Build map HTML with tree markers ────────────────────────────────────────
@@ -627,7 +627,7 @@ export default function TreeMapScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: '#f0f4f1' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -670,6 +670,7 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingHorizontal: 16,
     paddingVertical: 10,
+    paddingBottom: 90,
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#E5E5E5',
@@ -691,8 +692,8 @@ const styles = StyleSheet.create({
   modalBackdropTouch: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   detailSheet: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     padding: 20,
     paddingBottom: 36,
     maxHeight: '60%',
@@ -747,8 +748,8 @@ const styles = StyleSheet.create({
   detailActionText: { fontSize: 13, fontWeight: '600', color: '#1a5c2a' },
   alertSheet: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     padding: 20,
     paddingBottom: 36,
     maxHeight: '50%',

@@ -64,11 +64,13 @@ const styles = StyleSheet.create({
   container: {
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'transparent',
   },
   labelContainer: {
     position: 'absolute',
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'transparent',
   },
   label: {
     fontWeight: 'bold',

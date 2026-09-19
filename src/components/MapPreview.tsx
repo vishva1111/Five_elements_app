@@ -110,7 +110,7 @@ export default function MapPreview({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 7.5,
+    borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: '#e8f5e9',
   },
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
     bottom: 8,
     left: 8,
     backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: 7.5,
+    borderRadius: 14,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },

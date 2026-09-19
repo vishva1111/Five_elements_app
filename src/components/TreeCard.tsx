@@ -9,10 +9,10 @@ interface Props {
 }
 
 const CONDITION_COLORS: Record<string, string> = {
-  Healthy: '#22c55e',
-  Stressed: '#f59e0b',
-  Diseased: '#ef4444',
-  Dead: '#6b7280',
+  Healthy: '#16a34a',
+  Stressed: '#d97706',
+  Diseased: '#dc2626',
+  Dead: '#4b5563',
 };
 
 export default function TreeCard({ tree, onPress }: Props) {
@@ -75,7 +75,7 @@ export default function TreeCard({ tree, onPress }: Props) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
-    borderRadius: 7.5,
+    borderRadius: 14,
     marginBottom: 10,
     overflow: 'hidden',
     elevation: 2,
@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
   photoWrap: {
     width: 80,
     height: 80,
-    borderRadius: 7.5,
+    borderRadius: 14,
     overflow: 'hidden',
     marginRight: 12,
   },
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 7.5,
+    borderRadius: 14,
     borderWidth: 1,
     marginBottom: 4,
   },
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8F5E9',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 7.5,
+    borderRadius: 14,
   },
   locationText: {
     fontSize: 10,

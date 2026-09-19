@@ -273,10 +273,10 @@ export default function TaskScreen() {
     const isTreeCapture = task.status === 'completed' && task.photo_url;
     
     const conditionColors: Record<string, string> = {
-      Healthy: '#22c55e',
-      Stressed: '#f59e0b',
-      Diseased: '#ef4444',
-      Dead: '#6b7280',
+      Healthy: '#16a34a',
+      Stressed: '#d97706',
+      Diseased: '#dc2626',
+      Dead: '#4b5563',
     };
     
     const handlePress = () => {
@@ -371,7 +371,7 @@ export default function TaskScreen() {
     <View style={s.container}>
       <ScrollView
         style={s.scroll}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 160 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a5c2a" />}
       >
         {/* Header with date and project location */}
@@ -428,11 +428,11 @@ export default function TaskScreen() {
               return (
                 <TouchableOpacity
                   key={tab.key}
-                  style={[s.tabBtn, active && { backgroundColor: tab.color + '15', borderColor: tab.color }]}
+                  style={[s.tabBtn, active && { backgroundColor: tab.color + '15', borderColor: tab.color }, !active && { borderColor: '#E0ECDD' }]}
                   onPress={() => setActiveTab(tab.key)}
                   activeOpacity={0.7}
                 >
-                  <CircularProgress size={52} progress={pct} color={tab.color} strokeWidth={4} trackColor="#E8E8E8">
+                  <CircularProgress size={56} progress={pct} color={tab.color} strokeWidth={4} trackColor="#E8E8E8">
                     <Text style={[s.tabCountText, { color: tab.color }]}>{count}/{denominator}</Text>
                   </CircularProgress>
                   <Text numberOfLines={1} style={[s.tabText, active && { color: tab.color }]}>{tab.label}</Text>
@@ -537,7 +537,7 @@ export default function TaskScreen() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: '#f0f4f1' },
   scroll: { flex: 1 },
   header: {
     paddingHorizontal: 20,
@@ -549,7 +549,7 @@ const s = StyleSheet.create({
     gap: 14,
   },
   headerLeft: { flex: 1 },
-  headerDate: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
+  headerDate: { fontSize: 18, fontWeight: '800', color: '#fff' },
   headerSub: { fontSize: 13, fontWeight: '600', color: '#cde8d3', marginTop: 2 },
   headerDivider: {
     width: 1,
@@ -570,52 +570,68 @@ const s = StyleSheet.create({
   },
   headerLocationLabel: { fontSize: 9, fontWeight: '600', color: '#cde8d3', letterSpacing: 0.5 },
   tabsWrap: { paddingHorizontal: 12, paddingTop: 12 },
-  tabsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
+  tabsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   tabBtn: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 6,
     backgroundColor: '#fff',
-    borderRadius: 7.5,
-    paddingVertical: 10,
+    borderRadius: 14,
+    paddingVertical: 12,
     paddingHorizontal: 4,
     borderWidth: 1.5,
     borderColor: '#E8E8E8',
+    elevation: 3,
+    shadowColor: '#1a5c2a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
   },
   tabBtnActive: {},
-  tabText: { fontSize: 11, fontWeight: '700', color: '#888' },
-  tabCountText: { fontSize: 12, fontWeight: '700' },
+  tabText: { fontSize: 11, fontWeight: '800', color: '#888' },
+  tabCountText: { fontSize: 13, fontWeight: '800' },
   dateSelectorWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 4, gap: 8 },
   dateAllBtn: {
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#fff',
-    borderRadius: 7.5,
-    paddingVertical: 8,
+    borderRadius: 14,
+    paddingVertical: 10,
     paddingHorizontal: 12,
     borderWidth: 1.5,
     borderColor: '#E0ECDD',
     minWidth: 56,
-    minHeight: 68,
+    height: 68,
+    elevation: 2,
+    shadowColor: '#1a5c2a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
   },
   dateAllBtnActive: { backgroundColor: '#1a5c2a', borderColor: '#1a5c2a' },
-  dateAllText: { fontSize: 12, fontWeight: '700', color: '#1a5c2a' },
+  dateAllText: { fontSize: 12, fontWeight: '800', color: '#1a5c2a' },
   dateAllTextActive: { color: '#fff' },
   dateList: { gap: 8 },
   dateItem: {
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#fff',
-    borderRadius: 7.5,
-    paddingVertical: 8,
+    borderRadius: 14,
+    paddingVertical: 10,
     paddingHorizontal: 12,
     borderWidth: 1.5,
     borderColor: '#E8E8E8',
     minWidth: 56,
+    height: 68,
+    elevation: 2,
+    shadowColor: '#1a5c2a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
   },
   dateItemActive: { backgroundColor: '#1a5c2a', borderColor: '#1a5c2a' },
-  dateLabel: { fontSize: 9, fontWeight: '700', color: '#888', letterSpacing: 0.5 },
+  dateLabel: { fontSize: 9, fontWeight: '800', color: '#888', letterSpacing: 0.5 },
   dateLabelActive: { color: '#fff' },
   dateDay: { fontSize: 18, fontWeight: '800', color: '#222', marginTop: 1 },
   dateDayActive: { color: '#fff' },
@@ -624,14 +640,14 @@ const s = StyleSheet.create({
   content: { padding: 16, paddingTop: 12 },
   taskCard: {
     backgroundColor: '#fff',
-    borderRadius: 7.5,
+    borderRadius: 14,
     padding: 12,
     marginBottom: 8,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+    elevation: 4,
+    shadowColor: '#1a5c2a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
     borderLeftWidth: 3,
     borderLeftColor: '#1a5c2a',
     flexDirection: 'row',
@@ -639,7 +655,7 @@ const s = StyleSheet.create({
   taskPhotoWrap: {
     width: 80,
     height: 80,
-    borderRadius: 7.5,
+    borderRadius: 14,
     overflow: 'hidden',
     marginRight: 12,
   },
@@ -653,32 +669,37 @@ const s = StyleSheet.create({
   taskCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   taskTitleWrap: { flex: 1 },
   taskId: { fontSize: 10, fontWeight: '600', color: '#999', marginBottom: 2 },
-  taskName: { fontSize: 14, fontWeight: '700', color: '#222' },
-  statusBadge: { borderRadius: 7.5, paddingHorizontal: 8, paddingVertical: 3 },
-  statusText: { fontSize: 9, fontWeight: '700' },
+  taskName: { fontSize: 14, fontWeight: '800', color: '#222' },
+  statusBadge: { borderRadius: 14, paddingHorizontal: 8, paddingVertical: 3 },
+  statusText: { fontSize: 9, fontWeight: '800' },
   startBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#F09125',
-    borderRadius: 7.5,
+    borderRadius: 14,
     paddingVertical: 6,
     paddingHorizontal: 10,
+    elevation: 2,
+    shadowColor: '#F09125',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
-  startBtnText: { color: '#fff', fontWeight: '700', fontSize: 11 },
+  startBtnText: { color: '#fff', fontWeight: '800', fontSize: 11 },
   taskNote: { fontSize: 12, color: '#666', marginTop: 4, lineHeight: 16 },
   dueRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4 },
   dueText: { fontSize: 10, color: '#888' },
   treeDetailRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-  detailLink: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#E8F5E9', borderRadius: 7.5 },
-  detailLinkText: { fontSize: 10, color: '#1a5c2a', fontWeight: '600' },
-  conditionBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7.5, borderWidth: 1 },
+  detailLink: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#E8F5E9', borderRadius: 14 },
+  detailLinkText: { fontSize: 10, color: '#1a5c2a', fontWeight: '800' },
+  conditionBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 14, borderWidth: 1 },
   conditionDot: { width: 6, height: 6, borderRadius: 3 },
   surveyorRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   surveyorText: { fontSize: 10, color: '#666' },
   emptyState: { alignItems: 'center', paddingVertical: 48 },
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
-  emptyText: { fontSize: 16, fontWeight: '600', color: '#555' },
+  emptyText: { fontSize: 16, fontWeight: '800', color: '#555' },
   emptySubText: { fontSize: 13, color: '#888', marginTop: 4, textAlign: 'center', paddingHorizontal: 24 },
   bottomBar: {
     position: 'absolute',
@@ -688,8 +709,13 @@ const s = StyleSheet.create({
     backgroundColor: '#fff',
     paddingHorizontal: 16,
     paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 10,
   },
   addDemoBtn: {
     flexDirection: 'row',
@@ -697,8 +723,13 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: '#1a5c2a',
-    borderRadius: 10,
+    borderRadius: 14,
     paddingVertical: 14,
+    elevation: 4,
+    shadowColor: '#1a5c2a',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
   },
-  addDemoBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  addDemoBtnText: { fontSize: 15, fontWeight: '800', color: '#fff' },
 });

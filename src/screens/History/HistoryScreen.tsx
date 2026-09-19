@@ -56,16 +56,16 @@ const STATUS_FILTERS: { label: string; value: string }[] = [
 ];
 
 const CONDITION_COLORS: Record<string, string> = {
-  Healthy: '#22c55e',
-  Stressed: '#f59e0b',
-  Diseased: '#ef4444',
-  Dead: '#6b7280',
+  Healthy: '#16a34a',
+  Stressed: '#d97706',
+  Diseased: '#dc2626',
+  Dead: '#4b5563',
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  completed: '#22c55e',
-  approved: '#8b5cf6',
-  rejected: '#ef4444',
+  completed: '#16a34a',
+  approved: '#7c3aed',
+  rejected: '#dc2626',
 };
 
 export default function HistoryScreen() {
@@ -193,10 +193,20 @@ export default function HistoryScreen() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
         {filters.map((f) => {
           const active = selectedValue === f.value;
+          const chipColor = activeCategory === 'condition' && f.value !== 'all'
+            ? CONDITION_COLORS[f.value] || '#1a5c2a'
+            : activeCategory === 'status' && f.value !== 'all'
+            ? STATUS_COLORS[f.value] || '#1a5c2a'
+            : '#1a5c2a';
           return (
             <TouchableOpacity
               key={f.value}
-              style={[styles.chip, active && styles.chipActive]}
+              style={[
+                styles.chip,
+                active && { backgroundColor: chipColor, borderColor: chipColor },
+                !active && f.value !== 'all' && activeCategory === 'condition' && { backgroundColor: CONDITION_COLORS[f.value] + '15', borderColor: CONDITION_COLORS[f.value] + '40' },
+                !active && f.value !== 'all' && activeCategory === 'status' && { backgroundColor: STATUS_COLORS[f.value] + '15', borderColor: STATUS_COLORS[f.value] + '40' },
+              ]}
               onPress={() => onPress(f.value)}
             >
               <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
@@ -309,9 +319,6 @@ export default function HistoryScreen() {
         {renderFilterChips()}
       </View>
 
-      {/* Count */}
-      <Text style={styles.count}>{filtered.length} record{filtered.length !== 1 ? 's' : ''}</Text>
-
       {/* List */}
       <FlatList
         data={filtered}
@@ -338,7 +345,7 @@ export default function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: '#f0f4f1' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -349,7 +356,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 19,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: '#fff',
     flex: 1,
   },
@@ -357,21 +364,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 7.5,
+    borderRadius: 14,
   },
   headerCountText: {
     color: '#fff',
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   categoryBar: {
     flexDirection: 'row',
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 6,
+    paddingVertical: 12,
+    gap: 8,
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
   },
   categoryBtn: {
     flex: 1,
@@ -379,8 +384,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    paddingVertical: 8,
-    borderRadius: 7.5,
+    paddingVertical: 10,
+    borderRadius: 14,
     backgroundColor: '#E8F5E9',
   },
   categoryBtnActive: {
@@ -388,7 +393,7 @@ const styles = StyleSheet.create({
   },
   categoryText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#1a5c2a',
   },
   categoryTextActive: {
@@ -396,71 +401,67 @@ const styles = StyleSheet.create({
   },
   chipBar: {
     backgroundColor: '#fff',
-    paddingBottom: 10,
+    paddingBottom: 12,
   },
   chipScroll: {
     paddingHorizontal: 16,
     gap: 8,
   },
   chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 7.5,
-    backgroundColor: '#f3f4f6',
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: '#E8F5E9',
   },
   chipActive: {
     backgroundColor: '#1a5c2a',
-    borderColor: '#1a5c2a',
   },
   chipText: {
     fontSize: 12,
     color: '#555',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   chipTextActive: {
     color: '#fff',
-    fontWeight: '700',
+    fontWeight: '800',
   },
-  count: { fontSize: 12, color: '#888', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 },
-  list: { padding: 16, paddingTop: 8 },
+  list: { padding: 16, paddingTop: 8, paddingBottom: 100 },
 
-  // History card
   historyCard: {
     backgroundColor: '#fff',
-    borderRadius: 7.5,
-    marginBottom: 10,
+    borderRadius: 14,
+    marginBottom: 12,
     overflow: 'hidden',
-    elevation: 2,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
     flexDirection: 'row',
     borderLeftWidth: 3,
     borderLeftColor: '#22c55e',
-    padding: 10,
+    padding: 12,
   },
   photoWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 7.5,
+    width: 90,
+    height: 90,
+    borderRadius: 14,
     overflow: 'hidden',
-    marginRight: 12,
+    marginRight: 14,
   },
   photo: {
-    width: 80,
-    height: 80,
+    width: 90,
+    height: 90,
   },
   photoPlaceholder: {
-    width: 80,
-    height: 80,
+    width: 90,
+    height: 90,
     backgroundColor: '#e8f5e9',
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 14,
   },
-  photoPlaceholderText: { fontSize: 32 },
+  photoPlaceholderText: { fontSize: 36 },
   cardContent: {
     flex: 1,
   },
@@ -468,7 +469,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   cardTitleWrap: {
     flex: 1,
@@ -476,22 +477,22 @@ const styles = StyleSheet.create({
   },
   taskId: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#999',
     marginBottom: 2,
   },
   taskName: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#222',
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 7.5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
     borderWidth: 1,
   },
   statusDot: {
@@ -501,18 +502,18 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 9,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   conditionBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 7.5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
     borderWidth: 1,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   conditionDot: {
     width: 6,
@@ -521,7 +522,7 @@ const styles = StyleSheet.create({
   },
   conditionText: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   bottomRow: {
     flexDirection: 'row',
@@ -535,12 +536,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8F5E9',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 7.5,
+    borderRadius: 14,
   },
   locationText: {
     fontSize: 10,
     color: '#1a5c2a',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   dateRow: {
     flexDirection: 'row',
@@ -554,6 +555,6 @@ const styles = StyleSheet.create({
 
   empty: { alignItems: 'center', paddingVertical: 60 },
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
-  emptyText: { fontSize: 16, fontWeight: '600', color: '#555' },
+  emptyText: { fontSize: 16, fontWeight: '800', color: '#555' },
   emptySubText: { fontSize: 13, color: '#888', marginTop: 4 },
 });
