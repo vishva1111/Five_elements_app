@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
   },
   lockBadgeText: { color: '#F09125', fontSize: 10, fontWeight: '700' },
   scroll: { flex: 1 },
-  scrollContent: { padding: 16, gap: 12, paddingBottom: 40 },
+  scrollContent: { padding: 16, gap: 12, paddingBottom: 120 },
   photo: { width: '100%', height: 220, borderRadius: 7.5 },
   photoPlaceholder: {
     width: '100%',

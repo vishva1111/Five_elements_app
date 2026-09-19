@@ -37,15 +37,6 @@ export function useGeofencing({
 
   const handleAlerts = useCallback((newAlerts: GeofenceAlert[]) => {
     setAlerts((prev) => [...prev, ...newAlerts]);
-
-    // Log for debugging / notification system integration
-    for (const alert of newAlerts) {
-      const action = alert.event === 'enter' ? 'entered' : 'exited';
-      console.log(
-        `[Geofence] User ${action} zone "${alert.zone.label}" (${alert.zone.treeId})`
-      );
-    }
-
     onAlertRef.current?.(newAlerts);
   }, []);
 

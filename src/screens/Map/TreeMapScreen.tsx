@@ -134,6 +134,8 @@ if(bounds.isValid()){map.fitBounds(bounds.pad(0.2));}` : ''}
       const condition = (t.tree_condition || 'N/A').replace(/"/g, '\\"');
       const date = t.survey_date || t.submitted_at?.split('T')[0] || '';
       const isFocused = focusTreeId && t.id === focusTreeId;
+      const locked = !!t.locked;
+      const size = isFocused ? 42 : 34;
 
       return `{
         "type":"Feature",
@@ -145,8 +147,9 @@ if(bounds.isValid()){map.fitBounds(bounds.pad(0.2));}` : ''}
           "condition":"${condition}",
           "date":"${date}",
           "color":"${color}",
-          "locked":${!!t.locked},
-          "focused":${!!isFocused}
+          "locked":${locked},
+          "focused":${!!isFocused},
+          "size":${size}
         }
       }`;
     })
@@ -166,6 +169,7 @@ if(bounds.isValid()){map.fitBounds(bounds.pad(0.2));}` : ''}
 <style>
 html,body,#map{margin:0;padding:0;width:100%;height:100%;}
 .mapboxgl-ctrl-bottom-left,.mapboxgl-ctrl-bottom-right{display:none !important;}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(1.15);opacity:0.85;}}
 </style>
 </head>
 <body>
@@ -190,36 +194,31 @@ var treesGeoJSON={
 };
 
 map.on('load',function(){
-  map.addSource('trees',{type:'geojson',data:treesGeoJSON});
-  map.addLayer({
-    id:'tree-circles',
-    type:'circle',
-    source:'trees',
-    paint:{
-      'circle-radius':['case',['get','focused'],18,12],
-      'circle-color':['get','color'],
-      'circle-stroke-color':['case',['get','focused'],'#F09125','#ffffff'],
-      'circle-stroke-width':['case',['get','focused'],3,2],
-      'circle-opacity':0.9
-    }
-  });
-  map.addLayer({
-    id:'tree-labels',
-    type:'symbol',
-    source:'trees',
-    layout:{
-      'text-field':['get','species'],
-      'text-size':11,
-      'text-offset':[0,1.5],
-      'text-anchor':'top'
-    },
-    paint:{
-      'text-color':'#ffffff',
-      'text-halo-color':'rgba(0,0,0,0.7)',
-      'text-halo-width':1
-    }
+  // Add tree markers as individual DOM elements with emoji
+  treesGeoJSON.features.forEach(function(f){
+    var p=f.properties;
+    var c=f.geometry.coordinates;
+    var el=document.createElement('div');
+    el.style.cssText='width:'+p.size+'px;height:'+p.size+'px;background:'+p.color+';border-radius:50%;border:3px solid '+(p.focused?'#F09125':'#fff')+';box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:'+(p.focused?22:18)+'px;cursor:pointer;'+(p.focused?'animation:pulse 1.5s infinite;':'');
+    el.innerHTML=p.locked?'🔒':'🌳';
+    var popup=new mapboxgl.Popup({offset:15,closeButton:true}).setHTML(
+      '<div style="font:13px/1.5 -apple-system,sans-serif;min-width:150px;">'+
+      '<b>'+p.species+'</b><br/>'+
+      'ID: '+p.treeId+'<br/>'+
+      '<span style="color:'+p.color+'">&#9679;</span> '+p.condition+'<br/>'+
+      'Date: '+p.date+
+      (p.locked?'<br/>🔒 Locked':'')+'</div>'
+    );
+    new mapboxgl.Marker({element:el})
+      .setLngLat(c)
+      .setPopup(popup)
+      .addTo(map);
+    el.addEventListener('click',function(){
+      post({type:'markerTap',treeId:p.id});
+    });
   });
 
+  // User location marker
   var userEl=document.createElement('div');
   userEl.style.cssText='width:20px;height:20px;background:#4285f4;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
   new mapboxgl.Marker({element:userEl})
@@ -232,28 +231,6 @@ map.on('load',function(){
     .addTo(map);` : ''}
 
   ${fitBoundsJs}
-
-  map.on('click','tree-circles',function(e){
-    if(e.features&&e.features.length>0){
-      var f=e.features[0];
-      var props=f.properties;
-      var coords=f.geometry.coordinates.slice();
-      var popupHtml='<div style="font:13px/1.5 -apple-system,sans-serif;min-width:150px;">'+
-        '<b>'+props.species+'</b><br/>'+
-        'ID: '+props.treeId+'<br/>'+
-        '<span style="color:'+props.color+'">&#9679;</span> '+props.condition+'<br/>'+
-        'Date: '+props.date+
-        (props.locked?'<br/>Locked':'')+'</div>';
-      new mapboxgl.Popup({offset:15})
-        .setLngLat(coords)
-        .setHTML(popupHtml)
-        .addTo(map);
-      post({type:'markerTap',treeId:props.id});
-    }
-  });
-
-  map.on('mouseenter','tree-circles',function(){map.getCanvas().style.cursor='pointer';});
-  map.on('mouseleave','tree-circles',function(){map.getCanvas().style.cursor='';});
 
   post({type:'ready',count:${trees.filter((t) => t.latitude && t.longitude).length}});
 });
@@ -496,89 +473,117 @@ export default function TreeMapScreen() {
         <View style={styles.modalBackdrop}>
           <TouchableOpacity style={styles.modalBackdropTouch} activeOpacity={1} onPress={() => setShowDetails(false)} />
           <View style={styles.detailSheet}>
-            {selectedTree && (
-              <>
-                <View style={styles.detailHeader}>
-                  <View style={styles.detailHeaderLeft}>
-                    <Text style={styles.detailSpecies}>
-                      {selectedTree.locked ? '🔒 ' : '🌳 '}
-                      {selectedTree.species || 'Unknown Species'}
-                    </Text>
-                    <Text style={styles.detailId}>
-                      {selectedTree.tree_id || selectedTree.id.slice(0, 8)}
-                    </Text>
-                  </View>
-                  <TouchableOpacity onPress={() => setShowDetails(false)}>
-                    <Ionicons name="close" size={24} color="#333" />
-                  </TouchableOpacity>
-                </View>
+            {selectedTree && (() => {
+              // Parse ##META## from notes
+              let cleanNotes = selectedTree.notes || '';
+              let meta: Record<string, any> = {};
+              const metaMatch = (selectedTree.notes || '').match(/##META##({.*})/s);
+              if (metaMatch) {
+                try { meta = JSON.parse(metaMatch[1]); } catch {}
+                cleanNotes = selectedTree.notes!.replace(/##META##{.*}/s, '').trim();
+              }
+              const dbh = selectedTree.dbh_cm || meta.dbh_cm;
+              const height = selectedTree.height_m || meta.height_m;
+              const condition = selectedTree.tree_condition || meta.tree_condition;
+              const date = selectedTree.survey_date || meta.survey_date || selectedTree.submitted_at?.split('T')[0] || '';
+              const condColor = CONDITION_COLORS[condition || ''] || '#6b7280';
 
-                <View style={styles.detailGrid}>
-                  <View style={styles.detailCell}>
-                    <Text style={styles.detailLabel}>Condition</Text>
-                    <Text style={[styles.detailValue, { color: CONDITION_COLORS[selectedTree.tree_condition || ''] || '#6b7280' }]}>
-                      {selectedTree.tree_condition || 'N/A'}
-                    </Text>
-                  </View>
-                  <View style={styles.detailCell}>
-                    <Text style={styles.detailLabel}>DBH</Text>
-                    <Text style={styles.detailValue}>{selectedTree.dbh_cm ?? '—'} cm</Text>
-                  </View>
-                  <View style={styles.detailCell}>
-                    <Text style={styles.detailLabel}>Height</Text>
-                    <Text style={styles.detailValue}>{selectedTree.height_m ?? '—'} m</Text>
-                  </View>
-                  <View style={styles.detailCell}>
-                    <Text style={styles.detailLabel}>Date</Text>
-                    <Text style={styles.detailValue}>{selectedTree.survey_date || '—'}</Text>
-                  </View>
-                </View>
-
-                {selectedTree.notes && (
-                  <View style={styles.detailNotes}>
-                    <Text style={styles.detailNotesLabel}>Notes</Text>
-                    <Text style={styles.detailNotesText}>{selectedTree.notes}</Text>
-                  </View>
-                )}
-
-                <View style={styles.detailCoords}>
-                  <Text style={styles.detailCoordsText}>
-                    📍 {selectedTree.latitude?.toFixed(5)}, {selectedTree.longitude?.toFixed(5)}
-                  </Text>
-                </View>
-
-                <View style={styles.detailActions}>
-                  <TouchableOpacity
-                    style={styles.detailActionBtn}
-                    onPress={() => {
-                      setShowDetails(false);
-                      navigation.navigate('History', {
-                        screen: 'TreeDetail',
-                        params: { treeId: selectedTree.id },
-                      });
-                    }}
-                  >
-                    <Ionicons name="eye" size={18} color="#1a5c2a" />
-                    <Text style={styles.detailActionText}>Full Details</Text>
-                  </TouchableOpacity>
-
-                  {!selectedTree.locked ? (
-                    <TouchableOpacity
-                      style={[styles.detailActionBtn, styles.lockActionBtn]}
-                      onPress={() => handleLockTree(selectedTree)}
-                    >
-                      <Ionicons name="lock-closed" size={18} color="#F09125" />
-                      <Text style={[styles.detailActionText, { color: '#F09125' }]}>Lock</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={[styles.detailActionBtn, styles.lockedBadge]}>
-                      <Ionicons name="lock-closed" size={18} color="#999" />
-                      <Text style={[styles.detailActionText, { color: '#999' }]}>Locked</Text>
+              return (
+                <>
+                  <View style={styles.detailHeader}>
+                    <View style={styles.detailHeaderLeft}>
+                      <Text style={styles.detailSpecies}>
+                        {selectedTree.locked ? '🔒 ' : '🌳 '}
+                        {selectedTree.species || 'Unknown Species'}
+                      </Text>
+                      <Text style={styles.detailId}>
+                        {selectedTree.tree_id || selectedTree.id.slice(0, 8)}
+                      </Text>
                     </View>
-                  )}
-                </View>
-              </>
-            )}
+                    <TouchableOpacity onPress={() => setShowDetails(false)}>
+                      <Ionicons name="close" size={24} color="#333" />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.detailGrid}>
+                    <View style={styles.detailCell}>
+                      <Text style={styles.detailLabel}>Condition</Text>
+                      {condition ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: condColor }} />
+                          <Text style={[styles.detailValue, { color: condColor }]}>{condition}</Text>
+                        </View>
+                      ) : (
+                        <Text style={[styles.detailValue, { color: '#ccc' }]}>Not set</Text>
+                      )}
+                    </View>
+                    <View style={styles.detailCell}>
+                      <Text style={styles.detailLabel}>DBH</Text>
+                      <Text style={[styles.detailValue, !dbh && { color: '#ccc' }]}>
+                        {dbh ? `${dbh} cm` : 'Not recorded'}
+                      </Text>
+                    </View>
+                    <View style={styles.detailCell}>
+                      <Text style={styles.detailLabel}>Height</Text>
+                      <Text style={[styles.detailValue, !height && { color: '#ccc' }]}>
+                        {height ? `${height} m` : 'Not recorded'}
+                      </Text>
+                    </View>
+                    <View style={styles.detailCell}>
+                      <Text style={styles.detailLabel}>Date</Text>
+                      <Text style={[styles.detailValue, !date && { color: '#ccc' }]}>
+                        {date || 'Not recorded'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {cleanNotes ? (
+                    <View style={styles.detailNotes}>
+                      <Text style={styles.detailNotesLabel}>Notes</Text>
+                      <Text style={styles.detailNotesText}>{cleanNotes}</Text>
+                    </View>
+                  ) : null}
+
+                  <View style={styles.detailCoords}>
+                    <Ionicons name="location" size={14} color="#1a5c2a" />
+                    <Text style={styles.detailCoordsText}>
+                      {selectedTree.latitude?.toFixed(5)}, {selectedTree.longitude?.toFixed(5)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailActions}>
+                    <TouchableOpacity
+                      style={styles.detailActionBtn}
+                      onPress={() => {
+                        setShowDetails(false);
+                        navigation.navigate('History', {
+                          screen: 'TreeDetail',
+                          params: { treeId: selectedTree.id },
+                        });
+                      }}
+                    >
+                      <Ionicons name="eye" size={18} color="#1a5c2a" />
+                      <Text style={styles.detailActionText}>Full Details</Text>
+                    </TouchableOpacity>
+
+                    {!selectedTree.locked ? (
+                      <TouchableOpacity
+                        style={[styles.detailActionBtn, styles.lockActionBtn]}
+                        onPress={() => handleLockTree(selectedTree)}
+                      >
+                        <Ionicons name="lock-closed" size={18} color="#F09125" />
+                        <Text style={[styles.detailActionText, { color: '#F09125' }]}>Lock</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={[styles.detailActionBtn, styles.lockedBadge]}>
+                        <Ionicons name="lock-closed" size={18} color="#999" />
+                        <Text style={[styles.detailActionText, { color: '#999' }]}>Locked</Text>
+                      </View>
+                    )}
+                  </View>
+                </>
+              );
+            })()}
           </View>
         </View>
       </Modal>
@@ -723,8 +728,8 @@ const styles = StyleSheet.create({
   },
   detailNotesLabel: { fontSize: 10, color: '#888', fontWeight: '600', marginBottom: 4 },
   detailNotesText: { fontSize: 13, color: '#333', lineHeight: 18 },
-  detailCoords: { backgroundColor: '#f0f0f0', borderRadius: 8, padding: 10, marginBottom: 16 },
-  detailCoordsText: { fontSize: 12, color: '#666', fontFamily: 'monospace' },
+  detailCoords: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f0fdf4', borderRadius: 8, padding: 10, marginBottom: 16, borderWidth: 1, borderColor: '#bbf7d0' },
+  detailCoordsText: { fontSize: 12, color: '#1a5c2a', fontFamily: 'monospace', fontWeight: '600' },
   detailActions: { flexDirection: 'row', gap: 10 },
   detailActionBtn: {
     flex: 1,

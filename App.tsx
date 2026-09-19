@@ -23,6 +23,7 @@ import CaptureScreen from './src/screens/Capture/CaptureScreen';
 import MapPickerScreen from './src/screens/Capture/MapPickerScreen';
 import TreeFormScreen from './src/screens/Capture/TreeFormScreen';
 import SubmitSuccessScreen from './src/screens/Capture/SubmitSuccessScreen';
+
 import HistoryScreen from './src/screens/History/HistoryScreen';
 import TreeDetailScreen from './src/screens/History/TreeDetailScreen';
 import ProfileScreen from './src/screens/Profile/ProfileScreen';
