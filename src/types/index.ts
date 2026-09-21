@@ -151,6 +151,7 @@ export type CaptureStackParamList = {
 export type HistoryStackParamList = {
   HistoryList: undefined;
   TreeDetail: { treeId: string };
+  UpdateTree: { treeId: string; treeIdDisplay: string; currentRound: number };
 };
 
 // ─── Store Types ───────────────────────────────────────────────────────────────
@@ -223,6 +224,41 @@ export interface TreeFormData {
   survey_date: string;
 }
 
+// ─── Monitoring Record Types ────────────────────────────────────────────────
+
+export interface TreeMonitoringRecord {
+  id: string;
+  tree_record_id: string;
+  tree_id: string;
+  monitoring_round: number;
+  user_id: string;
+  project_id?: string;
+  photo_url?: string;
+  latitude: number;
+  longitude: number;
+  dbh_cm?: number;
+  height_m?: number;
+  crown_diameter_m?: number;
+  tree_condition?: TreeCondition;
+  health_status?: HealthStatus;
+  survival_status?: 'alive' | 'dead' | 'missing';
+  notes?: string;
+  surveyor?: string;
+  survey_date?: string;
+  submitted_at: string;
+}
+
+export interface MonitoringFormData {
+  dbh_cm: string;
+  height_m: string;
+  crown_diameter_m: string;
+  tree_condition: TreeCondition;
+  survival_status: 'alive' | 'dead' | 'missing';
+  notes: string;
+  surveyor: string;
+  survey_date: string;
+}
+
 export const TREE_SPECIES = [
   'Teak (Sagwan)',
   'Neem',
@@ -265,6 +301,30 @@ export const LAND_TYPE_OPTIONS: LandType[] = [
   'Other',
 ];
 
+// ─── Monitoring Round Types ──────────────────────────────────────────────────
+
+export type MonitoringRound = 1 | 2 | 3 | 4;
+
+export interface MonitoringRoundInfo {
+  round: MonitoringRound;
+  label: string;
+  subtitle: string;
+  icon: string;
+  color: string;
+}
+
+export const MONITORING_ROUNDS: MonitoringRoundInfo[] = [
+  { round: 1, label: 'Planting', subtitle: 'Baseline Survey / Plantation Record', icon: 'leaf', color: '#22c55e' },
+  { round: 2, label: 'Survival', subtitle: '1st Monitoring', icon: 'heart', color: '#3b82f6' },
+  { round: 3, label: 'Growth', subtitle: '2nd Monitoring', icon: 'trending-up', color: '#f59e0b' },
+  { round: 4, label: 'Periodic', subtitle: '3rd Monitoring+', icon: 'time', color: '#8b5cf6' },
+];
+
+export function getMonitoringRoundInfo(round: number): MonitoringRoundInfo {
+  if (round >= 4) return MONITORING_ROUNDS[3];
+  return MONITORING_ROUNDS[Math.max(0, Math.min(round - 1, 3))];
+}
+
 // ─── Geofence Types ──────────────────────────────────────────────────────────
 
 export interface GeofenceZone {
@@ -292,5 +352,11 @@ export type MainTabParamList = {
   Map: { focusTreeId?: string } | undefined;
   Task: undefined;
   History: undefined;
+  Update: undefined;
   Profile: undefined;
+};
+
+export type UpdateLookupStackParamList = {
+  UpdateLookup: undefined;
+  UpdateTree: { treeId: string; treeIdDisplay: string; currentRound: number };
 };

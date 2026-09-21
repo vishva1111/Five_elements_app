@@ -23,7 +23,7 @@ export default function TreeCard({ tree, onPress }: Props) {
     year: 'numeric',
   });
 
-  const treeUniqueId = tree.id.slice(0, 8).toUpperCase();
+  const treeUniqueId = tree.tree_id || tree.id.slice(0, 8).toUpperCase();
   const conditionColor = CONDITION_COLORS[tree.tree_condition || 'Healthy'] || '#16a34a';
 
   return (

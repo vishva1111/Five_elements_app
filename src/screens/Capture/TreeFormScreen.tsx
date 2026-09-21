@@ -31,7 +31,7 @@ import {
 } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
-import { insertTreeRecord, syncUserCredits, computeCreditsForProject, fetchAllProjects } from '../../services/treeService';
+import { insertTreeRecord, syncUserCredits, computeCreditsForProject, fetchAllProjects, generateProjectTreeId } from '../../services/treeService';
 import { Project } from '../../types';
 import { uploadTreePhoto } from '../../services/storageService';
 import MapPreview from '../../components/MapPreview';
@@ -73,11 +73,18 @@ export default function TreeFormScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [showNoteHelper, setShowNoteHelper] = useState(false);
 
-  // Auto-generate TreeID on mount
+  // Auto-generate project-wise sequential TreeID on mount
   useEffect(() => {
-    const seq = String(Date.now()).slice(-4).padStart(4, '0');
-    setForm((f) => ({ ...f, tree_id: `TREE-${seq}` }));
-  }, []);
+    (async () => {
+      const projects = allProjects.length > 0 ? allProjects : (await fetchAllProjects()).data ?? [];
+      const project = projects.find((p) => p.id === (activeProjectId ?? form.project_id));
+      const treeId = await generateProjectTreeId(
+        project?.id ?? activeProjectId,
+        project?.name
+      );
+      setForm((f) => ({ ...f, tree_id: treeId }));
+    })();
+  }, [activeProjectId, allProjects.length]);
 
   // Refs used to keep fields visible above the keyboard while typing
   const scrollRef = useRef<ScrollView>(null);

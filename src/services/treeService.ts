@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { TreeRecord, TreeRecordInsert, ApiResponse, Project, User } from '../types';
+import { TreeRecord, TreeRecordInsert, TreeMonitoringRecord, ApiResponse, Project, User } from '../types';
 
 // ─── Transform raw Supabase row into TreeRecord with joined project_name ───────
 function mapTreeRecord(raw: any): TreeRecord {
@@ -517,4 +517,364 @@ export async function fetchTreesInBounds(
 
   const trees = await attachProjectNames((data ?? []).map(mapTreeRecord));
   return { data: trees, error: null };
+}
+
+// ─── Project-wise Sequential Tree ID Generator ──────────────────────────────
+// Format: {PROJECT_PREFIX}-{SEQ}  e.g. ARAV-001, ARAV-002, BERA-001
+// Prefix = first 4 uppercase letters of project name (stripped of spaces/symbols)
+
+export function makeProjectPrefix(projectName: string): string {
+  const clean = projectName.replace(/[^a-zA-Z]/g, '').toUpperCase();
+  return clean.slice(0, 4).padEnd(4, 'X');
+}
+
+export async function generateProjectTreeId(
+  projectId: string | null | undefined,
+  projectName?: string
+): Promise<string> {
+  if (!projectId || !projectName) {
+    const seq = String(Date.now()).slice(-4).padStart(4, '0');
+    return `TREE-${seq}`;
+  }
+
+  const prefix = makeProjectPrefix(projectName);
+
+  const { count, error } = await supabase
+    .from('tree_records')
+    .select('*', { count: 'exact', head: true })
+    .eq('project_id', projectId);
+
+  if (error) {
+    console.warn('[TreeApp] generateProjectTreeId count error:', error.message);
+    const seq = String(Date.now()).slice(-4).padStart(4, '0');
+    return `${prefix}-${seq}`;
+  }
+
+  const nextNum = (count ?? 0) + 1;
+  const seq = String(nextNum).padStart(3, '0');
+  return `${prefix}-${seq}`;
+}
+
+// ─── Migrate ALL existing trees to project-wise sequential IDs ──────────────
+// Groups trees by project, sorts by date, assigns ARAV-001, ARAV-002, etc.
+export async function migrateAllTreeIds(): Promise<{
+  updated: number;
+  errors: number;
+  details: string[];
+}> {
+  let updated = 0;
+  let errors = 0;
+  const details: string[] = [];
+
+  // 1. Fetch all projects
+  const { data: projects } = await supabase.from('projects').select('id, name');
+  if (!projects) return { updated, errors, details: ['Failed to fetch projects'] };
+
+  // 2. Fetch ALL trees (no project filter)
+  const { data: allTrees, error: fetchError } = await supabase
+    .from('tree_records')
+    .select('id, tree_id, project_id, submitted_at')
+    .order('submitted_at', { ascending: true });
+
+  if (fetchError || !allTrees) {
+    return { updated, errors, details: [fetchError?.message ?? 'Failed to fetch trees'] };
+  }
+
+  // 3. Group trees by project
+  const treesByProject = new Map<string, typeof allTrees>();
+  const noProjectTrees: typeof allTrees = [];
+
+  for (const tree of allTrees) {
+    if (tree.project_id) {
+      const group = treesByProject.get(tree.project_id) ?? [];
+      group.push(tree);
+      treesByProject.set(tree.project_id, group);
+    } else {
+      noProjectTrees.push(tree);
+    }
+  }
+
+  // 4. For each project, assign sequential IDs
+  for (const project of projects) {
+    const trees = treesByProject.get(project.id);
+    if (!trees || trees.length === 0) continue;
+
+    const prefix = makeProjectPrefix(project.name);
+    details.push(`${project.name} (${prefix}): ${trees.length} trees`);
+
+    for (let i = 0; i < trees.length; i++) {
+      const newId = `${prefix}-${String(i + 1).padStart(3, '0')}`;
+      const tree = trees[i];
+
+      // Skip if already correct
+      if (tree.tree_id === newId) continue;
+
+      const { error: updateError } = await supabase
+        .from('tree_records')
+        .update({ tree_id: newId })
+        .eq('id', tree.id);
+
+      if (updateError) {
+        errors++;
+        details.push(`  ✗ ${tree.tree_id || tree.id.slice(0, 8)} → ${newId}: ${updateError.message}`);
+      } else {
+        updated++;
+      }
+    }
+  }
+
+  // 5. Handle trees with no project — use "TREE" prefix
+  if (noProjectTrees.length > 0) {
+    details.push(`No Project (TREE): ${noProjectTrees.length} trees`);
+    for (let i = 0; i < noProjectTrees.length; i++) {
+      const newId = `TREE-${String(i + 1).padStart(3, '0')}`;
+      const tree = noProjectTrees[i];
+      if (tree.tree_id === newId) continue;
+
+      const { error: updateError } = await supabase
+        .from('tree_records')
+        .update({ tree_id: newId })
+        .eq('id', tree.id);
+
+      if (updateError) {
+        errors++;
+        details.push(`  ✗ ${tree.tree_id || tree.id.slice(0, 8)} → ${newId}: ${updateError.message}`);
+      } else {
+        updated++;
+      }
+    }
+  }
+
+  details.unshift(`Done: ${updated} updated, ${errors} errors`);
+  return { updated, errors, details };
+}
+
+// ─── Search trees by prefix (for Update screen autocomplete) ────────────────
+export async function searchTreesByPrefix(
+  prefix: string,
+  projectId?: string | null
+): Promise<ApiResponse<TreeRecord[]>> {
+  const search = prefix.toUpperCase();
+
+  let query = supabase
+    .from('tree_records')
+    .select('*, projects(name)')
+    .ilike('tree_id', `${search}%`)
+    .order('tree_id', { ascending: true })
+    .limit(20);
+
+  if (projectId) {
+    query = query.eq('project_id', projectId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    return { data: [], error: error.message };
+  }
+
+  return { data: (data ?? []).map(mapTreeRecord), error: null };
+}
+
+// ─── Fetch recent tree IDs from local storage ──────────────────────────────
+const RECENT_TREES_KEY = 'treeapp_recent_searches';
+
+export async function getRecentTreeSearches(): Promise<string[]> {
+  try {
+    const raw = await AsyncStorage.getItem(RECENT_TREES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveRecentTreeSearch(treeId: string): Promise<void> {
+  try {
+    const recent = await getRecentTreeSearches();
+    const filtered = recent.filter((id) => id !== treeId);
+    filtered.unshift(treeId);
+    await AsyncStorage.setItem(RECENT_TREES_KEY, JSON.stringify(filtered.slice(0, 10)));
+  } catch {}
+}
+
+// ─── Lookup tree by user-facing tree_id (e.g. "ARAV-001") ──────────────────
+export async function fetchTreeByTreeId(
+  treeId: string
+): Promise<ApiResponse<TreeRecord>> {
+  // Try exact match first, then case-insensitive
+  let { data, error } = await supabase
+    .from('tree_records')
+    .select('*, projects(name)')
+    .eq('tree_id', treeId)
+    .order('submitted_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  // Fallback: case-insensitive search
+  if (!data && !error) {
+    const retry = await supabase
+      .from('tree_records')
+      .select('*, projects(name)')
+      .ilike('tree_id', treeId)
+      .order('submitted_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    data = retry.data;
+    error = retry.error;
+  }
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  if (!data) {
+    return { data: null, error: `No tree found with ID "${treeId}"` };
+  }
+
+  return { data: await attachProjectName(mapTreeRecord(data)), error: null };
+}
+
+// ─── Lookup tree by tree_id within a specific project ────────────────────────
+// Tries exact match first, then case-insensitive, then UUID fallback
+export async function fetchTreeByTreeIdInProject(
+  treeId: string,
+  projectId: string
+): Promise<ApiResponse<TreeRecord>> {
+  // Try exact match within project
+  let { data, error } = await supabase
+    .from('tree_records')
+    .select('*, projects(name)')
+    .eq('tree_id', treeId)
+    .eq('project_id', projectId)
+    .order('submitted_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  // Fallback: case-insensitive search within project
+  if (!data && !error) {
+    const retry = await supabase
+      .from('tree_records')
+      .select('*, projects(name)')
+      .ilike('tree_id', treeId)
+      .eq('project_id', projectId)
+      .order('submitted_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    data = retry.data;
+    error = retry.error;
+  }
+
+  // Fallback: try matching by UUID if treeId looks like a UUID prefix
+  if (!data && !error && treeId.length >= 8) {
+    const retry = await supabase
+      .from('tree_records')
+      .select('*, projects(name)')
+      .eq('id', treeId)
+      .eq('project_id', projectId)
+      .limit(1)
+      .maybeSingle();
+    data = retry.data;
+    error = retry.error;
+  }
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  if (!data) {
+    return { data: null, error: `No tree found with ID "${treeId}" in this project` };
+  }
+
+  return { data: await attachProjectName(mapTreeRecord(data)), error: null };
+}
+
+// ─── Monitoring Round Functions ──────────────────────────────────────────────
+
+export async function fetchTreeMonitoringRecords(
+  treeId: string
+): Promise<ApiResponse<any[]>> {
+  const { data, error } = await supabase
+    .from('tree_monitoring_records')
+    .select('*')
+    .eq('tree_id', treeId)
+    .order('monitoring_round', { ascending: true });
+
+  if (error) {
+    console.warn('[TreeApp] fetchTreeMonitoringRecords error:', error.message);
+    return { data: [], error: null };
+  }
+
+  return { data: (data ?? []) as any[], error: null };
+}
+
+export async function getTreeMonitoringRound(
+  treeId: string
+): Promise<number> {
+  const { count, error } = await supabase
+    .from('tree_monitoring_records')
+    .select('*', { count: 'exact', head: true })
+    .eq('tree_id', treeId);
+
+  if (error) {
+    return 1;
+  }
+
+  return (count ?? 0) + 1;
+}
+
+export async function insertMonitoringRecord(record: {
+  tree_record_id: string;
+  tree_id: string;
+  monitoring_round: number;
+  user_id: string;
+  project_id?: string;
+  photo_url?: string;
+  latitude: number;
+  longitude: number;
+  dbh_cm?: number;
+  height_m?: number;
+  crown_diameter_m?: number;
+  tree_condition?: string;
+  health_status?: string;
+  survival_status?: string;
+  notes?: string;
+  surveyor?: string;
+  survey_date?: string;
+}): Promise<ApiResponse<any>> {
+  const { data, error } = await supabase
+    .from('tree_monitoring_records')
+    .insert(record)
+    .select()
+    .single();
+
+  if (error) {
+    console.warn('[TreeApp] insertMonitoringRecord error:', error.message);
+    return { data: null, error: error.message };
+  }
+
+  return { data, error: null };
+}
+
+export async function updateTreeFromMonitoring(
+  treeRecordId: string,
+  updates: {
+    dbh_cm?: number;
+    height_m?: number;
+    crown_diameter_m?: number;
+    tree_condition?: string;
+    health_status?: string;
+  }
+): Promise<ApiResponse<TreeRecord>> {
+  const { data, error } = await supabase
+    .from('tree_records')
+    .update(updates)
+    .eq('id', treeRecordId)
+    .select('*, projects(name)')
+    .single();
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  return { data: await attachProjectName(mapTreeRecord(data)), error: null };
 }

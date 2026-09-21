@@ -14,6 +14,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTreeStore } from '../../store/treeStore';
 import { fetchTreesByProject, fetchAllProjects, lockTree } from '../../services/treeService';
 import { useAuthStore } from '../../store/authStore';
@@ -242,6 +243,7 @@ map.on('load',function(){
 export default function TreeMapScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
+  const insets = useSafeAreaInsets();
   const focusTreeId = route.params?.focusTreeId;
   const trees = useTreeStore((s) => s.trees);
   const setTrees = useTreeStore((s) => s.setTrees);
@@ -446,23 +448,31 @@ export default function TreeMapScreen() {
         </Animated.View>
       )}
 
-      {/* Stats bar */}
-      <View style={styles.statsBar}>
+      {/* Stats bar - floating overlay */}
+      <View style={[styles.statsBar, { bottom: insets.bottom + 12 }]}>
         <View style={styles.statItem}>
-          <Ionicons name="leaf" size={16} color="#1a5c2a" />
+          <View style={[styles.statIconWrap, { backgroundColor: '#dcfce7' }]}>
+            <Ionicons name="leaf" size={14} color="#16a34a" />
+          </View>
           <Text style={styles.statText}>{allTrees.length}</Text>
         </View>
+        <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Ionicons name="lock-closed" size={16} color="#F09125" />
+          <View style={[styles.statIconWrap, { backgroundColor: '#fef3c7' }]}>
+            <Ionicons name="lock-closed" size={14} color="#F09125" />
+          </View>
           <Text style={styles.statText}>{allTrees.filter((t) => t.locked).length}</Text>
         </View>
+        <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Ionicons name="location" size={16} color="#4285f4" />
-          <Text style={styles.statText}>{isMonitoring ? 'Geofence ON' : 'Geofence OFF'}</Text>
+          <View style={[styles.statIconWrap, { backgroundColor: '#dbeafe' }]}>
+            <Ionicons name="location" size={14} color="#4285f4" />
+          </View>
+          <Text style={styles.statText}>{isMonitoring ? 'Geofence ON' : 'OFF'}</Text>
         </View>
         {geofenceAlerts.length > 0 && (
           <TouchableOpacity style={styles.alertBadge} onPress={() => setShowAlerts(true)}>
-            <Ionicons name="notifications" size={16} color="#fff" />
+            <Ionicons name="notifications" size={14} color="#fff" />
             <Text style={styles.alertBadgeText}>{geofenceAlerts.length}</Text>
           </TouchableOpacity>
         )}
@@ -627,25 +637,25 @@ export default function TreeMapScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0f4f1' },
+  container: { flex: 1, backgroundColor: '#000' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 48,
-    paddingBottom: 14,
-    paddingHorizontal: 14,
+    paddingTop: 44,
+    paddingBottom: 10,
+    paddingHorizontal: 12,
   },
-  backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  backBtn: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.15)' },
   headerCenter: { flex: 1, alignItems: 'center' },
-  headerTitle: { color: '#fff', fontSize: 19, fontWeight: '700', textTransform: 'uppercase' },
-  headerSubtitle: { color: '#cde8d3', fontSize: 12, marginTop: 2 },
-  refreshBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { color: '#fff', fontSize: 16, fontWeight: '700', textTransform: 'uppercase' },
+  headerSubtitle: { color: '#cde8d3', fontSize: 11, marginTop: 1 },
+  refreshBtn: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.15)' },
   map: { flex: 1 },
-  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f0f4f1' },
   loadingText: { marginTop: 12, fontSize: 14, color: '#666' },
   toastBanner: {
     position: 'absolute',
-    top: 110,
+    top: 100,
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
@@ -665,29 +675,42 @@ const styles = StyleSheet.create({
   toastExit: { backgroundColor: '#dc2626' },
   toastText: { color: '#fff', fontSize: 13, fontWeight: '600', flex: 1 },
   statsBar: {
+    position: 'absolute',
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 10,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    paddingBottom: 90,
     backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E5E5',
+    borderRadius: 20,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
   },
   statItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  statText: { fontSize: 13, fontWeight: '600', color: '#333' },
+  statIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statDivider: { width: 1, height: 16, backgroundColor: '#E5E5E5' },
+  statText: { fontSize: 13, fontWeight: '700', color: '#333' },
   alertBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#ef4444',
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 12,
-    marginLeft: 'auto',
+    marginLeft: 4,
   },
-  alertBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  alertBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalBackdropTouch: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   detailSheet: {

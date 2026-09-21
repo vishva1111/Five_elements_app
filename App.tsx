@@ -26,6 +26,8 @@ import SubmitSuccessScreen from './src/screens/Capture/SubmitSuccessScreen';
 
 import HistoryScreen from './src/screens/History/HistoryScreen';
 import TreeDetailScreen from './src/screens/History/TreeDetailScreen';
+import UpdateTreeScreen from './src/screens/History/UpdateTreeScreen';
+import UpdateLookupScreen from './src/screens/History/UpdateLookupScreen';
 import ProfileScreen from './src/screens/Profile/ProfileScreen';
 import TaskScreen from './src/screens/Task/TaskScreen';
 import TreeMapScreen from './src/screens/Map/TreeMapScreen';
@@ -44,6 +46,7 @@ const RootStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 const CaptureStack = createNativeStackNavigator();
 const HistoryStack = createNativeStackNavigator();
+const UpdateLookupStack = createNativeStackNavigator();
 
 function CaptureNavigator() {
   return (
@@ -68,7 +71,17 @@ function HistoryNavigator() {
     >
       <HistoryStack.Screen name="HistoryList" component={HistoryScreen} options={{ title: 'MY SUBMISSIONS', headerShown: false }} />
       <HistoryStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS', headerShown: false }} />
+      <HistoryStack.Screen name="UpdateTree" component={UpdateTreeScreen} options={{ title: 'UPDATE TREE', headerShown: false }} />
     </HistoryStack.Navigator>
+  );
+}
+
+function UpdateLookupNavigator() {
+  return (
+    <UpdateLookupStack.Navigator screenOptions={{ headerShown: false }}>
+      <UpdateLookupStack.Screen name="UpdateLookup" component={UpdateLookupScreen} />
+      <UpdateLookupStack.Screen name="UpdateTree" component={UpdateTreeScreen} />
+    </UpdateLookupStack.Navigator>
   );
 }
 
@@ -80,8 +93,8 @@ function MainTabs() {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
           if (route.name === 'Home') iconName = focused ? 'home' : 'home-outline';
-          else if (route.name === 'Map') iconName = focused ? 'map' : 'map-outline';
           else if (route.name === 'Task') iconName = focused ? 'clipboard' : 'clipboard-outline';
+          else if (route.name === 'Update') iconName = focused ? 'create' : 'create-outline';
           else if (route.name === 'History') iconName = focused ? 'list' : 'list-outline';
           else if (route.name === 'Profile') iconName = focused ? 'person' : 'person-outline';
           return (
@@ -98,8 +111,8 @@ function MainTabs() {
         tabBarLabel: ({ focused, color }) => {
           const labels: Record<string, string> = {
             Home: 'Home',
-            Map: 'Map',
             Task: 'Tasks',
+            Update: 'Update',
             History: 'History',
             Profile: 'Profile',
           };
@@ -140,8 +153,8 @@ function MainTabs() {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ headerShown: false, title: 'DASHBOARD' }} />
-      <Tab.Screen name="Map" component={TreeMapScreen} options={{ headerShown: false, title: 'MAP' }} />
       <Tab.Screen name="Task" component={TaskScreen} options={{ headerShown: false, title: 'TASKS' }} />
+      <Tab.Screen name="Update" component={UpdateLookupNavigator} options={{ headerShown: false, title: 'UPDATE' }} />
       <Tab.Screen name="History" component={HistoryNavigator} options={{ headerShown: false, title: 'HISTORY' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false, title: 'PROFILE' }} />
     </Tab.Navigator>
@@ -304,6 +317,8 @@ export default function App() {
                   <RootStack.Screen name="Main" component={MainTabs} />
                   <RootStack.Screen name="Capture" component={CaptureNavigator} />
                   <RootStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS' }} />
+                  <RootStack.Screen name="UpdateTree" component={UpdateTreeScreen} options={{ title: 'UPDATE TREE', headerShown: false }} />
+                  <RootStack.Screen name="Map" component={TreeMapScreen} options={{ title: 'MAP', headerShown: false }} />
                 </>
               )}
             </RootStack.Navigator>

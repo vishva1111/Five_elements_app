@@ -33,6 +33,7 @@ interface HistoryItem {
   longitude?: number;
   surveyor?: string;
   project_id?: string;
+  tree_id?: string;
 }
 
 const CATEGORIES: { key: FilterCategory; label: string; icon: string }[] = [
@@ -136,6 +137,7 @@ export default function HistoryScreen() {
       longitude: t.longitude,
       surveyor: t.surveyor || meta.surveyor,
       project_id: t.project_id,
+      tree_id: t.tree_id,
     });
   });
 
@@ -256,7 +258,7 @@ export default function HistoryScreen() {
         <View style={styles.cardContent}>
           <View style={styles.cardTop}>
             <View style={styles.cardTitleWrap}>
-              <Text style={styles.taskId}>ID: {item.id.slice(0, 8).toUpperCase()}</Text>
+              <Text style={styles.taskId}>ID: {item.tree_id || item.id.slice(0, 8).toUpperCase()}</Text>
               <Text style={styles.taskName} numberOfLines={1}>{item.title}</Text>
             </View>
             {/* Status badge on right */}

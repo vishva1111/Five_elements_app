@@ -13,8 +13,8 @@ import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { HistoryStackParamList, TreeRecord } from '../../types';
-import { fetchTreeById } from '../../services/treeService';
+import { HistoryStackParamList, TreeRecord, getMonitoringRoundInfo } from '../../types';
+import { fetchTreeById, fetchTreeMonitoringRecords, getTreeMonitoringRound } from '../../services/treeService';
 import MapPreview from '../../components/MapPreview';
 
 type Route = RouteProp<HistoryStackParamList, 'TreeDetail'>;
@@ -33,6 +33,8 @@ export default function TreeDetailScreen() {
   const { treeId } = route.params;
   const [tree, setTree] = useState<TreeRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currentRound, setCurrentRound] = useState(1);
+  const [monitoringCount, setMonitoringCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,6 +43,15 @@ export default function TreeDetailScreen() {
         if (!cancelled) {
           setTree(data);
           setLoading(false);
+          // Fetch monitoring round
+          if (data?.tree_id) {
+            getTreeMonitoringRound(data.tree_id).then((round) => {
+              if (!cancelled) setCurrentRound(round);
+            });
+            fetchTreeMonitoringRecords(data.tree_id).then(({ data: records }) => {
+              if (!cancelled) setMonitoringCount(records?.length ?? 0);
+            });
+          }
         }
       })
       .catch((err) => {
@@ -159,6 +170,43 @@ export default function TreeDetailScreen() {
           <Text style={styles.scientificName}>{scientificName}</Text>
         ) : null}
 
+        {/* Monitoring Round Indicator + Update Button */}
+        <View style={styles.monitoringSection}>
+          <View style={styles.roundInfoCard}>
+            <View style={styles.roundInfoLeft}>
+              <View style={[styles.roundDot, { backgroundColor: getMonitoringRoundInfo(currentRound).color }]}>
+                <Ionicons name={getMonitoringRoundInfo(currentRound).icon as any} size={14} color="#fff" />
+              </View>
+              <View>
+                <Text style={styles.roundTitle}>
+                  Round {currentRound}: {getMonitoringRoundInfo(currentRound).label}
+                </Text>
+                <Text style={styles.roundDesc}>
+                  {monitoringCount > 0
+                    ? `${monitoringCount} monitoring record${monitoringCount > 1 ? 's' : ''} recorded`
+                    : 'No monitoring records yet'}
+                </Text>
+              </View>
+            </View>
+            {!tree.locked && (
+              <TouchableOpacity
+                style={styles.updateBtn}
+                onPress={() => {
+                  const displayId = tree.tree_id || `TREE-${tree.id.slice(0, 8).toUpperCase()}`;
+                  navigation.navigate('UpdateTree', {
+                    treeId: tree.id,
+                    treeIdDisplay: displayId,
+                    currentRound,
+                  });
+                }}
+              >
+                <Ionicons name="create-outline" size={16} color="#fff" />
+                <Text style={styles.updateBtnText}>Update</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
         {/* Measurements Card */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
@@ -241,7 +289,7 @@ export default function TreeDetailScreen() {
           <TouchableOpacity
             style={styles.mapsBtn}
             onPress={() => {
-              navigation.getParent()?.navigate('Map', { focusTreeId: tree.id });
+              navigation.getParent()?.getParent()?.navigate('Map', { focusTreeId: tree.id });
             }}
           >
             <Ionicons name="map" size={16} color="#fff" />
@@ -374,6 +422,40 @@ const styles = StyleSheet.create({
   idText: { fontSize: 12, fontWeight: '800', color: '#1a5c2a', fontFamily: 'monospace' },
   species: { fontSize: 23, fontWeight: '800', color: '#1a1a1a' },
   scientificName: { fontSize: 13, color: '#666', fontStyle: 'italic', marginTop: -2 },
+  monitoringSection: { marginTop: 4 },
+  roundInfoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+    elevation: 3,
+    shadowColor: '#1a5c2a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+  },
+  roundInfoLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  roundDot: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roundTitle: { fontSize: 14, fontWeight: '800', color: '#1a5c2a' },
+  roundDesc: { fontSize: 11, color: '#888', marginTop: 2 },
+  updateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F09125',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  updateBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   conditionBadge: {
     flexDirection: 'row',
     alignItems: 'center',

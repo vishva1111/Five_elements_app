@@ -197,6 +197,49 @@ export default function MapPickerScreen() {
     startGNSSCapture();
   }, [startGNSSCapture]);
 
+  const startGPSFallback = useCallback(async () => {
+    if (!mountedRef.current) return;
+    setCapturing(true);
+    setGnssError(null);
+    setResultAccuracy(null);
+    setResultSamples(0);
+    setProgress('Fetching GPS location…');
+
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        throw new Error('Location permission denied');
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.BestForNavigation,
+      });
+
+      if (!mountedRef.current) return;
+
+      const result: Coordinates = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        accuracy: location.coords.accuracy ?? undefined,
+      };
+
+      setCoords(result);
+      setResultAccuracy(location.coords.accuracy ?? null);
+      setResultSamples(0);
+      setCapturing(false);
+      setProgress('');
+
+      webViewRef.current?.postMessage(
+        JSON.stringify({ action: 'move', lat: result.latitude, lng: result.longitude })
+      );
+    } catch (err: any) {
+      if (!mountedRef.current) return;
+      setGnssError(err?.message ?? 'GPS fetch failed');
+      setCapturing(false);
+      setProgress('');
+    }
+  }, []);
+
   const handleWebViewMessage = useCallback((event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
@@ -210,7 +253,7 @@ export default function MapPickerScreen() {
 
   const handleConfirm = () => {
     if (!coords) {
-      Alert.alert('Location Required', 'Wait for GNSS capture to finish or tap on the map.');
+      Alert.alert('Location Required', 'Wait for GNSS/GPS capture to finish or tap on the map.');
       return;
     }
     navigation.navigate('TreeForm', { photoUri, coords });
@@ -247,11 +290,22 @@ export default function MapPickerScreen() {
 
         {/* GNSS error */}
         {gnssError && !capturing && (
-          <TouchableOpacity style={styles.errorBox} onPress={handleRetake} activeOpacity={0.7}>
-            <Ionicons name="alert-circle" size={18} color="#ef4444" />
-            <Text style={styles.errorText}>{gnssError}</Text>
-            <Text style={styles.errorRetry}>Tap to retry</Text>
-          </TouchableOpacity>
+          <View style={styles.errorBox}>
+            <View style={styles.errorRow}>
+              <Ionicons name="alert-circle" size={18} color="#ef4444" />
+              <Text style={styles.errorText}>{gnssError}</Text>
+            </View>
+            <View style={styles.errorActions}>
+              <TouchableOpacity style={styles.retryBtn} onPress={handleRetake} activeOpacity={0.7}>
+                <Ionicons name="refresh" size={14} color="#1a5c2a" />
+                <Text style={styles.retryBtnText}>Retry GNSS</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.gpsFallbackBtn} onPress={startGPSFallback} activeOpacity={0.7}>
+                <Ionicons name="navigate" size={14} color="#fff" />
+                <Text style={styles.gpsFallbackText}>Use GPS</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         )}
 
         {/* Coordinates + accuracy display */}
@@ -260,7 +314,7 @@ export default function MapPickerScreen() {
           <Text style={styles.coordsValue}>
             {coords
               ? `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`
-              : 'Starting GNSS capture…'}
+              : 'Starting GNSS capture… (tap map to set manually)'}
           </Text>
           {resultAccuracy !== null && (
             <View style={styles.accuracyRow}>
@@ -345,9 +399,6 @@ const styles = StyleSheet.create({
   },
   progressText: { fontSize: 13, fontWeight: '600', color: '#1a5c2a', flex: 1 },
   errorBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
     backgroundColor: '#FEF0E3',
     borderRadius: 14,
     padding: 14,
@@ -355,8 +406,41 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#fde047',
   },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
   errorText: { fontSize: 13, fontWeight: '500', color: '#ef4444', flex: 1 },
-  errorRetry: { fontSize: 11, fontWeight: '700', color: '#F09125' },
+  errorActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  retryBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: '#1a5c2a',
+    borderRadius: 10,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+  },
+  retryBtnText: { fontSize: 13, fontWeight: '700', color: '#1a5c2a' },
+  gpsFallbackBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#F09125',
+    borderRadius: 10,
+    paddingVertical: 10,
+  },
+  gpsFallbackText: { fontSize: 13, fontWeight: '700', color: '#fff' },
   coordsBox: {
     backgroundColor: '#f0fdf4',
     borderRadius: 14,
