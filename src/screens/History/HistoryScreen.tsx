@@ -13,7 +13,8 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useTaskStore } from '../../store/taskStore';
-import { fetchMyTrees } from '../../services/treeService';
+import { fetchMyTrees, backfillProjectTreeIds } from '../../services/treeService';
+import { parseTreeMeta, resolveTreeId, TREE_ID_PLACEHOLDER } from '../../utils/treeId';
 import { fetchAgentTasks } from '../../services/taskService';
 import { TreeCondition, LandType, Task, TreeRecord } from '../../types';
 import { Ionicons } from '@expo/vector-icons';
@@ -95,6 +96,15 @@ export default function HistoryScreen() {
     if (seq !== loadSeqRef.current) return;
     if (treesRes.data) setTrees(treesRes.data);
     if (tasksRes.data) setTasks(tasksRes.data);
+
+    // Trees captured before project IDs existed get one assigned + persisted so
+    // every card shows its project tree ID (e.g. ARAV-001)
+    if (treesRes.data && treesRes.data.length > 0) {
+      backfillProjectTreeIds(treesRes.data).then((enriched) => {
+        if (seq !== loadSeqRef.current || !enriched) return;
+        setTrees(enriched);
+      });
+    }
   }, [userId, setTrees, setTasks]);
 
   useFocusEffect(
@@ -120,9 +130,7 @@ export default function HistoryScreen() {
 
   // Trees
   trees.forEach((t) => {
-    let meta: Record<string, any> = {};
-    const metaMatch = (t.notes || '').match(/##META##({.*})/s);
-    if (metaMatch) { try { meta = JSON.parse(metaMatch[1]); } catch {} }
+    const meta = parseTreeMeta(t.notes);
     const rawCondition = t.tree_condition || meta.tree_condition || 'Healthy';
     const normalizedCondition = rawCondition.charAt(0).toUpperCase() + rawCondition.slice(1).toLowerCase();
     allItems.push({
@@ -137,7 +145,7 @@ export default function HistoryScreen() {
       longitude: t.longitude,
       surveyor: t.surveyor || meta.surveyor,
       project_id: t.project_id,
-      tree_id: t.tree_id,
+      tree_id: resolveTreeId(t),
     });
   });
 
@@ -258,7 +266,9 @@ export default function HistoryScreen() {
         <View style={styles.cardContent}>
           <View style={styles.cardTop}>
             <View style={styles.cardTitleWrap}>
-              <Text style={styles.taskId}>ID: {item.tree_id || item.id.slice(0, 8).toUpperCase()}</Text>
+              <Text style={styles.taskId}>
+                ID: <Text style={styles.taskIdValue}>{item.tree_id || TREE_ID_PLACEHOLDER}</Text>
+              </Text>
               <Text style={styles.taskName} numberOfLines={1}>{item.title}</Text>
             </View>
             {/* Status badge on right */}
@@ -486,6 +496,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#999',
     marginBottom: 2,
+  },
+  taskIdValue: {
+    color: '#1a5c2a',
+    fontFamily: 'monospace',
+    fontWeight: '800',
   },
   taskName: {
     fontSize: 14,

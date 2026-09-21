@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { TreeRecord } from '../types';
+import { displayTreeId } from '../utils/treeId';
 
 interface Props {
   tree: TreeRecord;
@@ -23,7 +24,9 @@ export default function TreeCard({ tree, onPress }: Props) {
     year: 'numeric',
   });
 
-  const treeUniqueId = tree.tree_id || tree.id.slice(0, 8).toUpperCase();
+  // Project-based tree ID only — tree_id column, with the legacy ##META## notes
+  // fallback. The database uuid is never shown.
+  const treeUniqueId = displayTreeId(tree);
   const conditionColor = CONDITION_COLORS[tree.tree_condition || 'Healthy'] || '#16a34a';
 
   return (
@@ -42,7 +45,9 @@ export default function TreeCard({ tree, onPress }: Props) {
       {/* Info right */}
       <View style={styles.info}>
         <View style={styles.topRow}>
-          <Text style={styles.taskId}>ID: {treeUniqueId}</Text>
+          <Text style={styles.taskId}>
+            ID: <Text style={styles.taskIdValue}>{treeUniqueId}</Text>
+          </Text>
           <Text style={styles.taskName} numberOfLines={1}>{tree.species || 'Tree'}</Text>
         </View>
 
@@ -119,6 +124,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#999',
     marginBottom: 2,
+  },
+  taskIdValue: {
+    color: '#1a5c2a',
+    fontFamily: 'monospace',
+    fontWeight: '800',
   },
   taskName: {
     fontSize: 14,

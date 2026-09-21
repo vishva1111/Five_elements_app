@@ -1,6 +1,112 @@
 import { supabase } from './supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TreeRecord, TreeRecordInsert, TreeMonitoringRecord, ApiResponse, Project, User } from '../types';
+import {
+  buildProjectTreeId,
+  makeProjectPrefix,
+  nextProjectSequence,
+  resolveTreeId,
+} from '../utils/treeId';
+
+// ─── Schema capability detection ─────────────────────────────────────────────
+// The deployed database may not have run the migrations yet: the tree_id column
+// or the tree_monitoring_records table can be absent. Detect that once and
+// degrade gracefully (device-local IDs, friendly errors) instead of retrying and
+// warning on every single call.
+export const SETUP_SQL_FILE = 'supabase/migrations/002_create_tree_monitoring.sql';
+
+let setupNoticeShown = false;
+function warnNeedsMigration(what: string): void {
+  if (setupNoticeShown) return;
+  setupNoticeShown = true;
+  console.warn(
+    `[TreeApp] Database is missing ${what}.\n` +
+      `         Run ${SETUP_SQL_FILE} once in the Supabase SQL Editor → New query.\n` +
+      `         Until then, tree IDs are stored on this device only and monitoring ` +
+      `rounds cannot be saved.`
+  );
+}
+
+// PostgREST / Postgres "missing column or table" detection
+export function isMissingSchemaError(error: any): boolean {
+  const code = error?.code;
+  if (code === 'PGRST204' || code === 'PGRST205' || code === '42703' || code === '42P01') {
+    return true;
+  }
+  const message = String(error?.message ?? error ?? '').toLowerCase();
+  return (
+    message.includes('does not exist') ||
+    (message.includes('schema cache') && message.includes('could not find'))
+  );
+}
+
+// True once we know tree_records.tree_id cannot be read/written (pre-migration).
+// Re-probed after the TTL so that running the migration is picked up without an
+// app restart. Keeps failing queries from being retried on every call.
+const TREE_ID_COLUMN_REPROBE_MS = 60_000;
+let treeIdColumnMissing = false;
+let treeIdColumnCheckedAt = 0;
+
+function treeIdColumnUnavailable(): boolean {
+  if (!treeIdColumnMissing) return false;
+  if (Date.now() - treeIdColumnCheckedAt > TREE_ID_COLUMN_REPROBE_MS) {
+    treeIdColumnMissing = false;
+    return false;
+  }
+  return true;
+}
+
+function markTreeIdColumnMissing(): void {
+  treeIdColumnMissing = true;
+  treeIdColumnCheckedAt = Date.now();
+  warnNeedsMigration('the tree_records.tree_id column');
+}
+
+// ─── Device-local tree IDs ───────────────────────────────────────────────────
+// Keeps the assigned {PREFIX}-{SEQ} stable across app restarts even when the
+// database cannot store it yet. The database always wins: this map is only
+// consulted when neither the tree_id column nor the legacy ##META## notes have
+// an ID, and an entry is dropped as soon as a DB write succeeds.
+const LOCAL_TREE_IDS_KEY = 'treeapp_local_tree_ids';
+let localTreeIds: Record<string, string> | null = null;
+let localTreeIdsLoad: Promise<Record<string, string>> | null = null;
+
+async function loadLocalTreeIds(): Promise<Record<string, string>> {
+  if (localTreeIds) return localTreeIds;
+  if (!localTreeIdsLoad) {
+    localTreeIdsLoad = AsyncStorage.getItem(LOCAL_TREE_IDS_KEY)
+      .then((raw) => {
+        localTreeIds = raw ? JSON.parse(raw) : {};
+        return localTreeIds as Record<string, string>;
+      })
+      .catch(() => {
+        localTreeIds = {};
+        return localTreeIds as Record<string, string>;
+      })
+      .finally(() => {
+        localTreeIdsLoad = null;
+      });
+  }
+  return localTreeIdsLoad;
+}
+
+async function saveLocalTreeId(recordId: string, treeId: string): Promise<void> {
+  try {
+    const map = await loadLocalTreeIds();
+    if (map[recordId] === treeId) return;
+    map[recordId] = treeId;
+    await AsyncStorage.setItem(LOCAL_TREE_IDS_KEY, JSON.stringify(map));
+  } catch {}
+}
+
+async function clearLocalTreeId(recordId: string): Promise<void> {
+  try {
+    const map = await loadLocalTreeIds();
+    if (!(recordId in map)) return;
+    delete map[recordId];
+    await AsyncStorage.setItem(LOCAL_TREE_IDS_KEY, JSON.stringify(map));
+  } catch {}
+}
 
 // ─── Transform raw Supabase row into TreeRecord with joined project_name ───────
 function mapTreeRecord(raw: any): TreeRecord {
@@ -519,40 +625,219 @@ export async function fetchTreesInBounds(
   return { data: trees, error: null };
 }
 
+// Fallback numbering used when the tree_id column was not deployed yet: keeps
+// IDs unique and sequential within the session instead of repeating "-001".
+const sessionSequences = new Map<string, number>();
+
+function nextSessionSequence(prefix: string): number {
+  const next = (sessionSequences.get(prefix) ?? 0) + 1;
+  sessionSequences.set(prefix, next);
+  return next;
+}
+
 // ─── Project-wise Sequential Tree ID Generator ──────────────────────────────
 // Format: {PROJECT_PREFIX}-{SEQ}  e.g. ARAV-001, ARAV-002, BERA-001
 // Prefix = first 4 uppercase letters of project name (stripped of spaces/symbols)
-
-export function makeProjectPrefix(projectName: string): string {
-  const clean = projectName.replace(/[^a-zA-Z]/g, '').toUpperCase();
-  return clean.slice(0, 4).padEnd(4, 'X');
-}
 
 export async function generateProjectTreeId(
   projectId: string | null | undefined,
   projectName?: string
 ): Promise<string> {
-  if (!projectId || !projectName) {
+  const prefix = projectName ? makeProjectPrefix(projectName) : 'TREE';
+
+  if (!projectId) {
     const seq = String(Date.now()).slice(-4).padStart(4, '0');
     return `TREE-${seq}`;
   }
 
-  const prefix = makeProjectPrefix(projectName);
-
-  const { count, error } = await supabase
+  // Sequence off the highest ID already used in this project (not the row count,
+  // which would hand out duplicates when rows were deleted or never got an ID)
+  const { data, error } = await supabase
     .from('tree_records')
-    .select('*', { count: 'exact', head: true })
+    .select('tree_id')
     .eq('project_id', projectId);
 
   if (error) {
-    console.warn('[TreeApp] generateProjectTreeId count error:', error.message);
+    if (isMissingSchemaError(error)) {
+      markTreeIdColumnMissing();
+      return buildProjectTreeId(prefix, nextSessionSequence(prefix));
+    }
+    console.warn('[TreeApp] generateProjectTreeId lookup error:', error.message);
     const seq = String(Date.now()).slice(-4).padStart(4, '0');
     return `${prefix}-${seq}`;
   }
 
-  const nextNum = (count ?? 0) + 1;
-  const seq = String(nextNum).padStart(3, '0');
-  return `${prefix}-${seq}`;
+  return buildProjectTreeId(prefix, nextProjectSequence(data, prefix));
+}
+
+// ─── Guarantee every tree has a project-based tree_id ────────────────────────
+// Used by the tree cards / tree details screens so no screen ever falls back to
+// the database uuid. Resolution order:
+//   1. tree_id column          → returned as is
+//   2. ##META## notes (legacy) → persisted into tree_id, then returned
+//   3. nothing yet             → next free {PREFIX}-{SEQ} for the project,
+//                                persisted, then returned
+// Assignment is serialized per project so two trees can never be given the same
+// sequence number, and the value is cached in memory for the session.
+
+const treeIdCache = new Map<string, string>();
+const treeIdLocks = new Map<string, Promise<string>>();
+
+async function runEnsureProjectTreeId(tree: TreeRecord): Promise<string> {
+  const direct = typeof tree.tree_id === 'string' ? tree.tree_id.trim() : '';
+  if (direct) return direct;
+
+  // 1. Legacy records kept the ID inside the ##META## notes blob
+  const legacyId = resolveTreeId(tree);
+  if (legacyId) {
+    if (treeIdColumnUnavailable()) {
+      // Cannot move it into the column yet — keep using it
+      tree.tree_id = legacyId;
+      return legacyId;
+    }
+    const { error } = await supabase
+      .from('tree_records')
+      .update({ tree_id: legacyId })
+      .eq('id', tree.id);
+
+    if (error) {
+      if (isMissingSchemaError(error)) {
+        markTreeIdColumnMissing();
+      } else {
+        console.warn('[TreeApp] Could not persist legacy tree_id:', error.message);
+      }
+    } else {
+      tree.tree_id = legacyId;
+      clearLocalTreeId(tree.id);
+    }
+    return legacyId;
+  }
+
+  // 2. An ID assigned on this device earlier (before the migration was run)
+  const local = (await loadLocalTreeIds())[tree.id];
+  if (local) {
+    tree.tree_id = local;
+    return local;
+  }
+
+  // 3. Build the next project-scoped sequential ID
+  let prefix = 'TREE';
+  if (tree.project_id) {
+    const { data: project } = await supabase
+      .from('projects')
+      .select('id, name')
+      .eq('id', tree.project_id)
+      .maybeSingle();
+
+    const projectName = (project as any)?.name ?? tree.project_name;
+    if (projectName) prefix = makeProjectPrefix(projectName);
+  }
+
+  let rows: Array<{ tree_id?: string | null }> = [];
+  let columnUnavailable = treeIdColumnUnavailable();
+  if (!columnUnavailable) {
+    const query = supabase.from('tree_records').select('tree_id');
+    const { data, error } = tree.project_id
+      ? await query.eq('project_id', tree.project_id)
+      : await query;
+    if (error) {
+      columnUnavailable = true;
+      if (isMissingSchemaError(error)) {
+        markTreeIdColumnMissing();
+      }
+    } else {
+      rows = (data ?? []) as any[];
+    }
+  }
+
+  let seq = columnUnavailable
+    ? nextSessionSequence(prefix)
+    : nextProjectSequence(rows, prefix);
+  let newTreeId = buildProjectTreeId(prefix, seq);
+
+  // 4. Persist it, retrying with the next number if that ID is already taken
+  for (let attempt = 0; attempt < 5 && !treeIdColumnUnavailable(); attempt++) {
+    const { error } = await supabase
+      .from('tree_records')
+      .update({ tree_id: newTreeId })
+      .eq('id', tree.id);
+
+    if (!error) {
+      tree.tree_id = newTreeId;
+      clearLocalTreeId(tree.id);
+      return newTreeId;
+    }
+
+    if (isMissingSchemaError(error)) {
+      // Column not deployed yet: keep the ID on the device so it stays stable
+      markTreeIdColumnMissing();
+      break;
+    }
+
+    const message = (error.message || '').toLowerCase();
+    const duplicate =
+      error.code === '23505' || message.includes('duplicate') || message.includes('unique');
+    console.warn('[TreeApp] Could not persist project tree_id:', error.message);
+    if (!duplicate) break;
+
+    seq += 1;
+    newTreeId = buildProjectTreeId(prefix, seq);
+  }
+
+  // Missing column / offline / read-only user: still show a project ID. It is
+  // remembered on the device, so the same value comes back on the next load.
+  tree.tree_id = newTreeId;
+  await saveLocalTreeId(tree.id, newTreeId);
+  return newTreeId;
+}
+
+export async function ensureProjectTreeId(tree: TreeRecord): Promise<string> {
+  if (!tree?.id) return '';
+  const cached = treeIdCache.get(tree.id);
+  if (cached) return cached;
+
+  const projectKey = tree.project_id ?? 'no-project';
+  const previous = treeIdLocks.get(projectKey) ?? Promise.resolve('');
+  const task = previous
+    .catch(() => '')
+    .then(() => runEnsureProjectTreeId(tree))
+    .then((id) => {
+      if (id) treeIdCache.set(tree.id, id);
+      return id;
+    });
+
+  treeIdLocks.set(projectKey, task);
+  try {
+    return await task;
+  } catch (err: any) {
+    console.warn('[TreeApp] ensureProjectTreeId failed:', err?.message ?? err);
+    return resolveTreeId(tree);
+  } finally {
+    if (treeIdLocks.get(projectKey) === task) treeIdLocks.delete(projectKey);
+  }
+}
+
+// Backfill a list of records in one go — the same list, with tree_id filled in
+export async function backfillProjectTreeIds(
+  trees: TreeRecord[]
+): Promise<TreeRecord[]> {
+  const list = trees ?? [];
+  // Pending = the tree_id column is empty. Such a record may still carry a
+  // legacy ##META## id that has to be moved into the column.
+  const pending = list.filter(
+    (t) => t && !(typeof t.tree_id === 'string' && t.tree_id.trim())
+  );
+  if (pending.length === 0) return list;
+
+  for (const tree of pending) {
+    await ensureProjectTreeId(tree);
+  }
+
+  return list.map((t) => {
+    if (!t) return t;
+    const resolved = resolveTreeId(t);
+    return resolved && resolved !== t.tree_id ? { ...t, tree_id: resolved } : t;
+  });
 }
 
 // ─── Migrate ALL existing trees to project-wise sequential IDs ──────────────
@@ -577,6 +862,9 @@ export async function migrateAllTreeIds(): Promise<{
     .order('submitted_at', { ascending: true });
 
   if (fetchError || !allTrees) {
+    if (fetchError && isMissingSchemaError(fetchError)) {
+      markTreeIdColumnMissing();
+    }
     return { updated, errors, details: [fetchError?.message ?? 'Failed to fetch trees'] };
   }
 
@@ -616,7 +904,7 @@ export async function migrateAllTreeIds(): Promise<{
 
       if (updateError) {
         errors++;
-        details.push(`  ✗ ${tree.tree_id || tree.id.slice(0, 8)} → ${newId}: ${updateError.message}`);
+        details.push(`  ✗ ${tree.tree_id} → ${newId}: ${updateError.message}`);
       } else {
         updated++;
       }
@@ -638,7 +926,7 @@ export async function migrateAllTreeIds(): Promise<{
 
       if (updateError) {
         errors++;
-        details.push(`  ✗ ${tree.tree_id || tree.id.slice(0, 8)} → ${newId}: ${updateError.message}`);
+        details.push(`  ✗ ${tree.tree_id} → ${newId}: ${updateError.message}`);
       } else {
         updated++;
       }
@@ -697,6 +985,102 @@ export async function saveRecentTreeSearch(treeId: string): Promise<void> {
   } catch {}
 }
 
+// ─── Migrate a single tree ID to project-wise sequential format ──────────────
+// Updates the tree's tree_id and all its monitoring records to match the project.
+// Returns the new tree_id.
+export async function migrateTreeIdToProject(
+  treeId: string, // db primary key of the tree record
+  projectId: string,
+  projectName: string
+): Promise<{ newTreeId: string; errors: string[] }> {
+  const errors: string[] = [];
+
+  // 1. Fetch the tree record
+  const { data: tree, error: treeError } = await supabase
+    .from('tree_records')
+    .select('*')
+    .eq('id', treeId)
+    .single();
+
+  if (treeError) {
+    return { newTreeId: '', errors: [treeError.message] };
+  }
+
+  // 2. Generate the new project-based tree_id (next free number for the project)
+  const prefix = makeProjectPrefix(projectName);
+  let sequence = 1;
+  let sequenceKnown = false;
+
+  if (!treeIdColumnUnavailable()) {
+    const { data: projectTrees, error: seqError } = await supabase
+      .from('tree_records')
+      .select('tree_id')
+      .eq('project_id', projectId);
+
+    if (seqError) {
+      if (isMissingSchemaError(seqError)) {
+        markTreeIdColumnMissing();
+      } else {
+        errors.push(`Sequence lookup error: ${seqError.message}`);
+        return { newTreeId: '', errors };
+      }
+    } else {
+      sequence = nextProjectSequence(projectTrees, prefix);
+      sequenceKnown = true;
+    }
+  }
+
+  if (!sequenceKnown) sequence = nextSessionSequence(prefix);
+
+  const newTreeId = buildProjectTreeId(prefix, sequence);
+
+  // 3. Check if already correct (same ID)
+  if (tree.tree_id === newTreeId) {
+    return { newTreeId, errors };
+  }
+
+  // 4. Update the tree record's tree_id
+  const { error: updateError } = await supabase
+    .from('tree_records')
+    .update({ tree_id: newTreeId })
+    .eq('id', treeId);
+
+  if (updateError) {
+    if (isMissingSchemaError(updateError)) {
+      markTreeIdColumnMissing();
+      // Still hand the new project-format ID to the caller so the UI shows it
+      await saveLocalTreeId(treeId, newTreeId);
+      return { newTreeId, errors };
+    }
+    errors.push(`Tree update error: ${updateError.message}`);
+    return { newTreeId: '', errors };
+  }
+
+  await clearLocalTreeId(treeId);
+
+  // 5. Update all monitoring records to use the new tree_id
+  // Use the OLD tree_id (before update) to find monitoring records
+  const oldTreeId = resolveTreeId(tree);
+  if (oldTreeId) {
+    const { error: monitorError } = await supabase
+      .from('tree_monitoring_records')
+      .update({ tree_id: newTreeId })
+      .eq('tree_id', oldTreeId);
+
+    if (monitorError) {
+      if (isMissingSchemaError(monitorError)) {
+        warnNeedsMigration('the tree_monitoring_records table');
+      } else {
+        errors.push(`Monitoring records update error: ${monitorError.message}`);
+      }
+      // Note: tree record already updated, but monitoring not updated
+      return { newTreeId, errors };
+    }
+  }
+
+  return { newTreeId, errors };
+}
+
 // ─── Lookup tree by user-facing tree_id (e.g. "ARAV-001") ──────────────────
 export async function fetchTreeByTreeId(
   treeId: string
@@ -710,7 +1094,7 @@ export async function fetchTreeByTreeId(
     .limit(1)
     .maybeSingle();
 
-  // Fallback: case-insensitive search
+  // Fallback 1: case-insensitive search
   if (!data && !error) {
     const retry = await supabase
       .from('tree_records')
@@ -721,6 +1105,43 @@ export async function fetchTreeByTreeId(
       .maybeSingle();
     data = retry.data;
     error = retry.error;
+  }
+
+  // Fallback 2: If treeId looks like a project-prefixed ID (e.g. "ARAV-001"),
+  // but not found, try searching for any tree with that number in ANY project
+  // (handles unmigrated trees that may have different prefixes)
+  if (!data && !error && treeId.includes('-')) {
+    const parts = treeId.split('-');
+    if (parts.length === 2) {
+      const numPart = parts[1];
+      // Search for trees where tree_id ends with this number
+      const likePattern = `%${numPart}`;
+      const retry2 = await supabase
+        .from('tree_records')
+        .select('*, projects(name)')
+        .ilike('tree_id', likePattern)
+        .order('submitted_at', { ascending: false })
+        .limit(5)
+        .maybeSingle();
+      if (retry2.data) {
+        data = retry2.data;
+        error = retry2.error;
+      }
+    }
+  }
+
+  // Fallback 3: If still not found and treeId looks like old format (no dash),
+  // search by the ID directly (might be a raw DB id)
+  if (!data && !error && treeId.length <= 12 && !treeId.includes('-')) {
+    const retry3 = await supabase
+      .from('tree_records')
+      .select('*, projects(name)')
+      .eq('id', treeId)
+      .maybeSingle();
+    if (retry3.data) {
+      data = retry3.data;
+      error = retry3.error;
+    }
   }
 
   if (error) {
@@ -734,61 +1155,26 @@ export async function fetchTreeByTreeId(
   return { data: await attachProjectName(mapTreeRecord(data)), error: null };
 }
 
-// ─── Lookup tree by tree_id within a specific project ────────────────────────
-// Tries exact match first, then case-insensitive, then UUID fallback
-export async function fetchTreeByTreeIdInProject(
-  treeId: string,
-  projectId: string
-): Promise<ApiResponse<TreeRecord>> {
-  // Try exact match within project
-  let { data, error } = await supabase
-    .from('tree_records')
-    .select('*, projects(name)')
-    .eq('tree_id', treeId)
-    .eq('project_id', projectId)
-    .order('submitted_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+// ─── Monitoring Round Functions ──────────────────────────────────────────────
 
-  // Fallback: case-insensitive search within project
-  if (!data && !error) {
-    const retry = await supabase
-      .from('tree_records')
-      .select('*, projects(name)')
-      .ilike('tree_id', treeId)
-      .eq('project_id', projectId)
-      .order('submitted_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    data = retry.data;
-    error = retry.error;
-  }
+// Shown to the user when the monitoring table has not been created yet
+export const MONITORING_SETUP_ERROR =
+  'Monitoring rounds are not available yet: the database table is missing. ' +
+  `Run ${SETUP_SQL_FILE} once in the Supabase SQL Editor, then reload the app.`;
 
-  // Fallback: try matching by UUID if treeId looks like a UUID prefix
-  if (!data && !error && treeId.length >= 8) {
-    const retry = await supabase
-      .from('tree_records')
-      .select('*, projects(name)')
-      .eq('id', treeId)
-      .eq('project_id', projectId)
-      .limit(1)
-      .maybeSingle();
-    data = retry.data;
-    error = retry.error;
-  }
+// Set once the monitoring table is found to be missing (pre-migration). Lets the
+// Update screens show a warning instead of silently rendering an empty history.
+let monitoringSetupRequired = false;
 
-  if (error) {
-    return { data: null, error: error.message };
-  }
-
-  if (!data) {
-    return { data: null, error: `No tree found with ID "${treeId}" in this project` };
-  }
-
-  return { data: await attachProjectName(mapTreeRecord(data)), error: null };
+function markMonitoringSetupMissing(): void {
+  monitoringSetupRequired = true;
+  warnNeedsMigration('the tree_monitoring_records table');
 }
 
-// ─── Monitoring Round Functions ──────────────────────────────────────────────
+/** True once a call proved the monitoring table has not been created yet. */
+export function isMonitoringSetupRequired(): boolean {
+  return monitoringSetupRequired;
+}
 
 export async function fetchTreeMonitoringRecords(
   treeId: string
@@ -800,6 +1186,11 @@ export async function fetchTreeMonitoringRecords(
     .order('monitoring_round', { ascending: true });
 
   if (error) {
+    if (isMissingSchemaError(error)) {
+      // Expected until the migration is run — warn once, not on every call
+      markMonitoringSetupMissing();
+      return { data: [], error: null };
+    }
     console.warn('[TreeApp] fetchTreeMonitoringRecords error:', error.message);
     return { data: [], error: null };
   }
@@ -816,6 +1207,7 @@ export async function getTreeMonitoringRound(
     .eq('tree_id', treeId);
 
   if (error) {
+    if (isMissingSchemaError(error)) markMonitoringSetupMissing();
     return 1;
   }
 
@@ -848,6 +1240,10 @@ export async function insertMonitoringRecord(record: {
     .single();
 
   if (error) {
+    if (isMissingSchemaError(error)) {
+      markMonitoringSetupMissing();
+      return { data: null, error: MONITORING_SETUP_ERROR };
+    }
     console.warn('[TreeApp] insertMonitoringRecord error:', error.message);
     return { data: null, error: error.message };
   }
@@ -873,6 +1269,16 @@ export async function updateTreeFromMonitoring(
     .single();
 
   if (error) {
+    if (isMissingSchemaError(error)) {
+      // Measurement columns (dbh_cm, height_m, …) are not deployed yet
+      warnNeedsMigration('the measurement columns on tree_records');
+      return {
+        data: null,
+        error:
+          'Measurements could not be saved: the database is missing the measurement ' +
+          `columns. Run ${SETUP_SQL_FILE} once in the Supabase SQL Editor.`,
+      };
+    }
     return { data: null, error: error.message };
   }
 

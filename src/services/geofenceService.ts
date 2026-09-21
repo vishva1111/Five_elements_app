@@ -1,5 +1,6 @@
 import * as Location from 'expo-location';
 import { GeofenceZone, GeofenceEvent, GeofenceAlert, TreeRecord } from '../types';
+import { displayTreeId } from '../utils/treeId';
 
 // ─── Haversine distance between two coordinates (in meters) ──────────────────
 // Used for geofence entry/exit detection. No external library needed.
@@ -39,7 +40,7 @@ export function createZonesFromTrees(
       latitude: t.latitude,
       longitude: t.longitude,
       radius: radiusMeters,
-      label: t.species || t.tree_id || 'Tree',
+      label: t.species || displayTreeId(t, 'Tree'),
     }));
 }
 

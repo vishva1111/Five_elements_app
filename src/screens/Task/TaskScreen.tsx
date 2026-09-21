@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useTaskStore } from '../../store/taskStore';
-import { fetchMyTrees, fetchAllProjects } from '../../services/treeService';
+import { fetchMyTrees, fetchAllProjects, backfillProjectTreeIds } from '../../services/treeService';
 import { fetchAgentTasks, startTask } from '../../services/taskService';
 import {
   loadLocalTasks,
@@ -26,7 +26,8 @@ import {
   refreshLocalProgress,
   isLocalTask,
 } from '../../services/localTaskService';
-import { Task, Project } from '../../types';
+import { Task, Project, TreeRecord } from '../../types';
+import { displayTreeId, parseTreeMeta, resolveTreeId } from '../../utils/treeId';
 import CircularProgress from '../../components/CircularProgress';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -60,6 +61,8 @@ export default function TaskScreen() {
   const [addingDemo, setAddingDemo] = useState(false);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>('all');
+  // uuid (tree record) → project tree ID, e.g. "ARAV-001" (see utils/treeId.ts)
+  const [treeIds, setTreeIds] = useState<Record<string, string>>({});
   const loadSeqRef = useRef(0);
 
   // Dashboard boxes can open this screen on a specific tab (e.g. Rejected/Completed).
@@ -116,6 +119,23 @@ export default function TaskScreen() {
     }
 
     setTasks([...visibleTasks, ...visibleLocal]);
+
+    // Tree capture cards are labelled with the project tree ID (e.g. ARAV-001).
+    // Trees captured before project IDs existed get an ID assigned + persisted
+    // here, so the label is right on this screen too (not only in History/Map).
+    if (myTrees.length > 0) {
+      backfillProjectTreeIds(myTrees).then((enriched) => {
+        if (seq !== loadSeqRef.current || !enriched) return;
+        const resolved: Record<string, string> = {};
+        enriched.forEach((t) => {
+          const id = resolveTreeId(t);
+          if (t?.id && id) resolved[t.id] = id;
+        });
+        if (Object.keys(resolved).length > 0) {
+          setTreeIds((prev) => ({ ...prev, ...resolved }));
+        }
+      });
+    }
   }, [userId, activeProjectId, assignedProjects, setTasks, localTasks]);
 
   useFocusEffect(
@@ -259,6 +279,16 @@ export default function TaskScreen() {
 
   const activeProject = allProjects.find((p) => p.id === activeProjectId);
 
+  // uuid → tree record: lets a completed card know it stands for a tree capture,
+  // so it can be labelled with the project tree ID instead of the DB uuid.
+  const treeByUuid = useMemo(() => {
+    const map = new Map<string, TreeRecord>();
+    trees.forEach((t) => {
+      if (t?.id) map.set(t.id, t);
+    });
+    return map;
+  }, [trees]);
+
   const renderTaskCard = (task: Task) => {
     const started = !!task.started_at;
     const createdDate = task.created_at ? new Date(task.created_at) : null;
@@ -270,6 +300,10 @@ export default function TaskScreen() {
       : '#1a5c2a';
     const isAssigned = task.status === 'assigned';
     const isTreeCapture = task.status === 'completed' && task.photo_url;
+    // A card that stands for a tree record is labelled with that tree's project
+    // tree ID (ARAV-001) — the database uuid is never shown to the user.
+    const treeRecord = treeByUuid.get(task.id);
+    const projectTreeId = treeRecord ? treeIds[task.id] || displayTreeId(treeRecord) : '';
     
     const conditionColors: Record<string, string> = {
       Healthy: '#16a34a',
@@ -294,7 +328,9 @@ export default function TaskScreen() {
         <View style={s.taskCardContent}>
           <View style={s.taskCardTop}>
             <View style={s.taskTitleWrap}>
-              <Text style={s.taskId} numberOfLines={1}>ID: {task.id.slice(0, 8).toUpperCase()}</Text>
+              <Text style={s.taskId} numberOfLines={1}>
+                ID: {treeRecord ? <Text style={s.taskIdValue}>{projectTreeId}</Text> : task.id.slice(0, 8).toUpperCase()}
+              </Text>
               <Text style={s.taskName} numberOfLines={1}>{task.name}</Text>
             </View>
             {isAssigned ? (
@@ -473,41 +509,29 @@ export default function TaskScreen() {
         {/* Tab content */}
         <View style={s.content}>
           {activeTab === 'assigned' && renderTaskList(filterByDate(assignedTasks))}
-          {activeTab === 'completed' && renderTaskList(filterByDate([...completedTasks, ...trees.map((t) => ({
-            id: t.id,
-            name: t.species || 'Tree Capture',
-            project_id: t.project_id,
-            assignee_id: t.user_id || '',
-            target_count: 1,
-            priority: 'medium' as const,
-            captured: 1,
-            remaining: 0,
-            progress: 100,
-            status: 'completed' as const,
-            created_at: t.submitted_at,
-            photo_url: t.photo_url,
-            latitude: t.latitude,
-            longitude: t.longitude,
-            tree_condition: (() => {
-              let meta: Record<string, any> = {};
-              const m = (t.notes || '').match(/##META##({.*})/s);
-              if (m) try { meta = JSON.parse(m[1]); } catch {}
-              return t.tree_condition || meta.tree_condition || 'Healthy';
-            })(),
-            tree_condition_color: (() => {
-              let meta: Record<string, any> = {};
-              const m = (t.notes || '').match(/##META##({.*})/s);
-              if (m) try { meta = JSON.parse(m[1]); } catch {}
-              const c = t.tree_condition || meta.tree_condition || 'Healthy';
-              return c === 'Healthy' ? '#16a34a' : c === 'Stressed' ? '#d97706' : c === 'Diseased' ? '#dc2626' : '#4b5563';
-            })(),
-            surveyor: t.surveyor || (() => {
-              let meta: Record<string, any> = {};
-              const m = (t.notes || '').match(/##META##({.*})/s);
-              if (m) try { meta = JSON.parse(m[1]); } catch {}
-              return meta.surveyor;
-            })(),
-          }))]))}
+          {activeTab === 'completed' && renderTaskList(filterByDate([...completedTasks, ...trees.map((t) => {
+            const meta = parseTreeMeta(t.notes);
+            const condition = t.tree_condition || meta.tree_condition || 'Healthy';
+            return {
+              id: t.id,
+              name: t.species || 'Tree Capture',
+              project_id: t.project_id,
+              assignee_id: t.user_id || '',
+              target_count: 1,
+              priority: 'medium' as const,
+              captured: 1,
+              remaining: 0,
+              progress: 100,
+              status: 'completed' as const,
+              created_at: t.submitted_at,
+              photo_url: t.photo_url,
+              latitude: t.latitude,
+              longitude: t.longitude,
+              tree_condition: condition,
+              tree_condition_color: condition === 'Healthy' ? '#16a34a' : condition === 'Stressed' ? '#d97706' : condition === 'Diseased' ? '#dc2626' : '#4b5563',
+              surveyor: t.surveyor || meta.surveyor,
+            };
+          })]))}
           {activeTab === 'approved' && renderTaskList(filterByDate(approvedTasks))}
           {activeTab === 'rejected' && renderTaskList(filterByDate(rejectedTasks))}
         </View>
@@ -649,6 +673,8 @@ const s = StyleSheet.create({
   taskCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   taskTitleWrap: { flex: 1 },
   taskId: { fontSize: 10, fontWeight: '600', color: '#999', marginBottom: 2 },
+  // Project tree ID on a tree-capture card (same look as components/TreeCard.tsx)
+  taskIdValue: { color: '#1a5c2a', fontFamily: 'monospace', fontWeight: '800' },
   taskName: { fontSize: 14, fontWeight: '800', color: '#222' },
   statusBadge: { borderRadius: 14, paddingHorizontal: 8, paddingVertical: 3 },
   statusText: { fontSize: 9, fontWeight: '800' },

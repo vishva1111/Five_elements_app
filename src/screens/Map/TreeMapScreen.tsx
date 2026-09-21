@@ -27,6 +27,7 @@ import {
   MAPBOX_GL_CSS_CDN,
   DEFAULT_STYLE,
 } from '../../services/mapboxConfig';
+import { displayTreeId, resolveTreeId } from '../../utils/treeId';
 
 type Nav = NativeStackNavigationProp<any>;
 type Route = RouteProp<{ Map: { focusTreeId?: string } }, 'Map'>;
@@ -59,7 +60,8 @@ function buildMapHtml(
       .map((t) => {
         const color = CONDITION_COLORS[t.tree_condition || 'Healthy'] || '#16a34a';
         const species = (t.species || 'Unknown').replace(/'/g, "\\'");
-        const treeId = (t.tree_id || t.id.slice(0, 8)).replace(/'/g, "\\'");
+        // Project-based tree ID only (never the database uuid)
+        const treeId = resolveTreeId(t).replace(/'/g, "\\'");
         const condition = (t.tree_condition || 'N/A').replace(/'/g, "\\'");
         const date = t.survey_date || t.submitted_at?.split('T')[0] || '';
         const popup = `${t.locked ? '🔒 ' : ''}<b>${species}</b><br/>ID: ${treeId}<br/>Condition: ${condition}<br/>Date: ${date}`;
@@ -131,7 +133,8 @@ if(bounds.isValid()){map.fitBounds(bounds.pad(0.2));}` : ''}
     .map((t) => {
       const color = CONDITION_COLORS[t.tree_condition || 'Healthy'] || '#16a34a';
       const species = (t.species || 'Unknown').replace(/"/g, '\\"');
-      const treeId = (t.tree_id || t.id.slice(0, 8)).replace(/"/g, '\\"');
+      // Project-based tree ID only (never the database uuid)
+      const treeId = resolveTreeId(t).replace(/"/g, '\\"');
       const condition = (t.tree_condition || 'N/A').replace(/"/g, '\\"');
       const date = t.survey_date || t.submitted_at?.split('T')[0] || '';
       const isFocused = focusTreeId && t.id === focusTreeId;
@@ -340,7 +343,7 @@ export default function TreeMapScreen() {
 
     Alert.alert(
       'Lock Tree',
-      `Lock "${tree.species || tree.tree_id}"? This cannot be undone from the app.`,
+      `Lock "${tree.species || displayTreeId(tree, 'this tree')}"? This cannot be undone from the app.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -507,7 +510,7 @@ export default function TreeMapScreen() {
                         {selectedTree.species || 'Unknown Species'}
                       </Text>
                       <Text style={styles.detailId}>
-                        {selectedTree.tree_id || selectedTree.id.slice(0, 8)}
+                        {displayTreeId(selectedTree)}
                       </Text>
                     </View>
                     <TouchableOpacity onPress={() => setShowDetails(false)}>

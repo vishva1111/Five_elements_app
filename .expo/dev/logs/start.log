@@ -1616,30 +1616,316 @@
 {"_e":"metro:client_log","_t":1789982491402,"level":"warn","data":["[TreeApp] fetchTreeMonitoringRecords error:","Could not find the table 'public.tree_monitoring_records' in the schema cache"]}
 {"_e":"metro:client_log","_t":1789982496810,"level":"warn","data":["[TreeApp] fetchTreeMonitoringRecords error:","Could not find the table 'public.tree_monitoring_records' in the schema cache"]}
 {"_e":"metro:client_log","_t":1789982595453,"level":"warn","data":["[TreeApp] tree_records missing columns — run supabase/migrations/001_add_tree_columns.sql. Saving extra data in notes."]}
-{"_e":"root:init","_t":1789983276600,"format":"v0-jsonl","version":"57.0.26"}
-{"_e":"env:mode","_t":1789983276601,"nodeEnv":"development","babelEnv":"development","mode":"development"}
-{"_e":"env:load","_t":1789983276605,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_MAPBOX_TOKEN":"","EXPO_PUBLIC_SUPABASE_ANON_KEY":"your_supabase_anon_key_here","EXPO_PUBLIC_SUPABASE_URL":"https://iauhmhkmreojmfahvxxh.supabase.co"}}
-{"_e":"devserver:start","_t":1789983277157,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
-{"_e":"metro:config","_t":1789983277540,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
-{"_e":"expo:dev-tools-plugin:load","_t":1789983278042,"plugins":[]}
-{"_e":"metro:instantiate","_t":1789983291625,"atlas":false,"workers":10,"host":"::","port":8081}
-{"_e":"metro:bundling:started","_t":1789983297622,"id":"2","platform":"android","environment":null,"entry":"index.js"}
-{"_e":"metro:bundling:progress","_t":1789983297622,"id":"2","progress":0,"total":1,"current":0}
-{"_e":"metro:bundling:progress","_t":1789983297626,"id":"2","progress":0,"total":1,"current":0}
-{"_e":"metro:bundling:progress","_t":1789983297725,"id":"2","progress":0.006204259711015199,"total":292,"current":23}
-{"_e":"metro:bundling:progress","_t":1789983297825,"id":"2","progress":0.06871524177585069,"total":412,"current":108}
-{"_e":"metro:bundling:progress","_t":1789983297925,"id":"2","progress":0.11281393858166774,"total":524,"current":176}
-{"_e":"metro:bundling:progress","_t":1789983298025,"id":"2","progress":0.18842030178326474,"total":675,"current":293}
-{"_e":"metro:bundling:progress","_t":1789983298125,"id":"2","progress":0.251314058183672,"total":762,"current":382}
-{"_e":"metro:bundling:progress","_t":1789983298225,"id":"2","progress":0.35971331874519147,"total":837,"current":502}
-{"_e":"metro:bundling:progress","_t":1789983298326,"id":"2","progress":0.46283486743027197,"total":1001,"current":681}
-{"_e":"metro:bundling:progress","_t":1789983298427,"id":"2","progress":0.5851108264646915,"total":1072,"current":820}
-{"_e":"metro:bundling:progress","_t":1789983298526,"id":"2","progress":0.7453801936653678,"total":1127,"current":973}
-{"_e":"metro:bundling:progress","_t":1789983298626,"id":"2","progress":0.7864008543965825,"total":1219,"current":1081}
-{"_e":"metro:bundling:progress","_t":1789983298726,"id":"2","progress":0.7864008543965825,"total":1347,"current":1171}
-{"_e":"metro:bundling:progress","_t":1789983298826,"id":"2","progress":0.8797146254458977,"total":1450,"current":1360}
-{"_e":"metro:bundling:progress","_t":1789983298933,"id":"2","progress":0.999,"total":1506,"current":1506}
-{"_e":"metro:bundling:done","_t":1789983299005,"id":"2","total":1506,"ms":1382.5566}
-{"_e":"metro:bundling:started","_t":1789983404278,"id":"4","platform":"android","environment":null,"entry":"index.js"}
-{"_e":"metro:bundling:progress","_t":1789983404278,"id":"4","progress":0,"total":1,"current":0}
-{"_e":"metro:bundling:done","_t":1789983404332,"id":"4","total":1,"ms":53.8365}
+{"_e":"root:init","_t":1789984770805,"format":"v0-jsonl","version":"57.0.26"}
+{"_e":"env:mode","_t":1789984770806,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1789984770810,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_MAPBOX_TOKEN":"","EXPO_PUBLIC_SUPABASE_ANON_KEY":"your_supabase_anon_key_here","EXPO_PUBLIC_SUPABASE_URL":"https://iauhmhkmreojmfahvxxh.supabase.co"}}
+{"_e":"devserver:start","_t":1789984771388,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1789984771868,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1789984772384,"plugins":[]}
+{"_e":"metro:instantiate","_t":1789984786033,"atlas":false,"workers":10,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1789984791990,"id":"2","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1789984791990,"id":"2","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789984791995,"id":"2","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789984792095,"id":"2","progress":0.006694214876033058,"total":220,"current":18}
+{"_e":"metro:bundling:progress","_t":1789984792195,"id":"2","progress":0.06317750182615046,"total":370,"current":93}
+{"_e":"metro:bundling:progress","_t":1789984792296,"id":"2","progress":0.11875527982514561,"total":473,"current":163}
+{"_e":"metro:bundling:progress","_t":1789984792396,"id":"2","progress":0.18309176438676816,"total":631,"current":270}
+{"_e":"metro:bundling:progress","_t":1789984792497,"id":"2","progress":0.2696519319856464,"total":778,"current":404}
+{"_e":"metro:bundling:progress","_t":1789984792596,"id":"2","progress":0.3095532871937739,"total":949,"current":528}
+{"_e":"metro:bundling:progress","_t":1789984792696,"id":"2","progress":0.47171983368710346,"total":1009,"current":693}
+{"_e":"metro:bundling:progress","_t":1789984792796,"id":"2","progress":0.6173469387755102,"total":1092,"current":858}
+{"_e":"metro:bundling:progress","_t":1789984792896,"id":"2","progress":0.7429141646679855,"total":1195,"current":1030}
+{"_e":"metro:bundling:progress","_t":1789984793002,"id":"2","progress":0.7667793533981212,"total":1327,"current":1162}
+{"_e":"metro:bundling:progress","_t":1789984793102,"id":"2","progress":0.8755057591983609,"total":1446,"current":1353}
+{"_e":"metro:bundling:progress","_t":1789984793203,"id":"2","progress":0.999,"total":1506,"current":1506}
+{"_e":"metro:bundling:done","_t":1789984793278,"id":"2","total":1506,"ms":1287.4806}
+{"_e":"root:init","_t":1789985797577,"format":"v0-jsonl","version":"57.0.26"}
+{"_e":"env:mode","_t":1789985797578,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1789985797582,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_MAPBOX_TOKEN":"","EXPO_PUBLIC_SUPABASE_ANON_KEY":"your_supabase_anon_key_here","EXPO_PUBLIC_SUPABASE_URL":"https://iauhmhkmreojmfahvxxh.supabase.co"}}
+{"_e":"devserver:start","_t":1789985798188,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1789985798681,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1789985799333,"plugins":[]}
+{"_e":"metro:instantiate","_t":1789985812988,"atlas":false,"workers":10,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1789985815024,"id":"2","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1789985815024,"id":"2","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789985815028,"id":"2","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789985815128,"id":"2","progress":0.004299919376511691,"total":244,"current":16}
+{"_e":"metro:bundling:progress","_t":1789985815228,"id":"2","progress":0.02732053821460283,"total":363,"current":60}
+{"_e":"metro:bundling:progress","_t":1789985815330,"id":"2","progress":0.06821314878892733,"total":425,"current":111}
+{"_e":"metro:bundling:progress","_t":1789985815432,"id":"2","progress":0.12123998719803822,"total":471,"current":164}
+{"_e":"metro:bundling:progress","_t":1789985815533,"id":"2","progress":0.1430308588410449,"total":587,"current":222}
+{"_e":"metro:bundling:progress","_t":1789985815633,"id":"2","progress":0.18456314340423113,"total":689,"current":296}
+{"_e":"metro:bundling:progress","_t":1789985815733,"id":"2","progress":0.2387654958677686,"total":792,"current":387}
+{"_e":"metro:bundling:progress","_t":1789985815833,"id":"2","progress":0.312246927389714,"total":893,"current":499}
+{"_e":"metro:bundling:progress","_t":1789985815933,"id":"2","progress":0.39160014004088844,"total":962,"current":602}
+{"_e":"metro:bundling:progress","_t":1789985816049,"id":"2","progress":0.4704378105126695,"total":1006,"current":690}
+{"_e":"metro:bundling:progress","_t":1789985816149,"id":"2","progress":0.5518367346938776,"total":1050,"current":780}
+{"_e":"metro:bundling:progress","_t":1789985816271,"id":"2","progress":0.6528280227591121,"total":1078,"current":871}
+{"_e":"metro:bundling:progress","_t":1789985816371,"id":"2","progress":0.7063788244190886,"total":1122,"current":943}
+{"_e":"metro:bundling:progress","_t":1789985816481,"id":"2","progress":0.7489192507003374,"total":1159,"current":1003}
+{"_e":"metro:bundling:progress","_t":1789985816582,"id":"2","progress":0.8083494655332044,"total":1199,"current":1078}
+{"_e":"metro:bundling:progress","_t":1789985816691,"id":"2","progress":0.8083494655332044,"total":1324,"current":1157}
+{"_e":"metro:bundling:progress","_t":1789985816791,"id":"2","progress":0.8695197987117919,"total":1407,"current":1312}
+{"_e":"metro:bundling:progress","_t":1789985816891,"id":"2","progress":0.9611687812379853,"total":1479,"current":1450}
+{"_e":"metro:bundling:done","_t":1789985817009,"id":"2","total":1479,"ms":1985.4797}
+{"_e":"metro:client_log","_t":1789985937513,"level":"warn","data":["[TreeApp] tree_records missing columns — run supabase/migrations/001_add_tree_columns.sql. Saving extra data in notes."]}
+{"_e":"root:init","_t":1789986584573,"format":"v0-jsonl","version":"57.0.26"}
+{"_e":"env:mode","_t":1789986584574,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1789986584578,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_MAPBOX_TOKEN":"","EXPO_PUBLIC_SUPABASE_ANON_KEY":"your_supabase_anon_key_here","EXPO_PUBLIC_SUPABASE_URL":"https://iauhmhkmreojmfahvxxh.supabase.co"}}
+{"_e":"devserver:start","_t":1789986585215,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1789986585763,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1789986586517,"plugins":[]}
+{"_e":"metro:instantiate","_t":1789986600311,"atlas":false,"workers":10,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1789986605533,"id":"3","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1789986605534,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789986605537,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789986605637,"id":"3","progress":0.013639511961212637,"total":137,"current":16}
+{"_e":"metro:bundling:progress","_t":1789986605737,"id":"3","progress":0.041221303948576676,"total":330,"current":67}
+{"_e":"metro:bundling:progress","_t":1789986605837,"id":"3","progress":0.09749687630154104,"total":490,"current":153}
+{"_e":"metro:bundling:progress","_t":1789986605937,"id":"3","progress":0.185603813140303,"total":636,"current":274}
+{"_e":"metro:bundling:progress","_t":1789986606037,"id":"3","progress":0.24868938626766143,"total":762,"current":380}
+{"_e":"metro:bundling:progress","_t":1789986606137,"id":"3","progress":0.3863752582644628,"total":880,"current":547}
+{"_e":"metro:bundling:progress","_t":1789986606237,"id":"3","progress":0.50861249256395,"total":1025,"current":731}
+{"_e":"metro:bundling:progress","_t":1789986606337,"id":"3","progress":0.6760826950770686,"total":1097,"current":902}
+{"_e":"metro:bundling:progress","_t":1789986606437,"id":"3","progress":0.7435623036191531,"total":1191,"current":1027}
+{"_e":"metro:bundling:progress","_t":1789986606540,"id":"3","progress":0.7667793533981212,"total":1327,"current":1162}
+{"_e":"metro:bundling:progress","_t":1789986606640,"id":"3","progress":0.8809292813253566,"total":1449,"current":1360}
+{"_e":"metro:bundling:progress","_t":1789986606750,"id":"3","progress":0.999,"total":1506,"current":1506}
+{"_e":"metro:bundling:done","_t":1789986606824,"id":"3","total":1506,"ms":1290.0133}
+{"_e":"metro:client_log","_t":1789986848910,"level":"warn","data":["[TreeApp] fetchTreeMonitoringRecords error:","Could not find the table 'public.tree_monitoring_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789986850621,"level":"warn","data":["[TreeApp] fetchTreeMonitoringRecords error:","Could not find the table 'public.tree_monitoring_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789986852847,"level":"warn","data":["[TreeApp] Tree ID migration errors:","[\"Tree update error: Could not find the 'tree_id' column of 'tree_records' in the schema cache\"]"]}
+{"_e":"metro:bundling:failed","_t":1789986929219,"id":null,"message":"Unable to resolve \"../../lib/supabase\" from \"src\\screens\\History\\UpdateLookupScreen.tsx\"\n  30 |   fetchAllProjects,\n  31 | } from '../../services/treeService';\n> 32 | import { supabase } from '../../lib/supabase';\n     |                           ^\n  33 |\n  34 | type Nav = NativeStackNavigationProp<UpdateLookupStackParamList, 'UpdateLookup'>;\n  35 |","importStack":"\u001b[1mImport stack:\u001b[22m\n\n\u001b[90m \u001b[39msrc\\screens\\History\\UpdateLookupScreen.tsx\n\u001b[90m |\u001b[39m \u001b[36mimport\u001b[39m \u001b[32m\"../../lib/supabase\"\u001b[39m\n\n\u001b[90m \u001b[39mApp.tsx\n\u001b[90m |\u001b[39m \u001b[36mimport\u001b[39m \u001b[32m\"./src/screens/History/UpdateLookupScreen\"\u001b[39m\n\n\u001b[90m \u001b[39mindex.js\n\u001b[90m |\u001b[39m \u001b[36mimport\u001b[39m \u001b[32m\"./App\"\u001b[39m\n\n\u001b[90m \u001b[39m\n\u001b[90m |\u001b[39m \u001b[36mimport\u001b[39m \u001b[32m\"./index\"\u001b[39m\n","filename":null,"targetModuleName":"../../lib/supabase","originModulePath":"src\\screens\\History\\UpdateLookupScreen.tsx"}
+{"_e":"metro:bundling:failed","_t":1789986929422,"id":null,"message":"Unable to resolve \"../../lib/supabase\" from \"src\\screens\\History\\UpdateLookupScreen.tsx\"\n  30 |   fetchAllProjects,\n  31 | } from '../../services/treeService';\n> 32 | import { supabase } from '../../lib/supabase';\n     |                           ^\n  33 |\n  34 | type Nav = NativeStackNavigationProp<UpdateLookupStackParamList, 'UpdateLookup'>;\n  35 |","importStack":"\u001b[1mImport stack:\u001b[22m\n\n\u001b[90m \u001b[39msrc\\screens\\History\\UpdateLookupScreen.tsx\n\u001b[90m |\u001b[39m \u001b[36mimport\u001b[39m \u001b[32m\"../../lib/supabase\"\u001b[39m\n\n\u001b[90m \u001b[39mApp.tsx\n\u001b[90m |\u001b[39m \u001b[36mimport\u001b[39m \u001b[32m\"./src/screens/History/UpdateLookupScreen\"\u001b[39m\n\n\u001b[90m \u001b[39mindex.js\n\u001b[90m |\u001b[39m \u001b[36mimport\u001b[39m \u001b[32m\"./App\"\u001b[39m\n\n\u001b[90m \u001b[39m\n\u001b[90m |\u001b[39m \u001b[36mimport\u001b[39m \u001b[32m\"./index\"\u001b[39m\n","filename":null,"targetModuleName":"../../lib/supabase","originModulePath":"src\\screens\\History\\UpdateLookupScreen.tsx"}
+{"_e":"root:init","_t":1789987016858,"format":"v0-jsonl","version":"57.0.26"}
+{"_e":"env:mode","_t":1789987016859,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1789987016863,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_MAPBOX_TOKEN":"","EXPO_PUBLIC_SUPABASE_ANON_KEY":"your_supabase_anon_key_here","EXPO_PUBLIC_SUPABASE_URL":"https://iauhmhkmreojmfahvxxh.supabase.co"}}
+{"_e":"devserver:start","_t":1789987017421,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1789987017883,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1789987018523,"plugins":[]}
+{"_e":"metro:instantiate","_t":1789987032146,"atlas":false,"workers":10,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1789987035754,"id":"3","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1789987035754,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789987035758,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789987035858,"id":"3","progress":0.005140619437522249,"total":265,"current":19}
+{"_e":"metro:bundling:progress","_t":1789987035965,"id":"3","progress":0.061482377922473255,"total":367,"current":91}
+{"_e":"metro:bundling:progress","_t":1789987036065,"id":"3","progress":0.14003101967111997,"total":473,"current":177}
+{"_e":"metro:bundling:progress","_t":1789987036165,"id":"3","progress":0.18587973753092618,"total":668,"current":288}
+{"_e":"metro:bundling:progress","_t":1789987036265,"id":"3","progress":0.24483218080620678,"total":770,"current":381}
+{"_e":"metro:bundling:progress","_t":1789987036365,"id":"3","progress":0.2949718414594539,"total":893,"current":485}
+{"_e":"metro:bundling:progress","_t":1789987036465,"id":"3","progress":0.40686548459753763,"total":972,"current":620}
+{"_e":"metro:bundling:progress","_t":1789987036567,"id":"3","progress":0.5490104308390023,"total":1050,"current":778}
+{"_e":"metro:bundling:progress","_t":1789987036667,"id":"3","progress":0.7421537645718081,"total":1119,"current":964}
+{"_e":"metro:bundling:progress","_t":1789987036767,"id":"3","progress":0.7759730064220579,"total":1209,"current":1065}
+{"_e":"metro:bundling:progress","_t":1789987036867,"id":"3","progress":0.7759730064220579,"total":1356,"current":1175}
+{"_e":"metro:bundling:progress","_t":1789987036967,"id":"3","progress":0.8863470353421518,"total":1452,"current":1367}
+{"_e":"metro:bundling:progress","_t":1789987037072,"id":"3","progress":0.999,"total":1506,"current":1506}
+{"_e":"metro:bundling:done","_t":1789987037143,"id":"3","total":1506,"ms":1389.3099}
+{"_e":"metro:bundling:started","_t":1789987315273,"id":"7","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1789987315273,"id":"7","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:done","_t":1789987315329,"id":"7","total":1,"ms":55.8559}
+{"_e":"root:init","_t":1789987407721,"format":"v0-jsonl","version":"57.0.26"}
+{"_e":"env:mode","_t":1789987407722,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1789987407725,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_MAPBOX_TOKEN":"","EXPO_PUBLIC_SUPABASE_ANON_KEY":"your_supabase_anon_key_here","EXPO_PUBLIC_SUPABASE_URL":"https://iauhmhkmreojmfahvxxh.supabase.co"}}
+{"_e":"devserver:start","_t":1789987408106,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1789987408412,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1789987408694,"plugins":[]}
+{"_e":"metro:instantiate","_t":1789987421994,"atlas":false,"workers":10,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1789987429180,"id":"2","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1789987429181,"id":"2","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789987429185,"id":"2","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789987429309,"id":"2","progress":0.026014568158168574,"total":93,"current":15}
+{"_e":"metro:bundling:progress","_t":1789987429409,"id":"2","progress":0.026014568158168574,"total":311,"current":37}
+{"_e":"metro:bundling:progress","_t":1789987429509,"id":"2","progress":0.11360511001275511,"total":448,"current":151}
+{"_e":"metro:bundling:progress","_t":1789987429609,"id":"2","progress":0.17888264683805594,"total":584,"current":247}
+{"_e":"metro:bundling:progress","_t":1789987429709,"id":"2","progress":0.2209256138214702,"total":734,"current":345}
+{"_e":"metro:bundling:progress","_t":1789987429809,"id":"2","progress":0.27281404921999713,"total":829,"current":433}
+{"_e":"metro:bundling:progress","_t":1789987429909,"id":"2","progress":0.3034224899347711,"total":895,"current":493}
+{"_e":"metro:bundling:progress","_t":1789987430010,"id":"2","progress":0.4071777851847034,"total":992,"current":633}
+{"_e":"metro:bundling:progress","_t":1789987430109,"id":"2","progress":0.555829751592497,"total":1065,"current":794}
+{"_e":"metro:bundling:progress","_t":1789987430209,"id":"2","progress":0.722731626190706,"total":1101,"current":936}
+{"_e":"metro:bundling:progress","_t":1789987430310,"id":"2","progress":0.7569898477608492,"total":1162,"current":1011}
+{"_e":"metro:bundling:progress","_t":1789987430410,"id":"2","progress":0.7654601633569553,"total":1327,"current":1161}
+{"_e":"metro:bundling:progress","_t":1789987430513,"id":"2","progress":0.7712442472057857,"total":1404,"current":1233}
+{"_e":"metro:bundling:progress","_t":1789987430612,"id":"2","progress":0.9212863439144636,"total":1469,"current":1410}
+{"_e":"metro:bundling:done","_t":1789987430766,"id":"2","total":1469,"ms":1585.5916}
+{"_e":"metro:bundling:failed","_t":1789987689428,"id":null,"message":"src\\services\\treeService.ts: Duplicate declaration \"makeProjectPrefix\"\n  530 | // Prefix = first 4 uppercase letters of project name (stripped of spaces/symbols)\n  531 |\n> 532 | function makeProjectPrefix(projectName: string): string {\n      |          ^^^^^^^^^^^^^^^^^\n  533 |   const clean = projectName.replace(/[^a-zA-Z]/g, '').toUpperCase();\n  534 |   return clean.slice(0, 4).padEnd(4, 'X');\n  535 | }","importStack":null,"filename":null,"targetModuleName":null,"originModulePath":null}
+{"_e":"metro:client_log","_t":1789987825503,"level":"warn","data":["[TreeApp] fetchTreeMonitoringRecords error:","Could not find the table 'public.tree_monitoring_records' in the schema cache"]}
+{"_e":"metro:bundling:failed","_t":1789987840639,"id":null,"message":"src\\screens\\History\\UpdateLookupScreen.tsx: Duplicate declaration \"makeProjectPrefix\"\n  43 | };\n  44 |\n> 45 | function makeProjectPrefix(projectName: string): string {\n     |          ^^^^^^^^^^^^^^^^^\n  46 |   const clean = projectName.replace(/[^a-zA-Z]/g, '').toUpperCase();\n  47 |   return clean.slice(0, 4).padEnd(4, 'X');\n  48 | }","importStack":null,"filename":null,"targetModuleName":null,"originModulePath":null}
+{"_e":"metro:client_log","_t":1789987860115,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987862572,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987864153,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987865276,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987865524,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987866752,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987867548,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987868969,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987870445,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987871921,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987873397,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987874869,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987876348,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987877826,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987879301,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987881022,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987882496,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987883974,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987885456,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987886929,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987888401,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987889934,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987890369,"level":"warn","data":["[TreeApp] fetchTreeMonitoringRecords error:","Could not find the table 'public.tree_monitoring_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987891861,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789987926798,"level":"warn","data":["[TreeApp] fetchTreeMonitoringRecords error:","Could not find the table 'public.tree_monitoring_records' in the schema cache"]}
+{"_e":"metro:cache_write_error","_t":1789988163886,"message":"Cache write failed for store(s): BinaryFileStore"}
+{"_e":"metro:client_log","_t":1789988215338,"level":"error","data":["[ReferenceError: Property 'parseTreeMeta' doesn't exist]"]}
+{"_e":"metro:client_log","_t":1789988307321,"level":"warn","data":["[TreeApp] Could not persist legacy tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988307871,"level":"warn","data":["[TreeApp] Could not persist legacy tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988308350,"level":"warn","data":["[TreeApp] Could not persist legacy tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988308876,"level":"warn","data":["[TreeApp] fetchTreeMonitoringRecords error:","Could not find the table 'public.tree_monitoring_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988309151,"level":"warn","data":["[TreeApp] Could not persist legacy tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988309565,"level":"warn","data":["[TreeApp] Could not persist legacy tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988310086,"level":"warn","data":["[TreeApp] Could not persist legacy tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988310866,"level":"warn","data":["[TreeApp] Could not persist legacy tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988311425,"level":"warn","data":["[TreeApp] Could not persist legacy tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988312808,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988315310,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988317159,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988318810,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988320194,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988322024,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988323701,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988325359,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988326887,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988328232,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988331190,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988332705,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988332961,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988334728,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988334985,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988336711,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988338116,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988339538,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988341059,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988342520,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988344072,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988346704,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988348963,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988352096,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988354536,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988357078,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988359939,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988361485,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988505776,"level":"warn","data":["[TreeApp] fetchTreeMonitoringRecords error:","Could not find the table 'public.tree_monitoring_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789988577465,"level":"warn","data":["[TreeApp] fetchTreeMonitoringRecords error:","Could not find the table 'public.tree_monitoring_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989087965,"level":"error","data":["[ReferenceError: Property 'getMonitoringRoundInfo' doesn't exist]"]}
+{"_e":"metro:client_log","_t":1789989095922,"level":"error","data":["[ReferenceError: Property 'getMonitoringRoundInfo' doesn't exist]"]}
+{"_e":"root:init","_t":1789989453357,"format":"v0-jsonl","version":"57.0.26"}
+{"_e":"env:mode","_t":1789989453358,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1789989453362,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_MAPBOX_TOKEN":"","EXPO_PUBLIC_SUPABASE_ANON_KEY":"your_supabase_anon_key_here","EXPO_PUBLIC_SUPABASE_URL":"https://iauhmhkmreojmfahvxxh.supabase.co"}}
+{"_e":"devserver:start","_t":1789989454041,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1789989454580,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1789989455541,"plugins":[]}
+{"_e":"metro:instantiate","_t":1789989469306,"atlas":false,"workers":10,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1789989476682,"id":"3","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1789989476682,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789989476687,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789989476798,"id":"3","progress":0.011211072664359861,"total":85,"current":9}
+{"_e":"metro:bundling:progress","_t":1789989476897,"id":"3","progress":0.011211072664359861,"total":309,"current":32}
+{"_e":"metro:bundling:progress","_t":1789989476997,"id":"3","progress":0.0580212051787522,"total":411,"current":99}
+{"_e":"metro:bundling:progress","_t":1789989477097,"id":"3","progress":0.135424,"total":500,"current":184}
+{"_e":"metro:bundling:progress","_t":1789989477197,"id":"3","progress":0.16074970611929,"total":641,"current":257}
+{"_e":"metro:bundling:progress","_t":1789989477297,"id":"3","progress":0.24466682000158127,"total":746,"current":369}
+{"_e":"metro:bundling:progress","_t":1789989477399,"id":"3","progress":0.3008090970435388,"total":877,"current":481}
+{"_e":"metro:bundling:progress","_t":1789989477499,"id":"3","progress":0.40207727317914427,"total":962,"current":610}
+{"_e":"metro:bundling:progress","_t":1789989477599,"id":"3","progress":0.5443032157505524,"total":1022,"current":754}
+{"_e":"metro:bundling:progress","_t":1789989477699,"id":"3","progress":0.6990056436441817,"total":1098,"current":918}
+{"_e":"metro:bundling:progress","_t":1789989477799,"id":"3","progress":0.7531221172022684,"total":1150,"current":998}
+{"_e":"metro:bundling:progress","_t":1789989477899,"id":"3","progress":0.8114522632674297,"total":1240,"current":1117}
+{"_e":"metro:bundling:progress","_t":1789989478005,"id":"3","progress":0.8114522632674297,"total":1324,"current":1142}
+{"_e":"metro:bundling:progress","_t":1789989478105,"id":"3","progress":0.8114522632674297,"total":1354,"current":1190}
+{"_e":"metro:bundling:progress","_t":1789989478210,"id":"3","progress":0.8608510707258011,"total":1427,"current":1324}
+{"_e":"metro:bundling:progress","_t":1789989478310,"id":"3","progress":0.9610906390229215,"total":1476,"current":1447}
+{"_e":"metro:bundling:done","_t":1789989478433,"id":"3","total":1476,"ms":1751.3433}
+{"_e":"metro:client_log","_t":1789989506651,"level":"warn","data":["[TreeApp] Could not persist legacy tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989507398,"level":"warn","data":["[TreeApp] Could not persist legacy tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989508134,"level":"warn","data":["[TreeApp] Could not persist legacy tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989508871,"level":"warn","data":["[TreeApp] Could not persist legacy tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989509361,"level":"warn","data":["[TreeApp] Could not persist legacy tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989510097,"level":"warn","data":["[TreeApp] Could not persist legacy tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989510599,"level":"warn","data":["[TreeApp] Could not persist legacy tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989510841,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989511082,"level":"warn","data":["[TreeApp] Could not persist legacy tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989512319,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989512562,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989514284,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989515517,"level":"warn","data":["[TreeApp] fetchTreeMonitoringRecords error:","Could not find the table 'public.tree_monitoring_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989515762,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989517484,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989519243,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989519953,"level":"warn","data":["[TreeApp] fetchTreeMonitoringRecords error:","Could not find the table 'public.tree_monitoring_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989521661,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989522185,"level":"warn","data":["[TreeApp] fetchTreeMonitoringRecords error:","Could not find the table 'public.tree_monitoring_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989523153,"level":"warn","data":["[TreeApp] Tree ID migration errors:","[\"Sequence lookup error: column tree_records.tree_id does not exist\"]"]}
+{"_e":"metro:client_log","_t":1789989523626,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989524858,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989526582,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989528303,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989530022,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989531502,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989533248,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989534941,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989536666,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989536920,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989538396,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989540119,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989540360,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989541586,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989543342,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989543807,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989545278,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989545525,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989547010,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989547248,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989548478,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989549961,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989551435,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989553156,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989553397,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989554631,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989556108,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989556356,"level":"warn","data":["[TreeApp] Could not persist project tree_id:","Could not find the 'tree_id' column of 'tree_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989579717,"level":"warn","data":["[TreeApp] fetchTreeMonitoringRecords error:","Could not find the table 'public.tree_monitoring_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989592532,"level":"warn","data":["[TreeApp] fetchTreeMonitoringRecords error:","Could not find the table 'public.tree_monitoring_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989608996,"level":"warn","data":["[TreeApp] fetchTreeMonitoringRecords error:","Could not find the table 'public.tree_monitoring_records' in the schema cache"]}
+{"_e":"metro:client_log","_t":1789989620554,"level":"warn","data":["[TreeApp] fetchTreeMonitoringRecords error:","Could not find the table 'public.tree_monitoring_records' in the schema cache"]}
+{"_e":"metro:bundling:failed","_t":1789989706354,"id":null,"message":"SyntaxError: D:\\5eliment\\app\\treeapp\\src\\services\\treeService.ts: Identifier 'sessionSequences' has already been declared. (664:6)\n\n  662 | // Fallback numbering used when the tree_id column cannot be read (older schema):\n  663 | // keeps ids unique within a session instead of handing \"-001\" to every tree.\n> 664 | const sessionSequences = new Map<string, number>();\n      |       ^\n  665 |\n  666 | function nextSessionSequence(prefix: string): number {\n  667 |   const next = (sessionSequences.get(prefix) ?? 0) + 1;","importStack":null,"filename":"src\\services\\treeService.ts","targetModuleName":null,"originModulePath":null}
+{"_e":"root:init","_t":1789992523779,"format":"v0-jsonl","version":"57.0.26"}
+{"_e":"env:mode","_t":1789992523781,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1789992523785,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_MAPBOX_TOKEN":"","EXPO_PUBLIC_SUPABASE_ANON_KEY":"your_supabase_anon_key_here","EXPO_PUBLIC_SUPABASE_URL":"https://iauhmhkmreojmfahvxxh.supabase.co"}}
+{"_e":"devserver:start","_t":1789992524494,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1789992525094,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1789992525754,"plugins":[]}
+{"_e":"metro:instantiate","_t":1789992541397,"atlas":false,"workers":10,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1789992554599,"id":"3","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1789992554600,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789992554604,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789992554707,"id":"3","progress":0.007758597546242851,"total":193,"current":17}
+{"_e":"metro:bundling:progress","_t":1789992554806,"id":"3","progress":0.04834700246770213,"total":332,"current":73}
+{"_e":"metro:bundling:progress","_t":1789992554906,"id":"3","progress":0.08163265306122448,"total":392,"current":112}
+{"_e":"metro:bundling:progress","_t":1789992555006,"id":"3","progress":0.15837151187005413,"total":490,"current":195}
+{"_e":"metro:bundling:progress","_t":1789992555108,"id":"3","progress":0.164691428973541,"total":584,"current":237}
+{"_e":"metro:bundling:progress","_t":1789992555209,"id":"3","progress":0.19148656312195292,"total":681,"current":298}
+{"_e":"metro:bundling:progress","_t":1789992555309,"id":"3","progress":0.23158543509979945,"total":746,"current":359}
+{"_e":"metro:bundling:progress","_t":1789992555411,"id":"3","progress":0.2598512790005949,"total":820,"current":418}
+{"_e":"metro:bundling:progress","_t":1789992555511,"id":"3","progress":0.300411893358157,"total":894,"current":490}
+{"_e":"metro:bundling:progress","_t":1789992555611,"id":"3","progress":0.3597339737759401,"total":902,"current":541}
+{"_e":"metro:bundling:progress","_t":1789992555711,"id":"3","progress":0.4323329780553902,"total":984,"current":647}
+{"_e":"metro:bundling:progress","_t":1789992555811,"id":"3","progress":0.49963221926613094,"total":1037,"current":733}
+{"_e":"metro:bundling:progress","_t":1789992555911,"id":"3","progress":0.6711791196344501,"total":1101,"current":902}
+{"_e":"metro:bundling:progress","_t":1789992556011,"id":"3","progress":0.7599878244228451,"total":1162,"current":1013}
+{"_e":"metro:bundling:progress","_t":1789992556111,"id":"3","progress":0.8046075450128232,"total":1233,"current":1106}
+{"_e":"metro:bundling:progress","_t":1789992556227,"id":"3","progress":0.8046075450128232,"total":1378,"current":1189}
+{"_e":"metro:bundling:progress","_t":1789992556327,"id":"3","progress":0.8732804817346332,"total":1435,"current":1341}
+{"_e":"metro:bundling:progress","_t":1789992556427,"id":"3","progress":0.9294736561864265,"total":1476,"current":1423}
+{"_e":"metro:bundling:failed","_t":1789992556475,"id":"3","message":"SyntaxError: D:\\5eliment\\app\\treeapp\\src\\screens\\History\\UpdateLookupScreen.tsx: Unexpected token (775:0)\n\n  773 |   },\n  774 |   treePhotoPlaceholderText: { fontSize: 28 },\n> 775 |\n      | ^","importStack":null,"filename":"src\\screens\\History\\UpdateLookupScreen.tsx","targetModuleName":null,"originModulePath":null}
