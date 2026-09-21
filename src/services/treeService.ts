@@ -15,14 +15,16 @@ import {
 // warning on every single call.
 export const SETUP_SQL_FILE = 'supabase/migrations/002_create_tree_monitoring.sql';
 
+// Only shown with console.debug — the DB may legitimately lag behind the code
+// until the migration is run, and this state is already surfaced in the UI.
 let setupNoticeShown = false;
 function warnNeedsMigration(what: string): void {
   if (setupNoticeShown) return;
   setupNoticeShown = true;
-  console.warn(
-    `[TreeApp] Database is missing ${what}.\n` +
-      `         Run ${SETUP_SQL_FILE} once in the Supabase SQL Editor → New query.\n` +
-      `         Until then, tree IDs are stored on this device only and monitoring ` +
+  console.debug(
+    `[TreeApp] Database is missing ${what}. ` +
+      `Run ${SETUP_SQL_FILE} once in the Supabase SQL Editor → New query. ` +
+      `Until then, tree IDs are stored on this device only and monitoring ` +
       `rounds cannot be saved.`
   );
 }
@@ -1164,16 +1166,55 @@ export const MONITORING_SETUP_ERROR =
 
 // Set once the monitoring table is found to be missing (pre-migration). Lets the
 // Update screens show a warning instead of silently rendering an empty history.
+// Re-probed after the TTL so running the migration is picked up without an
+// app restart — same pattern as tree_id column detection.
+const MONITORING_TABLE_REPROBE_MS = 30_000; // 30s — monitoring table is cheap to check
 let monitoringSetupRequired = false;
+let monitoringSetupCheckedAt = 0;
+
+function monitoringTableUnavailable(): boolean {
+  if (!monitoringSetupRequired) return false;
+  if (Date.now() - monitoringSetupCheckedAt > MONITORING_TABLE_REPROBE_MS) {
+    monitoringSetupRequired = false;
+    return false;
+  }
+  return true;
+}
 
 function markMonitoringSetupMissing(): void {
   monitoringSetupRequired = true;
+  monitoringSetupCheckedAt = Date.now();
   warnNeedsMigration('the tree_monitoring_records table');
 }
 
-/** True once a call proved the monitoring table has not been created yet. */
+/** True once a call proved the monitoring table has not been created yet (within TTL). */
 export function isMonitoringSetupRequired(): boolean {
-  return monitoringSetupRequired;
+  return monitoringTableUnavailable();
+}
+
+/** Re-probe the monitoring table immediately — call after running the migration. */
+export async function recheckMonitoringSetup(): Promise<boolean> {
+  if (!monitoringTableUnavailable()) {
+    // Either never flagged, or TTL already expired — do a fresh check
+    try {
+      const { error } = await supabase
+        .from('tree_monitoring_records')
+        .select('id')
+        .limit(1);
+      if (error && isMissingSchemaError(error)) {
+        markMonitoringSetupMissing();
+        return true; // still missing
+      }
+      // Table exists (or some other non-schema error) — clear the flag
+      monitoringSetupRequired = false;
+      return false;
+    } catch {
+      // Network / unexpected — leave current state alone
+      return monitoringSetupRequired;
+    }
+  }
+  // TTL hasn't expired yet — latest known state is "missing"
+  return true;
 }
 
 export async function fetchTreeMonitoringRecords(
@@ -1187,7 +1228,7 @@ export async function fetchTreeMonitoringRecords(
 
   if (error) {
     if (isMissingSchemaError(error)) {
-      // Expected until the migration is run — warn once, not on every call
+      // Expected until the migration is run — mark missing (TTL-reprobed)
       markMonitoringSetupMissing();
       return { data: [], error: null };
     }

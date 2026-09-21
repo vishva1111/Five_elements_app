@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  Image,
   ActivityIndicator,
   TouchableOpacity,
   Linking,
@@ -141,6 +142,15 @@ export default function TreeDetailScreen() {
       </LinearGradient>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        {/* Tree Photo */}
+        {tree.photo_url ? (
+          <Image source={{ uri: tree.photo_url }} style={styles.photo} resizeMode="cover" />
+        ) : (
+          <View style={styles.photoPlaceholder}>
+            <Text style={styles.photoPlaceholderText}>🌳</Text>
+          </View>
+        )}
+
         {/* Tree ID + Condition + Species */}
         <View style={styles.idRow}>
           <View style={styles.idBadge}>
