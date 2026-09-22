@@ -17,7 +17,7 @@ import { fetchMyTrees, backfillProjectTreeIds } from '../../services/treeService
 import { parseTreeMeta, resolveTreeId, TREE_ID_PLACEHOLDER } from '../../utils/treeId';
 import { fetchAgentTasks } from '../../services/taskService';
 import { TreeCondition, LandType, Task, TreeRecord, HistoryCategory, MONITORING_ROUNDS } from '../../types';
-import { fetchAuditsForTrees } from '../../services/auditService';
+import { fetchAuditsForTrees, getLatestAudit } from '../../services/auditService';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -36,6 +36,7 @@ interface HistoryItem {
   surveyor?: string;
   project_id?: string;
   tree_id?: string;
+  tree_record_id?: string;
   audit_round?: number | null;
 }
 
@@ -100,6 +101,7 @@ export default function HistoryScreen() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [auditFilter, setAuditFilter] = useState<string>('all');
   const [auditItems, setAuditItems] = useState<HistoryItem[]>([]);
+  const [auditsByTree, setAuditsByTree] = useState<Record<string, any[]>>({});
 
   const loadSeqRef = useRef(0);
 
@@ -124,14 +126,17 @@ export default function HistoryScreen() {
 
       // Flatten monitoring records → one history item per audit photo
       try {
-        const auditsByTree = await fetchAuditsForTrees(treesRes.data.map((t) => t.id));
+        const audits = await fetchAuditsForTrees(treesRes.data.map((t) => t.id));
         if (seq !== loadSeqRef.current) return;
+        setAuditsByTree(audits);
+
         const items: HistoryItem[] = [];
         for (const t of treesRes.data) {
-          const records = auditsByTree[t.id] ?? [];
+          const records = audits[t.id] ?? [];
           for (const r of records) {
             items.push({
               id: r.id ?? `${t.id}-a${r.monitoring_round}`,
+              tree_record_id: t.id,
               type: 'tree',
               title: `Audit ${r.monitoring_round ?? 1} · ${t.species || 'Tree'}`,
               photo_url: r.photo_url || t.photo_url,
@@ -176,24 +181,29 @@ export default function HistoryScreen() {
   // Merge trees + approved/rejected tasks into history items
   const allItems: HistoryItem[] = [];
 
-  // Trees
+  // Trees (enriched with latest audit data if available)
   trees.forEach((t) => {
     const meta = parseTreeMeta(t.notes);
-    const rawCondition = t.tree_condition || meta.tree_condition || 'Healthy';
+    const treeAudits = auditsByTree[t.id] ?? [];
+    const latest = getLatestAudit(treeAudits);
+    const rawCondition = latest?.tree_condition || t.tree_condition || meta.tree_condition || 'Healthy';
     const normalizedCondition = rawCondition.charAt(0).toUpperCase() + rawCondition.slice(1).toLowerCase();
+    const photo = latest?.photo_url || t.photo_url;
     allItems.push({
       id: t.id,
+      tree_record_id: t.id,
       type: 'tree',
       title: t.species || 'Tree',
-      photo_url: t.photo_url,
+      photo_url: photo,
       condition: normalizedCondition,
       status: 'completed',
-      date: t.submitted_at,
-      latitude: t.latitude,
-      longitude: t.longitude,
-      surveyor: t.surveyor || meta.surveyor,
+      date: latest?.survey_date || latest?.submitted_at || t.submitted_at,
+      latitude: latest?.latitude ?? t.latitude,
+      longitude: latest?.longitude ?? t.longitude,
+      surveyor: latest?.surveyor || t.surveyor || meta.surveyor,
       project_id: t.project_id,
       tree_id: resolveTreeId(t),
+      audit_round: latest?.monitoring_round ?? null,
     });
   });
 
@@ -315,7 +325,10 @@ export default function HistoryScreen() {
       <TouchableOpacity
         key={item.id}
         style={[styles.historyCard, { borderLeftColor: statusColor }]}
-        onPress={() => navigation.navigate('TreeDetail', { treeId: item.id })}
+        onPress={() => {
+          const targetTreeId = item.tree_record_id || item.id;
+          navigation.navigate('TreeDetail', { treeId: targetTreeId });
+        }}
         activeOpacity={0.7}
       >
         {/* Photo */}
@@ -346,20 +359,23 @@ export default function HistoryScreen() {
             </View>
           </View>
 
-          {/* Condition / Audit badge */}
-          {activeCategory === 'audit' && item.audit_round != null ? (
-            <View style={[styles.conditionBadge, { backgroundColor: (AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a') + '15', borderColor: (AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a') + '40' }]}>
-              <View style={[styles.conditionDot, { backgroundColor: AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a' }]} />
-              <Text style={[styles.conditionText, { color: AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a' }]}>
-                Audit {item.audit_round}
-              </Text>
-            </View>
-          ) : (
-            <View style={[styles.conditionBadge, { backgroundColor: conditionColor + '15', borderColor: conditionColor + '40' }]}>
-              <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
-              <Text style={[styles.conditionText, { color: conditionColor }]}>{item.condition || 'Unknown'}</Text>
-            </View>
-          )}
+          {/* Badges row: Audit round + Condition */}
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
+            {item.audit_round != null ? (
+              <View style={[styles.conditionBadge, { backgroundColor: (AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a') + '15', borderColor: (AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a') + '40' }]}>
+                <View style={[styles.conditionDot, { backgroundColor: AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a' }]} />
+                <Text style={[styles.conditionText, { color: AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a' }]}>
+                  Audit {item.audit_round}
+                </Text>
+              </View>
+            ) : null}
+            {item.condition ? (
+              <View style={[styles.conditionBadge, { backgroundColor: conditionColor + '15', borderColor: conditionColor + '40' }]}>
+                <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
+                <Text style={[styles.conditionText, { color: conditionColor }]}>{item.condition}</Text>
+              </View>
+            ) : null}
+          </View>
 
           {/* Location + Date */}
           <View style={styles.bottomRow}>

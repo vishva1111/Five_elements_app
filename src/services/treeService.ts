@@ -1,4 +1,11 @@
 import { supabase } from './supabase';
+import {
+  queueMonitoringRecord,
+  getPendingMonitoringRecords,
+  getPendingMonitoringRecordsForTree,
+  mergeMonitoringRecords,
+} from './localMonitoringService';
+import { useTreeStore } from '../store/treeStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TreeRecord, TreeRecordInsert, TreeMonitoringRecord, ApiResponse, Project, User } from '../types';
 import {
@@ -280,6 +287,8 @@ export async function fetchTreesByProject(
 export async function fetchTreeById(
   id: string
 ): Promise<ApiResponse<TreeRecord>> {
+  if (!id) return { data: null, error: 'Invalid ID' };
+
   // Try with project join first; fall back to plain select if join fails
   let { data, error } = await supabase
     .from('tree_records')
@@ -298,8 +307,46 @@ export async function fetchTreeById(
     error = retry.error;
   }
 
-  if (error) {
+  // Fallback 1: check if id is an audit record (local or DB)
+  if (!data) {
+    try {
+      const local = (await getPendingMonitoringRecords()).find((r) => r.id === id);
+      if (local?.tree_record_id && local.tree_record_id !== id) {
+        return fetchTreeById(local.tree_record_id);
+      }
+      const { data: mon } = await supabase
+        .from('tree_monitoring_records')
+        .select('tree_record_id')
+        .eq('id', id)
+        .maybeSingle();
+      if (mon?.tree_record_id && mon.tree_record_id !== id) {
+        return fetchTreeById(mon.tree_record_id);
+      }
+    } catch {}
+  }
+
+  // Fallback 2: check if id is a project tree_id (e.g. "ARAV-001")
+  if (!data && (id.includes('-') || id.length <= 15)) {
+    try {
+      const byTreeId = await fetchTreeByTreeId(id);
+      if (byTreeId.data) return byTreeId;
+    } catch {}
+  }
+
+  // Fallback 3: check if it matches in the local treeStore
+  if (!data) {
+    const fromStore = useTreeStore.getState().trees.find(
+      (t) => t.id === id || t.tree_id === id
+    );
+    if (fromStore) return { data: fromStore, error: null };
+  }
+
+  if (error && !data) {
     return { data: null, error: error.message };
+  }
+
+  if (!data) {
+    return { data: null, error: 'Tree record not found' };
   }
 
   return { data: await attachProjectName(mapTreeRecord(data)), error: null };
@@ -1288,39 +1335,63 @@ export async function recheckMonitoringSetup(): Promise<boolean> {
 export async function fetchTreeMonitoringRecords(
   treeId: string
 ): Promise<ApiResponse<any[]>> {
-  const { data, error } = await supabase
-    .from('tree_monitoring_records')
-    .select('*')
-    .eq('tree_id', treeId)
-    .order('monitoring_round', { ascending: true });
+  if (!treeId) return { data: [], error: null };
 
-  if (error) {
-    if (isMissingSchemaError(error)) {
-      // Expected until the migration is run — mark missing (TTL-reprobed)
-      markMonitoringSetupMissing();
-      return { data: [], error: null };
+  let dbRows: any[] = [];
+  try {
+    // `treeId` may be either the DB uuid (tree_record_id column) or the project
+    // display ID like "ARAV-001" (tree_id column). Query both and merge.
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(treeId);
+
+    // Primary query — by tree_record_id when UUID, else by tree_id
+    const primaryCol = isUuid ? 'tree_record_id' : 'tree_id';
+    const { data: primary, error } = await supabase
+      .from('tree_monitoring_records')
+      .select('*')
+      .eq(primaryCol, treeId)
+      .order('monitoring_round', { ascending: true });
+
+    if (error) {
+      if (isMissingSchemaError(error)) {
+        markMonitoringSetupMissing();
+      } else {
+        console.warn('[TreeApp] fetchTreeMonitoringRecords error:', error.message);
+      }
+    } else if (primary) {
+      dbRows = primary;
+      // Secondary query — also check the other column so nothing is missed
+      const secondaryCol = isUuid ? 'tree_id' : 'tree_record_id';
+      const { data: secondary } = await supabase
+        .from('tree_monitoring_records')
+        .select('*')
+        .eq(secondaryCol, treeId)
+        .order('monitoring_round', { ascending: true });
+      if (secondary) {
+        dbRows = [...dbRows, ...secondary];
+      }
     }
-    console.warn('[TreeApp] fetchTreeMonitoringRecords error:', error.message);
-    return { data: [], error: null };
+  } catch (err) {
+    // network or schema error
   }
 
-  return { data: (data ?? []) as any[], error: null };
+  // Always merge pending local audits stored on this device!
+  const localRows = await getPendingMonitoringRecordsForTree(treeId);
+  const merged = mergeMonitoringRecords(dbRows, localRows);
+
+  return { data: merged as any[], error: null };
 }
 
 export async function getTreeMonitoringRound(
   treeId: string
 ): Promise<number> {
-  const { count, error } = await supabase
-    .from('tree_monitoring_records')
-    .select('*', { count: 'exact', head: true })
-    .eq('tree_id', treeId);
-
-  if (error) {
-    if (isMissingSchemaError(error)) markMonitoringSetupMissing();
-    return 1;
+  const { data } = await fetchTreeMonitoringRecords(treeId);
+  const records = data ?? [];
+  if (records.length === 0) return 1;
+  const completedRounds = new Set(records.map((r) => Number(r.monitoring_round)).filter(Boolean));
+  for (let r = 1; r <= 4; r++) {
+    if (!completedRounds.has(r)) return r;
   }
-
-  return (count ?? 0) + 1;
+  return 4; // all 4 completed
 }
 
 export async function insertMonitoringRecord(record: {
@@ -1341,7 +1412,16 @@ export async function insertMonitoringRecord(record: {
   notes?: string;
   surveyor?: string;
   survey_date?: string;
-}): Promise<ApiResponse<any>> {
+}): Promise<ApiResponse<any> & { offline?: boolean }> {
+  // Fast-path: table already known to be missing — skip the round-trip
+  if (monitoringTableUnavailable()) {
+    const local = await queueMonitoringRecord({
+      ...record,
+      tree_record_id: record.tree_record_id ?? null,
+    });
+    return { data: local, error: null, offline: true };
+  }
+
   const { data, error } = await supabase
     .from('tree_monitoring_records')
     .insert(record)
@@ -1350,14 +1430,21 @@ export async function insertMonitoringRecord(record: {
 
   if (error) {
     if (isMissingSchemaError(error)) {
+      // Table missing — queue on device and report success so the audit flow
+      // doesn't show an error dialog. Audits upload automatically once the
+      // migration is applied (see syncPendingMonitoringRecords).
       markMonitoringSetupMissing();
-      return { data: null, error: MONITORING_SETUP_ERROR };
+      const local = await queueMonitoringRecord({
+        ...record,
+        tree_record_id: record.tree_record_id ?? null,
+      });
+      return { data: local, error: null, offline: true };
     }
     console.warn('[TreeApp] insertMonitoringRecord error:', error.message);
     return { data: null, error: error.message };
   }
 
-  return { data, error: null };
+  return { data, error: null, offline: false };
 }
 
 export async function updateTreeFromMonitoring(
@@ -1368,8 +1455,14 @@ export async function updateTreeFromMonitoring(
     crown_diameter_m?: number;
     tree_condition?: string;
     health_status?: string;
+    photo_url?: string;
   }
 ): Promise<ApiResponse<TreeRecord>> {
+  // Immediately update local in-memory Zustand store so UI updates right away
+  try {
+    useTreeStore.getState().updateTree(treeRecordId, updates as Partial<TreeRecord>);
+  } catch {}
+
   const { data, error } = await supabase
     .from('tree_records')
     .update(updates)
@@ -1381,11 +1474,27 @@ export async function updateTreeFromMonitoring(
     if (isMissingSchemaError(error)) {
       // Measurement columns (dbh_cm, height_m, …) are not deployed yet
       warnNeedsMigration('the measurement columns on tree_records');
+      // Retry with core columns that exist on tree_records
+      const coreUpdates: any = {};
+      if (updates.tree_condition) coreUpdates.tree_condition = updates.tree_condition;
+      if (updates.health_status) coreUpdates.health_status = updates.health_status;
+      if (updates.photo_url) coreUpdates.photo_url = updates.photo_url;
+      if (Object.keys(coreUpdates).length > 0) {
+        try {
+          const retry = await supabase
+            .from('tree_records')
+            .update(coreUpdates)
+            .eq('id', treeRecordId)
+            .select('*, projects(name)')
+            .single();
+          if (retry.data) {
+            return { data: await attachProjectName(mapTreeRecord(retry.data)), error: null };
+          }
+        } catch {}
+      }
       return {
         data: null,
-        error:
-          'Measurements could not be saved: the database is missing the measurement ' +
-          `columns. Run ${SETUP_SQL_FILE} once in the Supabase SQL Editor.`,
+        error: null,
       };
     }
     return { data: null, error: error.message };
