@@ -16,11 +16,12 @@ import { useTaskStore } from '../../store/taskStore';
 import { fetchMyTrees, backfillProjectTreeIds } from '../../services/treeService';
 import { parseTreeMeta, resolveTreeId, TREE_ID_PLACEHOLDER } from '../../utils/treeId';
 import { fetchAgentTasks } from '../../services/taskService';
-import { TreeCondition, LandType, Task, TreeRecord } from '../../types';
+import { TreeCondition, LandType, Task, TreeRecord, HistoryCategory, MONITORING_ROUNDS } from '../../types';
+import { fetchAuditsForTrees } from '../../services/auditService';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
-type FilterCategory = 'condition' | 'status';
+type FilterCategory = HistoryCategory;
 
 interface HistoryItem {
   id: string;
@@ -35,11 +36,13 @@ interface HistoryItem {
   surveyor?: string;
   project_id?: string;
   tree_id?: string;
+  audit_round?: number | null;
 }
 
 const CATEGORIES: { key: FilterCategory; label: string; icon: string }[] = [
   { key: 'condition', label: 'Condition', icon: 'leaf' },
   { key: 'status', label: 'Status', icon: 'flag' },
+  { key: 'audit', label: 'Audit', icon: 'clipboard' },
 ];
 
 const CONDITION_FILTERS: { label: string; value: TreeCondition | 'all' }[] = [
@@ -57,6 +60,11 @@ const STATUS_FILTERS: { label: string; value: string }[] = [
   { label: 'Rejected', value: 'rejected' },
 ];
 
+const AUDIT_FILTERS: { label: string; value: string }[] = [
+  { label: 'All', value: 'all' },
+  ...MONITORING_ROUNDS.map((r) => ({ label: `Audit ${r.round}`, value: String(r.round) })),
+];
+
 const CONDITION_COLORS: Record<string, string> = {
   Healthy: '#16a34a',
   Stressed: '#d97706',
@@ -68,6 +76,13 @@ const STATUS_COLORS: Record<string, string> = {
   completed: '#16a34a',
   approved: '#7c3aed',
   rejected: '#dc2626',
+};
+
+const AUDIT_COLORS: Record<string, string> = {
+  '1': '#22c55e',
+  '2': '#3b82f6',
+  '3': '#f59e0b',
+  '4': '#8b5cf6',
 };
 
 export default function HistoryScreen() {
@@ -83,6 +98,8 @@ export default function HistoryScreen() {
   const [activeCategory, setActiveCategory] = useState<FilterCategory>('condition');
   const [conditionFilter, setConditionFilter] = useState<TreeCondition | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [auditFilter, setAuditFilter] = useState<string>('all');
+  const [auditItems, setAuditItems] = useState<HistoryItem[]>([]);
 
   const loadSeqRef = useRef(0);
 
@@ -104,6 +121,36 @@ export default function HistoryScreen() {
         if (seq !== loadSeqRef.current || !enriched) return;
         setTrees(enriched);
       });
+
+      // Flatten monitoring records → one history item per audit photo
+      try {
+        const auditsByTree = await fetchAuditsForTrees(treesRes.data.map((t) => t.id));
+        if (seq !== loadSeqRef.current) return;
+        const items: HistoryItem[] = [];
+        for (const t of treesRes.data) {
+          const records = auditsByTree[t.id] ?? [];
+          for (const r of records) {
+            items.push({
+              id: r.id ?? `${t.id}-a${r.monitoring_round}`,
+              type: 'tree',
+              title: `Audit ${r.monitoring_round ?? 1} · ${t.species || 'Tree'}`,
+              photo_url: r.photo_url || t.photo_url,
+              condition: r.tree_condition || t.tree_condition || 'Healthy',
+              status: 'completed',
+              date: r.survey_date || r.submitted_at || t.submitted_at,
+              latitude: r.latitude ?? t.latitude,
+              longitude: r.longitude ?? t.longitude,
+              surveyor: r.surveyor || t.surveyor,
+              project_id: r.project_id || t.project_id,
+              tree_id: resolveTreeId(t),
+              audit_round: r.monitoring_round ?? null,
+            });
+          }
+        }
+        setAuditItems(items);
+      } catch (auditErr) {
+        console.warn('[TreeApp] audit history load failed:', auditErr);
+      }
     }
   }, [userId, setTrees, setTasks]);
 
@@ -123,6 +170,7 @@ export default function HistoryScreen() {
     setActiveCategory(cat);
     setConditionFilter('all');
     setStatusFilter('all');
+    setAuditFilter('all');
   };
 
   // Merge trees + approved/rejected tasks into history items
@@ -171,8 +219,19 @@ export default function HistoryScreen() {
   });
 
   // Filter
-  const filtered = allItems.filter((item) => {
+  const sourceItems =
+    activeCategory === 'audit'
+      ? auditItems
+      : activeCategory === 'condition'
+      ? trees.map((t) => allItems.find((i) => i.id === t.id)).filter(Boolean) as HistoryItem[]
+      : allItems.filter((i) => i.type === 'task' || i.status === 'completed');
+
+  const filtered = sourceItems.filter((item) => {
     const projectMatch = activeProjectId ? item.project_id === activeProjectId : true;
+    if (activeCategory === 'audit') {
+      const roundMatch = auditFilter === 'all' || String(item.audit_round ?? '') === auditFilter;
+      return projectMatch && roundMatch;
+    }
     const itemCondition = (item.condition || '').toLowerCase();
     const filterCondition = (conditionFilter || 'all').toLowerCase();
     const conditionMatch = filterCondition === 'all' || itemCondition === filterCondition;
@@ -203,17 +262,25 @@ export default function HistoryScreen() {
         selectedValue = statusFilter;
         onPress = setStatusFilter;
         break;
+      case 'audit':
+        filters = AUDIT_FILTERS;
+        selectedValue = auditFilter;
+        onPress = setAuditFilter;
+        break;
     }
 
     return (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
         {filters.map((f) => {
           const active = selectedValue === f.value;
-          const chipColor = activeCategory === 'condition' && f.value !== 'all'
-            ? CONDITION_COLORS[f.value] || '#1a5c2a'
-            : activeCategory === 'status' && f.value !== 'all'
-            ? STATUS_COLORS[f.value] || '#1a5c2a'
-            : '#1a5c2a';
+          const chipColor =
+            activeCategory === 'condition' && f.value !== 'all'
+              ? CONDITION_COLORS[f.value] || '#1a5c2a'
+              : activeCategory === 'status' && f.value !== 'all'
+              ? STATUS_COLORS[f.value] || '#1a5c2a'
+              : activeCategory === 'audit' && f.value !== 'all'
+              ? AUDIT_COLORS[f.value] || '#1a5c2a'
+              : '#1a5c2a';
           return (
             <TouchableOpacity
               key={f.value}
@@ -222,6 +289,7 @@ export default function HistoryScreen() {
                 active && { backgroundColor: chipColor, borderColor: chipColor },
                 !active && f.value !== 'all' && activeCategory === 'condition' && { backgroundColor: CONDITION_COLORS[f.value] + '15', borderColor: CONDITION_COLORS[f.value] + '40' },
                 !active && f.value !== 'all' && activeCategory === 'status' && { backgroundColor: STATUS_COLORS[f.value] + '15', borderColor: STATUS_COLORS[f.value] + '40' },
+                !active && f.value !== 'all' && activeCategory === 'audit' && { backgroundColor: AUDIT_COLORS[f.value] + '15', borderColor: AUDIT_COLORS[f.value] + '40' },
               ]}
               onPress={() => onPress(f.value)}
             >
@@ -278,11 +346,20 @@ export default function HistoryScreen() {
             </View>
           </View>
 
-          {/* Condition badge */}
-          <View style={[styles.conditionBadge, { backgroundColor: conditionColor + '15', borderColor: conditionColor + '40' }]}>
-            <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
-            <Text style={[styles.conditionText, { color: conditionColor }]}>{item.condition || 'Unknown'}</Text>
-          </View>
+          {/* Condition / Audit badge */}
+          {activeCategory === 'audit' && item.audit_round != null ? (
+            <View style={[styles.conditionBadge, { backgroundColor: (AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a') + '15', borderColor: (AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a') + '40' }]}>
+              <View style={[styles.conditionDot, { backgroundColor: AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a' }]} />
+              <Text style={[styles.conditionText, { color: AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a' }]}>
+                Audit {item.audit_round}
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.conditionBadge, { backgroundColor: conditionColor + '15', borderColor: conditionColor + '40' }]}>
+              <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
+              <Text style={[styles.conditionText, { color: conditionColor }]}>{item.condition || 'Unknown'}</Text>
+            </View>
+          )}
 
           {/* Location + Date */}
           <View style={styles.bottomRow}>
@@ -349,8 +426,10 @@ export default function HistoryScreen() {
             <Text style={styles.emptyEmoji}>🌱</Text>
             <Text style={styles.emptyText}>No records found</Text>
             <Text style={styles.emptySubText}>
-              {conditionFilter !== 'all' || statusFilter !== 'all'
+              {conditionFilter !== 'all' || statusFilter !== 'all' || auditFilter !== 'all'
                 ? 'Try a different filter'
+                : activeCategory === 'audit'
+                ? 'Your audit records will appear here'
                 : 'Your work history will appear here'}
             </Text>
           </View>

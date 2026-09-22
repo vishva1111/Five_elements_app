@@ -332,6 +332,12 @@ export default function TaskScreen() {
                 ID: {treeRecord ? <Text style={s.taskIdValue}>{projectTreeId}</Text> : task.id.slice(0, 8).toUpperCase()}
               </Text>
               <Text style={s.taskName} numberOfLines={1}>{task.name}</Text>
+              {task.audit_round != null ? (
+                <View style={s.auditChip}>
+                  <Ionicons name="clipboard-outline" size={10} color="#1a5c2a" />
+                  <Text style={s.auditChipText}>Audit {task.audit_round}</Text>
+                </View>
+              ) : null}
             </View>
             {isAssigned ? (
               <TouchableOpacity
@@ -703,6 +709,8 @@ const s = StyleSheet.create({
   conditionDot: { width: 6, height: 6, borderRadius: 3 },
   surveyorRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   surveyorText: { fontSize: 10, color: '#666' },
+  auditChip: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, backgroundColor: '#E8F5E9', borderRadius: 12 },
+  auditChipText: { fontSize: 10, fontWeight: '800', color: '#1a5c2a' },
   emptyState: { alignItems: 'center', paddingVertical: 48 },
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
   emptyText: { fontSize: 16, fontWeight: '800', color: '#555' },

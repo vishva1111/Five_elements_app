@@ -123,6 +123,9 @@ export interface Task {
   tree_condition?: string;
   tree_condition_color?: string;
   surveyor?: string;
+  // Auto-scheduled next-audit task (migration 002)
+  tree_record_id?: string | null;
+  audit_round?: number | null;
 }
 
 // ─── Task Store Types ──────────────────────────────────────────────────────────
@@ -153,6 +156,9 @@ export type HistoryStackParamList = {
   TreeDetail: { treeId: string };
   UpdateTree: { treeId: string; treeIdDisplay: string; currentRound: number };
 };
+
+// Audit category on History (filter by monitoring round 1..4)
+export type HistoryCategory = 'condition' | 'status' | 'audit';
 
 // ─── Store Types ───────────────────────────────────────────────────────────────
 
@@ -314,10 +320,10 @@ export interface MonitoringRoundInfo {
 }
 
 export const MONITORING_ROUNDS: MonitoringRoundInfo[] = [
-  { round: 1, label: 'Planting', subtitle: 'Baseline Survey / Plantation Record', icon: 'leaf', color: '#22c55e' },
-  { round: 2, label: 'Survival', subtitle: '1st Monitoring', icon: 'heart', color: '#3b82f6' },
-  { round: 3, label: 'Growth', subtitle: '2nd Monitoring', icon: 'trending-up', color: '#f59e0b' },
-  { round: 4, label: 'Periodic', subtitle: '3rd Monitoring+', icon: 'time', color: '#8b5cf6' },
+  { round: 1, label: 'Audit 1', subtitle: 'Baseline Survey / Plantation Record', icon: 'leaf', color: '#22c55e' },
+  { round: 2, label: 'Audit 2', subtitle: 'Survival Check · 1st Monitoring', icon: 'heart', color: '#3b82f6' },
+  { round: 3, label: 'Audit 3', subtitle: 'Growth Monitoring · 2nd Monitoring', icon: 'trending-up', color: '#f59e0b' },
+  { round: 4, label: 'Audit 4', subtitle: 'Periodic Check · 3rd Monitoring+', icon: 'time', color: '#8b5cf6' },
 ];
 
 export function getMonitoringRoundInfo(round: number): MonitoringRoundInfo {
@@ -352,6 +358,7 @@ export type MainTabParamList = {
   Map: { focusTreeId?: string } | undefined;
   Task: undefined;
   History: undefined;
+  /** Renamed to "Audit" in the tab bar — tree lookup + Audit 1–4 sub-tabs */
   Update: undefined;
   Profile: undefined;
 };

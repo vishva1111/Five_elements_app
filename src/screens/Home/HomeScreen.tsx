@@ -8,14 +8,12 @@ import {
   RefreshControl,
   Modal,
   FlatList,
-  Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
-import { fetchMyTrees, fetchAllProjects, migrateAllTreeIds } from '../../services/treeService';
+import { fetchMyTrees, fetchAllProjects } from '../../services/treeService';
 import { fetchAgentTasks } from '../../services/taskService';
 import { loadLocalTasks } from '../../services/localTaskService';
 import ProjectSelector from '../../components/ProjectSelector';
@@ -42,58 +40,10 @@ export default function HomeScreen() {
   const [taskStats, setTaskStats] = useState({ total: 0, assigned: 0, rejected: 0, completed: 0 });
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
-  const [migrating, setMigrating] = useState(false);
-  const [hasOldIds, setHasOldIds] = useState(false);
   const loadSeqRef = useRef(0);
 
   const firstName = (user?.full_name?.trim()?.split(' ')[0] || '').replace(/[.!]$/, '');
   const greetingName = firstName || 'there';
-
-  // Check if any trees have old-format IDs (no dash, e.g. "9B831168")
-  useEffect(() => {
-    if (trees.length > 0) {
-      const oldFormat = trees.some((t) => t.tree_id && !t.tree_id.includes('-'));
-      setHasOldIds(oldFormat);
-    }
-  }, [trees]);
-
-  const handleMigrateIds = async () => {
-    Alert.alert(
-      'Update Tree IDs',
-      'This will update all tree IDs to project-wise sequential format (e.g. ARAV-001). Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Update',
-          onPress: async () => {
-            setMigrating(true);
-            try {
-              const result = await migrateAllTreeIds();
-              Alert.alert(
-                'Migration Complete',
-                `${result.updated} trees updated, ${result.errors} errors.\n\n${result.details.join('\n')}`,
-              );
-              setHasOldIds(false);
-              // Reload trees
-              if (userId) {
-                const { data } = await fetchMyTrees(userId);
-                if (data) {
-                  const visible = activeProjectId
-                    ? data.filter((t) => t.project_id === activeProjectId)
-                    : data;
-                  setTrees(visible);
-                }
-              }
-            } catch (err: any) {
-              Alert.alert('Error', err?.message ?? 'Migration failed');
-            } finally {
-              setMigrating(false);
-            }
-          },
-        },
-      ]
-    );
-  };
 
   // Fetch all projects on mount
   useEffect(() => {
@@ -248,29 +198,6 @@ export default function HomeScreen() {
             <Text style={styles.treeStatLabel}>Dead</Text>
           </View>
         </View>
-
-        {/* Migration Button - only show if old format IDs exist */}
-        {hasOldIds && (
-          <TouchableOpacity
-            style={styles.migrateCard}
-            onPress={handleMigrateIds}
-            disabled={migrating}
-            activeOpacity={0.7}
-          >
-            <View style={styles.migrateIconWrap}>
-              {migrating ? (
-                <ActivityIndicator size="small" color="#F09125" />
-              ) : (
-                <Ionicons name="swap-horizontal" size={22} color="#F09125" />
-              )}
-            </View>
-            <View style={styles.migrateInfo}>
-              <Text style={styles.migrateTitle}>Update Tree IDs</Text>
-              <Text style={styles.migrateSub}>Convert to project-wise format (e.g. ARAV-001)</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#F09125" />
-          </TouchableOpacity>
-        )}
 
         {/* Capture a Tree Card */}
         <TouchableOpacity
@@ -486,29 +413,6 @@ const styles = StyleSheet.create({
   },
   greeting: { fontSize: 24, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
   bannerSub: { fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
-  migrateCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FEF3E2',
-    marginHorizontal: 16,
-    marginTop: 10,
-    borderRadius: 14,
-    padding: 14,
-    gap: 12,
-    borderWidth: 1.5,
-    borderColor: '#F09125',
-  },
-  migrateIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  migrateInfo: { flex: 1 },
-  migrateTitle: { fontSize: 14, fontWeight: '700', color: '#92400e' },
-  migrateSub: { fontSize: 11, color: '#b45309', marginTop: 2 },
   captureCard: {
     flexDirection: 'row',
     alignItems: 'center',

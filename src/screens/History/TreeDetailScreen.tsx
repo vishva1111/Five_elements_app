@@ -13,8 +13,9 @@ import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { HistoryStackParamList, TreeRecord } from '../../types';
-import { fetchTreeById, ensureProjectTreeId } from '../../services/treeService';
+import { HistoryStackParamList, TreeRecord, getMonitoringRoundInfo } from '../../types';
+import { fetchTreeById, ensureProjectTreeId, fetchTreeMonitoringRecords } from '../../services/treeService';
+import { getAuditStatus, formatDateFriendly } from '../../services/auditService';
 import { displayTreeId, parseTreeMeta, stripTreeMeta } from '../../utils/treeId';
 import MapPreview from '../../components/MapPreview';
 
@@ -34,6 +35,8 @@ export default function TreeDetailScreen() {
   const { treeId } = route.params;
   const [tree, setTree] = useState<TreeRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [audits, setAudits] = useState<any[]>([]);
+  const [compareIdx, setCompareIdx] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +59,15 @@ export default function TreeDetailScreen() {
         setTree(data);
         setLoading(false);
 
-        // Monitoring round + update action live on the Update screen
+        // Audit history for the timeline + photo comparison
+        try {
+          const { data: records } = await fetchTreeMonitoringRecords(data.id);
+          if (!cancelled) setAudits((records ?? []).slice().sort((a, b) =>
+            (a.survey_date ?? '').localeCompare(b.survey_date ?? '')
+          ));
+        } catch (auditErr) {
+          console.warn('[TreeApp] fetch audits failed:', auditErr);
+        }
       } catch (err) {
         console.warn('[TreeApp] fetchTreeById failed:', err);
         if (!cancelled) setLoading(false);
@@ -101,6 +112,30 @@ export default function TreeDetailScreen() {
   // Parse ##META## JSON from notes (fallback for old records before DB columns existed)
   const meta = parseTreeMeta(tree.notes);
   const cleanNotes = stripTreeMeta(tree.notes);
+
+  const auditStatus = getAuditStatus(tree, audits);
+
+  // Photos for comparison: original planting photo first, then each audit photo
+  const photoTimeline: { label: string; sub: string; uri?: string | null }[] = [
+    {
+      label: 'Planting',
+      sub: formatDateFriendly(tree.submitted_at),
+      uri: tree.photo_url,
+    },
+    ...audits
+      .filter((a) => a.photo_url)
+      .map((a) => {
+        const round = Number(a.monitoring_round) || 1;
+        return {
+          label: `Audit ${round}`,
+          sub: formatDateFriendly(a.survey_date ?? a.submitted_at),
+          uri: a.photo_url,
+        };
+      }),
+  ];
+  const comparePhotos = photoTimeline.filter((p) => p.uri);
+  const activeCompare = comparePhotos[Math.min(compareIdx, comparePhotos.length - 1)];
+  const prevCompare = comparePhotos[Math.max(Math.min(compareIdx, comparePhotos.length - 1) - 1, 0)];
 
   // Project-based tree ID only — tree_id column, legacy ##META## fallback
   const treeIdParam = displayTreeId(tree);
@@ -235,6 +270,108 @@ export default function TreeDetailScreen() {
           <DetailRow icon="calendar" label="Submitted" value={date} />
           {cleanNotes ? <DetailRow icon="document-text" label="Notes" value={cleanNotes} /> : null}
         </View>
+
+        {/* Audit Timeline Card */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="git-commit-outline" size={16} color="#1a5c2a" />
+            <Text style={styles.cardTitle}>Audit Timeline</Text>
+            <View style={styles.auditNextBadge}>
+              <Text style={styles.auditNextBadgeText}>
+                {auditStatus.currentRound === 1 && auditStatus.maxRound >= 4
+                  ? 'Cycle complete'
+                  : `Next: Audit ${auditStatus.currentRound}`}
+              </Text>
+            </View>
+          </View>
+
+          {audits.length === 0 ? (
+            <Text style={styles.auditEmpty}>No audits yet — next due {formatDateFriendly(auditStatus.nextDate)}</Text>
+          ) : (
+            <View style={styles.timeline}>
+              {audits.map((a, idx) => {
+                const round = Number(a.monitoring_round) || 1;
+                const info = getMonitoringRoundInfo(round);
+                const isLast = idx === audits.length - 1;
+                return (
+                  <View key={a.id ?? idx} style={styles.timelineRow}>
+                    <View style={styles.timelineLeft}>
+                      <View style={[styles.timelineDot, { backgroundColor: info.color }]} />
+                      {!isLast && <View style={styles.timelineLine} />}
+                    </View>
+                    <View style={styles.timelineBody}>
+                      <View style={styles.timelineTop}>
+                        <View style={[styles.auditRoundChip, { backgroundColor: info.color }]}>
+                          <Text style={styles.auditRoundChipText}>A{round}</Text>
+                        </View>
+                        <Text style={styles.timelineDate}>
+                          {formatDateFriendly(a.survey_date ?? a.submitted_at)}
+                        </Text>
+                      </View>
+                      <Text style={styles.timelineLabel}>{info.label}</Text>
+                      <Text style={styles.timelineMeta}>
+                        {[
+                          a.dbh_cm != null ? `DBH ${a.dbh_cm}cm` : null,
+                          a.height_m != null ? `H ${a.height_m}m` : null,
+                          a.tree_condition,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ') || 'Recorded'}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+
+        {/* Photo Comparison Card */}
+        {comparePhotos.length >= 2 ? (
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="images-outline" size={16} color="#1a5c2a" />
+              <Text style={styles.cardTitle}>Photo Comparison</Text>
+            </View>
+            <View style={styles.compareRow}>
+              <View style={styles.compareCell}>
+                <Text style={styles.compareLabel}>{prevCompare.label} · {prevCompare.sub}</Text>
+                <Image source={{ uri: prevCompare.uri! }} style={styles.comparePhoto} resizeMode="cover" />
+              </View>
+              <View style={styles.compareCell}>
+                <Text style={styles.compareLabel}>{activeCompare.label} · {activeCompare.sub}</Text>
+                <Image source={{ uri: activeCompare.uri! }} style={styles.comparePhoto} resizeMode="cover" />
+              </View>
+            </View>
+            <View style={styles.compareNav}>
+              <TouchableOpacity
+                style={styles.compareNavBtn}
+                onPress={() => setCompareIdx((i) => Math.max(0, Math.min(i, comparePhotos.length - 1) - 1))}
+                disabled={compareIdx <= 0}
+              >
+                <Ionicons name="chevron-back" size={16} color={compareIdx <= 0 ? '#ccc' : '#1a5c2a'} />
+              </TouchableOpacity>
+              <Text style={styles.compareNavText}>
+                {Math.min(compareIdx, comparePhotos.length - 1) + 1} / {comparePhotos.length}
+              </Text>
+              <TouchableOpacity
+                style={styles.compareNavBtn}
+                onPress={() =>
+                  setCompareIdx((i) =>
+                    Math.min(comparePhotos.length - 1, Math.max(0, Math.min(i, comparePhotos.length - 1)) + 1)
+                  )
+                }
+                disabled={compareIdx >= comparePhotos.length - 1}
+              >
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={compareIdx >= comparePhotos.length - 1 ? '#ccc' : '#1a5c2a'}
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
 
         {/* Location Card */}
         <View style={styles.card}>
@@ -417,6 +554,53 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E8F5E9',
   },
   cardTitle: { fontSize: 14, fontWeight: '800', color: '#1a5c2a' },
+  auditNextBadge: {
+    marginLeft: 'auto',
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  auditNextBadgeText: { fontSize: 9, fontWeight: '800', color: '#1a5c2a' },
+  auditEmpty: { fontSize: 12, color: '#999', paddingVertical: 6 },
+  timeline: { gap: 0 },
+  timelineRow: { flexDirection: 'row', gap: 10 },
+  timelineLeft: { alignItems: 'center', width: 14 },
+  timelineDot: { width: 10, height: 10, borderRadius: 5, marginTop: 3 },
+  timelineLine: { width: 2, flex: 1, backgroundColor: '#E8F0E9', marginVertical: 2 },
+  timelineBody: { flex: 1, paddingBottom: 14 },
+  timelineTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  auditRoundChip: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  auditRoundChipText: { color: '#fff', fontSize: 9, fontWeight: '800' },
+  timelineDate: { fontSize: 11, color: '#888' },
+  timelineLabel: { fontSize: 13, fontWeight: '800', color: '#222', marginTop: 3 },
+  timelineMeta: { fontSize: 11, color: '#777', marginTop: 2 },
+  compareRow: { flexDirection: 'row', gap: 10 },
+  compareCell: { flex: 1 },
+  compareLabel: { fontSize: 10, fontWeight: '700', color: '#1a5c2a', marginBottom: 5 },
+  comparePhoto: { width: '100%', height: 130, borderRadius: 12, backgroundColor: '#e8f5e9' },
+  compareNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 10,
+  },
+  compareNavBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D4E8D0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F4FAF5',
+  },
+  compareNavText: { fontSize: 11, fontWeight: '800', color: '#555' },
   sideBySide: {
     flexDirection: 'row',
     gap: 12,
