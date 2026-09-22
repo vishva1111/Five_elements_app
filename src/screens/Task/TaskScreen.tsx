@@ -18,7 +18,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useTaskStore } from '../../store/taskStore';
 import { fetchMyTrees, fetchAllProjects } from '../../services/treeService';
-import { fetchAgentTasks, startTask } from '../../services/taskService';
+import { fetchAgentTasks, completeTask } from '../../services/taskService';
 import {
   loadLocalTasks,
   saveLocalTasks,
@@ -103,16 +103,21 @@ export default function TaskScreen() {
     const myTrees = treesRes.data ?? [];
     const localWithProgress = refreshLocalProgress(localTasks, myTrees);
 
-    // Filter: tasks with no project, assigned projects, or active project
-    const filterByAssigned = (t: Task) =>
-      !t.project_id || (assignedProjects ?? []).some((p) => p.id === t.project_id) || t.project_id === activeProjectId;
+    // Tasks fetched from the backend are already scoped by assignee_id === me — if it's
+    // assigned to me, I should see it, full stop. No extra project filter on top of that;
+    // `assignedProjects` is never populated anywhere in the app, so that used to silently
+    // hide every real assigned task unless it happened to match whatever project the user
+    // currently had active for tree capture.
+    const visibleTasks = tasksRes.data ?? []
 
-    let visibleTasks = (tasksRes.data ?? []).filter(filterByAssigned);
-    let visibleLocal = localWithProgress.filter(filterByAssigned);
+    // Local/demo tasks are created ad-hoc under whichever project context is active, so
+    // it still makes sense to scope those to the current project selection.
+    const filterLocalByProject = (t: Task) =>
+      !t.project_id || (assignedProjects ?? []).some((p) => p.id === t.project_id) || t.project_id === activeProjectId
 
+    let visibleLocal = localWithProgress.filter(filterLocalByProject)
     if (activeProjectId) {
-      visibleTasks = visibleTasks.filter((t) => t.project_id === activeProjectId);
-      visibleLocal = visibleLocal.filter((t) => t.project_id === activeProjectId);
+      visibleLocal = visibleLocal.filter((t) => t.project_id === activeProjectId)
     }
 
     setTasks([...visibleTasks, ...visibleLocal]);
@@ -135,27 +140,33 @@ export default function TaskScreen() {
   };
 
   const handleStartTask = async (task: Task) => {
-    if (!task.started_at) {
-      if (isLocalTask(task)) {
-        const startedAt = new Date().toISOString();
-        const updatedLocal = localTasks.map((t) =>
-          t.id === task.id
-            ? { ...t, started_at: startedAt, status: 'in_progress' as const }
-            : t
-        );
-        setLocalTasks(updatedLocal);
-        saveLocalTasks(updatedLocal);
-        setTasks(
-          tasks.map((t) =>
-            t.id === task.id ? { ...t, started_at: startedAt, status: 'in_progress' } : t
-          )
-        );
-      } else {
-        await startTask(task.id);
-        setTasks(tasks.map((t) => (t.id === task.id ? { ...t, started_at: new Date().toISOString(), status: 'in_progress' } : t)));
-      }
-    }
+    // Navigate directly to Capture — no intermediate in_progress status.
+    // The task moves assigned → completed automatically when the tree is submitted.
     navigation.navigate('Capture');
+  };
+
+  // For tickets already linked to an existing tree (our "go verify this tree" tasks) —
+  // there's nothing new to capture, so completion is a direct confirmation, not a form.
+  const [completingId, setCompletingId] = useState<string | null>(null);
+  const handleCompleteTask = async (task: Task) => {
+    if (isLocalTask(task) || !task.tree_id) return;
+    setCompletingId(task.id);
+    try {
+      const { error } = await completeTask(task.id);
+      if (error) {
+        Alert.alert('Could not complete task', error);
+        return;
+      }
+      setTasks(
+        tasks.map((t) =>
+          t.id === task.id
+            ? { ...t, status: 'completed' as const, completed_at: new Date().toISOString() }
+            : t
+        )
+      );
+    } finally {
+      setCompletingId(null);
+    }
   };
 
   const handleAddDemoTask = async () => {
@@ -224,11 +235,12 @@ export default function TaskScreen() {
   // Count tasks for each tab
   const treeCaptures = trees.length;
   const assignedCount = assignedTasks.length;
+  const inProgressCount = inProgressTasks.length;
   const completedCount = completedTasks.length + treeCaptures;
   const approvedCount = approvedTasks.length;
   const rejectedCount = rejectedTasks.length;
   const reviewedCount = approvedCount + rejectedCount;
-  const totalTasks = assignedCount + completedCount + approvedCount + rejectedCount;
+  const totalTasks = assignedCount + inProgressCount + completedCount + approvedCount + rejectedCount;
 
   // Extract unique dates from assigned tasks (descending, past first)
   const dates = useMemo(() => {
@@ -271,6 +283,9 @@ export default function TaskScreen() {
       : '#1a5c2a';
     const isAssigned = task.status === 'assigned';
     const isTreeCapture = task.status === 'completed' && task.photo_url;
+    // Already-linked-to-a-tree + in_progress = our "verify this tree" ticket, ready
+    // to be confirmed directly (no new capture needed for it).
+    const canMarkComplete = task.status === 'in_progress' && !!task.tree_id;
     
     const conditionColors: Record<string, string> = {
       Healthy: '#22c55e',
@@ -295,7 +310,9 @@ export default function TaskScreen() {
         <View style={s.taskCardContent}>
           <View style={s.taskCardTop}>
             <View style={s.taskTitleWrap}>
-              <Text style={s.taskId} numberOfLines={1}>ID: {task.id.slice(0, 8).toUpperCase()}</Text>
+              <Text style={s.taskId} numberOfLines={1}>
+                {task.task_code ?? `ID: ${task.id.slice(0, 8).toUpperCase()}`}
+              </Text>
               <Text style={s.taskName} numberOfLines={1}>{task.name}</Text>
             </View>
             {isAssigned ? (
@@ -306,6 +323,22 @@ export default function TaskScreen() {
               >
                 <Ionicons name="play-circle-outline" size={14} color="#fff" />
                 <Text style={s.startBtnText}>Start</Text>
+              </TouchableOpacity>
+            ) : canMarkComplete ? (
+              <TouchableOpacity
+                style={[s.startBtn, { backgroundColor: '#22c55e' }]}
+                onPress={(e) => { e.stopPropagation(); handleCompleteTask(task); }}
+                activeOpacity={0.7}
+                disabled={completingId === task.id}
+              >
+                {completingId === task.id ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle-outline" size={14} color="#fff" />
+                    <Text style={s.startBtnText}>Complete</Text>
+                  </>
+                )}
               </TouchableOpacity>
             ) : (
               <View style={[s.statusBadge, { backgroundColor: statusColor + '18' }]}>
@@ -347,6 +380,14 @@ export default function TaskScreen() {
             <View style={s.dueRow}>
               <Ionicons name="calendar-outline" size={10} color="#888" />
               <Text style={s.dueText}>{dayName}, {dateStr}</Text>
+            </View>
+          ) : null}
+
+          {/* Who assigned this task to me */}
+          {task.assigned_by_name ? (
+            <View style={s.surveyorRow}>
+              <Ionicons name="person-circle-outline" size={11} color="#888" />
+              <Text style={s.surveyorText}>Assigned by {task.assigned_by_name}</Text>
             </View>
           ) : null}
         </View>
@@ -474,6 +515,7 @@ export default function TaskScreen() {
         {/* Tab content */}
         <View style={s.content}>
           {activeTab === 'assigned' && renderTaskList(filterByDate(assignedTasks))}
+          
           {activeTab === 'completed' && renderTaskList(filterByDate([...completedTasks, ...trees.map((t) => ({
             id: t.id,
             name: t.species || 'Tree Capture',

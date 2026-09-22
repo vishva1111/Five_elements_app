@@ -344,10 +344,12 @@ export async function saveUserProjects(
 export async function fetchUserProfile(
   userId: string
 ): Promise<ApiResponse<any>> {
+  // profiles.auth_id links to auth.users.id (UUID)
+  // profiles.id is a text key like "ind-xxxxxxxx" — NOT the auth UUID
   const { data, error } = await supabase
     .from('profiles')
     .select('*')
-    .eq('id', userId)
+    .eq('auth_id', userId)
     .maybeSingle();
 
   // If table doesn't exist or query fails, return null data (caller handles defaults)
@@ -363,10 +365,11 @@ export async function syncUserCredits(
   userId: string,
   credits: number
 ): Promise<ApiResponse<null>> {
+  // profiles.auth_id links to auth.users.id (UUID)
   const { error } = await supabase
     .from('profiles')
     .update({ credits })
-    .eq('id', userId);
+    .eq('auth_id', userId);
 
   return { data: null, error: error?.message ?? null };
 }

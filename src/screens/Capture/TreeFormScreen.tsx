@@ -34,6 +34,8 @@ import { useTreeStore } from '../../store/treeStore';
 import { insertTreeRecord, syncUserCredits, computeCreditsForProject, fetchAllProjects } from '../../services/treeService';
 import { Project } from '../../types';
 import { uploadTreePhoto } from '../../services/storageService';
+import { completeTask } from '../../services/taskService';
+import { useTaskStore } from '../../store/taskStore';
 import MapPreview from '../../components/MapPreview';
 
 type Nav = NativeStackNavigationProp<CaptureStackParamList, 'TreeForm'>;
@@ -247,6 +249,31 @@ export default function TreeFormScreen() {
       setUserCredits(remainingCredits);
       // Keep the profile credits column in sync (best-effort, non-blocking)
       syncUserCredits(user.id, remainingCredits);
+
+      // 4. Auto-complete any in_progress task assigned to this user
+      //    that is linked to this tree_id OR is the first in_progress task
+      //    (best-effort — non-blocking, won't fail the submit)
+      try {
+        const allTasks = useTaskStore.getState().tasks ?? [];
+        const inProgressTask = allTasks.find(
+          (t) =>
+            t.status === 'assigned' &&
+            (t.tree_id === data.id || t.tree_id === form.tree_id || !t.tree_id)
+        );
+        if (inProgressTask) {
+          await completeTask(inProgressTask.id, data.id);
+          // Update local store so TaskScreen reflects immediately
+          const updatedTasks = allTasks.map((t) =>
+            t.id === inProgressTask.id
+              ? { ...t, status: 'completed' as const, completed_at: new Date().toISOString(), tree_id: data.id }
+              : t
+          );
+          useTaskStore.getState().setTasks(updatedTasks);
+        }
+      } catch (taskErr) {
+        // Non-critical — tree was saved successfully
+        console.warn('[TreeFormScreen] task auto-complete failed:', taskErr);
+      }
 
       navigation.navigate('SubmitSuccess', { treeId: data.id });
     } catch (err: any) {

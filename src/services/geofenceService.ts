@@ -88,7 +88,7 @@ export function detectEvents(
 export type GeofenceCallback = (alerts: GeofenceAlert[]) => void;
 
 export interface GeofenceMonitor {
-  start: () => Promise<void>;
+  start: (zones: GeofenceZone[], callback: GeofenceCallback) => Promise<void>;
   stop: () => void;
   isRunning: () => boolean;
 }
