@@ -1,7 +1,7 @@
 import 'react-native-url-polyfill/auto';
 import React, { useEffect, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet, View, ActivityIndicator, Text, Image } from 'react-native';
@@ -23,8 +23,11 @@ import CaptureScreen from './src/screens/Capture/CaptureScreen';
 import MapPickerScreen from './src/screens/Capture/MapPickerScreen';
 import TreeFormScreen from './src/screens/Capture/TreeFormScreen';
 import SubmitSuccessScreen from './src/screens/Capture/SubmitSuccessScreen';
+
 import HistoryScreen from './src/screens/History/HistoryScreen';
 import TreeDetailScreen from './src/screens/History/TreeDetailScreen';
+import UpdateTreeScreen from './src/screens/History/UpdateTreeScreen';
+import UpdateLookupScreen from './src/screens/History/UpdateLookupScreen';
 import ProfileScreen from './src/screens/Profile/ProfileScreen';
 import TaskScreen from './src/screens/Task/TaskScreen';
 import TreeMapScreen from './src/screens/Map/TreeMapScreen';
@@ -43,6 +46,7 @@ const RootStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 const CaptureStack = createNativeStackNavigator();
 const HistoryStack = createNativeStackNavigator();
+const UpdateLookupStack = createNativeStackNavigator();
 
 function CaptureNavigator() {
   return (
@@ -67,7 +71,17 @@ function HistoryNavigator() {
     >
       <HistoryStack.Screen name="HistoryList" component={HistoryScreen} options={{ title: 'MY SUBMISSIONS', headerShown: false }} />
       <HistoryStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS', headerShown: false }} />
+      <HistoryStack.Screen name="UpdateTree" component={UpdateTreeScreen} options={{ title: 'AUDIT TREE', headerShown: false }} />
     </HistoryStack.Navigator>
+  );
+}
+
+function UpdateLookupNavigator() {
+  return (
+    <UpdateLookupStack.Navigator screenOptions={{ headerShown: false }}>
+      <UpdateLookupStack.Screen name="UpdateLookup" component={UpdateLookupScreen} />
+      <UpdateLookupStack.Screen name="UpdateTree" component={UpdateTreeScreen} />
+    </UpdateLookupStack.Navigator>
   );
 }
 
@@ -75,12 +89,15 @@ function MainTabs() {
   const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
+      screenOptions={({ route }) => {
+        const focusedName = getFocusedRouteNameFromRoute(route);
+        const hideTabBar = focusedName === 'UpdateTree';
+        return {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
           if (route.name === 'Home') iconName = focused ? 'home' : 'home-outline';
-          else if (route.name === 'Map') iconName = focused ? 'map' : 'map-outline';
           else if (route.name === 'Task') iconName = focused ? 'clipboard' : 'clipboard-outline';
+          else if (route.name === 'Update') iconName = focused ? 'clipboard' : 'clipboard-outline';
           else if (route.name === 'History') iconName = focused ? 'list' : 'list-outline';
           else if (route.name === 'Profile') iconName = focused ? 'person' : 'person-outline';
           return (
@@ -97,8 +114,8 @@ function MainTabs() {
         tabBarLabel: ({ focused, color }) => {
           const labels: Record<string, string> = {
             Home: 'Home',
-            Map: 'Map',
             Task: 'Tasks',
+            Update: 'Audit',
             History: 'History',
             Profile: 'Profile',
           };
@@ -117,30 +134,33 @@ function MainTabs() {
         tabBarActiveTintColor: '#1a5c2a',
         tabBarInactiveTintColor: '#999',
         tabBarShowLabel: true,
-        tabBarStyle: {
-          backgroundColor: '#fff',
-          borderTopWidth: 0,
-          elevation: 20,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.1,
-          shadowRadius: 12,
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
-          paddingTop: 8,
-          height: 68 + (insets.bottom > 0 ? insets.bottom : 8),
-          borderTopLeftRadius: 24,
-          borderTopRightRadius: 24,
-          position: 'absolute',
-        },
+        tabBarStyle: hideTabBar
+          ? { display: 'none' }
+          : {
+              backgroundColor: '#fff',
+              borderTopWidth: 0,
+              elevation: 20,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: -4 },
+              shadowOpacity: 0.1,
+              shadowRadius: 12,
+              paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
+              paddingTop: 8,
+              height: 68 + (insets.bottom > 0 ? insets.bottom : 8),
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              position: 'absolute',
+            },
         headerStyle: { backgroundColor: '#1a5c2a' },
         headerTintColor: '#fff',
         headerTitleStyle: { fontWeight: 'bold', fontSize: 19 },
         headerTitleAlign: 'center',
-      })}
+        };
+      }}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ headerShown: false, title: 'DASHBOARD' }} />
-      <Tab.Screen name="Map" component={TreeMapScreen} options={{ headerShown: false, title: 'MAP' }} />
       <Tab.Screen name="Task" component={TaskScreen} options={{ headerShown: false, title: 'TASKS' }} />
+      <Tab.Screen name="Update" component={UpdateLookupNavigator} options={{ headerShown: false, title: 'AUDIT' }} />
       <Tab.Screen name="History" component={HistoryNavigator} options={{ headerShown: false, title: 'HISTORY' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false, title: 'PROFILE' }} />
     </Tab.Navigator>
@@ -303,6 +323,8 @@ export default function App() {
                   <RootStack.Screen name="Main" component={MainTabs} />
                   <RootStack.Screen name="Capture" component={CaptureNavigator} />
                   <RootStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS' }} />
+                  <RootStack.Screen name="UpdateTree" component={UpdateTreeScreen} options={{ title: 'AUDIT TREE', headerShown: false }} />
+                  <RootStack.Screen name="Map" component={TreeMapScreen} options={{ title: 'MAP', headerShown: false }} />
                 </>
               )}
             </RootStack.Navigator>

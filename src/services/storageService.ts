@@ -1,3 +1,4 @@
+
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { supabase, TREE_PHOTOS_BUCKET } from './supabase';
@@ -38,5 +39,37 @@ export async function uploadTreePhoto(
   } catch (err: any) {
     console.error('Photo upload error:', err?.message ?? JSON.stringify(err));
     return null;
+  }
+}
+
+/**
+ * Ensure the storage bucket exists. Call this once on app startup or when
+ * the storage bucket is missing (404). Creates a public bucket so photos
+ * can be uploaded and accessed via public URLs.
+ */
+export async function ensureStorageBucket(): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.storage
+      .from(TREE_PHOTOS_BUCKET)
+      .getPublicUrl('__check__');
+
+    if (error && error.code === 'PGRST205') {
+      // Bucket doesn't exist — cannot create it via anon key.
+      // The bucket must be created in the Supabase Dashboard:
+      //   Dashboard → Storage → New Bucket → Name: tree-photos → Public
+      console.warn(
+        '[TreeApp] Storage bucket "' +
+          TREE_PHOTOS_BUCKET +
+          '" does not exist. ' +
+          'Create it in Supabase Dashboard → Storage → New Bucket → ' +
+          'Name: "tree-photos" → Public → Save.'
+      );
+      return false;
+    }
+
+    return true;
+  } catch (err: any) {
+    console.warn('[TreeApp] Storage bucket check failed:', err?.message);
+    return false;
   }
 }

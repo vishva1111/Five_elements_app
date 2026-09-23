@@ -4,13 +4,10 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="map upadte">
-      <change beforePath="$PROJECT_DIR$/.env.example" beforeDir="false" afterPath="$PROJECT_DIR$/.env.example" afterDir="false" />
+    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="design update 1">
       <change beforePath="$PROJECT_DIR$/.expo/dev/logs/start.log" beforeDir="false" afterPath="$PROJECT_DIR$/.expo/dev/logs/start.log" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/MapPreview.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/MapPreview.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Capture/MapPickerScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/MapPickerScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Map/TreeMapScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Map/TreeMapScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -25,7 +22,7 @@
     <option name="PUSH_AUTO_UPDATE" value="true" />
     <option name="RECENT_BRANCH_BY_REPOSITORY">
       <map>
-        <entry key="$PROJECT_DIR$" value="feature/project-tree-photo-upload" />
+        <entry key="$PROJECT_DIR$" value="project_task" />
       </map>
     </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -69,10 +66,10 @@
     &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
     &quot;dart.analysis.tool.window.visible&quot;: &quot;false&quot;,
     &quot;deletionFromPopupRequiresConfirmation&quot;: &quot;false&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;project__task&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;project__map&quot;,
     &quot;git.auto.fetch.suggestion.counter&quot;: &quot;3&quot;,
     &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;device.mirroring&quot;,
     &quot;show.migrate.to.gradle.popup&quot;: &quot;false&quot;
   }
 }</component>
@@ -252,7 +249,79 @@
       <option name="project" value="LOCAL" />
       <updated>1789551340294</updated>
     </task>
-    <option name="localTasksCounter" value="22" />
+    <task id="LOCAL-00022" summary="chnage map to use &quot;mapbox&quot;- satellite view.">
+      <option name="closed" value="true" />
+      <created>1789639136290</created>
+      <option name="number" value="00022" />
+      <option name="presentableId" value="LOCAL-00022" />
+      <option name="project" value="LOCAL" />
+      <updated>1789639136290</updated>
+    </task>
+    <task id="LOCAL-00023" summary="gps to gnss replce.">
+      <option name="closed" value="true" />
+      <created>1789811870379</created>
+      <option name="number" value="00023" />
+      <option name="presentableId" value="LOCAL-00023" />
+      <option name="project" value="LOCAL" />
+      <updated>1789811870379</updated>
+    </task>
+    <task id="LOCAL-00024" summary="change full app design view.">
+      <option name="closed" value="true" />
+      <created>1789817052943</created>
+      <option name="number" value="00024" />
+      <option name="presentableId" value="LOCAL-00024" />
+      <option name="project" value="LOCAL" />
+      <updated>1789817052943</updated>
+    </task>
+    <task id="LOCAL-00025" summary="solve design bugs.">
+      <option name="closed" value="true" />
+      <created>1789818907453</created>
+      <option name="number" value="00025" />
+      <option name="presentableId" value="LOCAL-00025" />
+      <option name="project" value="LOCAL" />
+      <updated>1789818907453</updated>
+    </task>
+    <task id="LOCAL-00026" summary="add update screen.">
+      <option name="closed" value="true" />
+      <created>1789984116377</created>
+      <option name="number" value="00026" />
+      <option name="presentableId" value="LOCAL-00026" />
+      <option name="project" value="LOCAL" />
+      <updated>1789984116377</updated>
+    </task>
+    <task id="LOCAL-00027" summary="solve tree id problem and make project wies id.">
+      <option name="closed" value="true" />
+      <created>1789992718711</created>
+      <option name="number" value="00027" />
+      <option name="presentableId" value="LOCAL-00027" />
+      <option name="project" value="LOCAL" />
+      <updated>1789992718711</updated>
+    </task>
+    <task id="LOCAL-00028" summary="solve id bug.">
+      <option name="closed" value="true" />
+      <created>1789996463635</created>
+      <option name="number" value="00028" />
+      <option name="presentableId" value="LOCAL-00028" />
+      <option name="project" value="LOCAL" />
+      <updated>1789996463636</updated>
+    </task>
+    <task id="LOCAL-00029" summary="audit page bug solve and tree profile page update.">
+      <option name="closed" value="true" />
+      <created>1790083184305</created>
+      <option name="number" value="00029" />
+      <option name="presentableId" value="LOCAL-00029" />
+      <option name="project" value="LOCAL" />
+      <updated>1790083184305</updated>
+    </task>
+    <task id="LOCAL-00030" summary="design update 1">
+      <option name="closed" value="true" />
+      <created>1790083699418</created>
+      <option name="number" value="00030" />
+      <option name="presentableId" value="LOCAL-00030" />
+      <option name="project" value="LOCAL" />
+      <updated>1790083699418</updated>
+    </task>
+    <option name="localTasksCounter" value="31" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -266,14 +335,7 @@
                   <entry key="branch">
                     <value>
                       <list>
-                        <option value="origin/feature/project-tree-photo-upload" />
-                      </list>
-                    </value>
-                  </entry>
-                  <entry key="text">
-                    <value>
-                      <list>
-                        <option value="task" />
+                        <option value="project_map" />
                       </list>
                     </value>
                   </entry>
@@ -286,13 +348,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="update features" />
-    <MESSAGE value="update features 2" />
-    <MESSAGE value="project according to login" />
-    <MESSAGE value="login session bug fixed." />
-    <MESSAGE value="credit logic update" />
-    <MESSAGE value="design bug" />
-    <MESSAGE value="design bug 2" />
     <MESSAGE value="new Feature- entire app work only with the selected project" />
     <MESSAGE value="clean project" />
     <MESSAGE value="small design bug" />
@@ -309,6 +364,15 @@
     <MESSAGE value="add logo or apk build upadte" />
     <MESSAGE value="Add Tree Markers, Geotagging, Geofencing &amp; Location Lock" />
     <MESSAGE value="location detch bug solve and project according tree fanching show." />
-    <option name="LAST_COMMIT_MESSAGE" value="location detch bug solve and project according tree fanching show." />
+    <MESSAGE value="chnage map to use &quot;mapbox&quot;- satellite view." />
+    <MESSAGE value="gps to gnss replce." />
+    <MESSAGE value="change full app design view." />
+    <MESSAGE value="solve design bugs." />
+    <MESSAGE value="add update screen." />
+    <MESSAGE value="solve tree id problem and make project wies id." />
+    <MESSAGE value="solve id bug." />
+    <MESSAGE value="audit page bug solve and tree profile page update." />
+    <MESSAGE value="design update 1" />
+    <option name="LAST_COMMIT_MESSAGE" value="design update 1" />
   </component>
 </project>

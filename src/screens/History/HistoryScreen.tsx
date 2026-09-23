@@ -13,13 +13,15 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useTaskStore } from '../../store/taskStore';
-import { fetchMyTrees } from '../../services/treeService';
+import { fetchMyTrees, backfillProjectTreeIds } from '../../services/treeService';
+import { parseTreeMeta, resolveTreeId, TREE_ID_PLACEHOLDER } from '../../utils/treeId';
 import { fetchAgentTasks } from '../../services/taskService';
-import { TreeCondition, LandType, Task, TreeRecord } from '../../types';
+import { TreeCondition, LandType, Task, TreeRecord, HistoryCategory, MONITORING_ROUNDS } from '../../types';
+import { fetchAuditsForTrees, getLatestAudit } from '../../services/auditService';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
-type FilterCategory = 'condition' | 'status';
+type FilterCategory = HistoryCategory;
 
 interface HistoryItem {
   id: string;
@@ -33,11 +35,15 @@ interface HistoryItem {
   longitude?: number;
   surveyor?: string;
   project_id?: string;
+  tree_id?: string;
+  tree_record_id?: string;
+  audit_round?: number | null;
 }
 
 const CATEGORIES: { key: FilterCategory; label: string; icon: string }[] = [
   { key: 'condition', label: 'Condition', icon: 'leaf' },
   { key: 'status', label: 'Status', icon: 'flag' },
+  { key: 'audit', label: 'Audit', icon: 'clipboard' },
 ];
 
 const CONDITION_FILTERS: { label: string; value: TreeCondition | 'all' }[] = [
@@ -55,17 +61,29 @@ const STATUS_FILTERS: { label: string; value: string }[] = [
   { label: 'Rejected', value: 'rejected' },
 ];
 
+const AUDIT_FILTERS: { label: string; value: string }[] = [
+  { label: 'All', value: 'all' },
+  ...MONITORING_ROUNDS.map((r) => ({ label: `Audit ${r.round}`, value: String(r.round) })),
+];
+
 const CONDITION_COLORS: Record<string, string> = {
-  Healthy: '#22c55e',
-  Stressed: '#f59e0b',
-  Diseased: '#ef4444',
-  Dead: '#6b7280',
+  Healthy: '#16a34a',
+  Stressed: '#d97706',
+  Diseased: '#dc2626',
+  Dead: '#4b5563',
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  completed: '#22c55e',
-  approved: '#8b5cf6',
-  rejected: '#ef4444',
+  completed: '#16a34a',
+  approved: '#7c3aed',
+  rejected: '#dc2626',
+};
+
+const AUDIT_COLORS: Record<string, string> = {
+  '1': '#22c55e',
+  '2': '#3b82f6',
+  '3': '#f59e0b',
+  '4': '#8b5cf6',
 };
 
 export default function HistoryScreen() {
@@ -81,6 +99,9 @@ export default function HistoryScreen() {
   const [activeCategory, setActiveCategory] = useState<FilterCategory>('condition');
   const [conditionFilter, setConditionFilter] = useState<TreeCondition | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [auditFilter, setAuditFilter] = useState<string>('all');
+  const [auditItems, setAuditItems] = useState<HistoryItem[]>([]);
+  const [auditsByTree, setAuditsByTree] = useState<Record<string, any[]>>({});
 
   const loadSeqRef = useRef(0);
 
@@ -94,6 +115,48 @@ export default function HistoryScreen() {
     if (seq !== loadSeqRef.current) return;
     if (treesRes.data) setTrees(treesRes.data);
     if (tasksRes.data) setTasks(tasksRes.data);
+
+    // Trees captured before project IDs existed get one assigned + persisted so
+    // every card shows its project tree ID (e.g. ARAV-001)
+    if (treesRes.data && treesRes.data.length > 0) {
+      backfillProjectTreeIds(treesRes.data).then((enriched) => {
+        if (seq !== loadSeqRef.current || !enriched) return;
+        setTrees(enriched);
+      });
+
+      // Flatten monitoring records → one history item per audit photo
+      try {
+        const audits = await fetchAuditsForTrees(treesRes.data.map((t) => t.id));
+        if (seq !== loadSeqRef.current) return;
+        setAuditsByTree(audits);
+
+        const items: HistoryItem[] = [];
+        for (const t of treesRes.data) {
+          const records = audits[t.id] ?? [];
+          for (const r of records) {
+            items.push({
+              id: r.id ?? `${t.id}-a${r.monitoring_round}`,
+              tree_record_id: t.id,
+              type: 'tree',
+              title: `Audit ${r.monitoring_round ?? 1} · ${t.species || 'Tree'}`,
+              photo_url: r.photo_url || t.photo_url,
+              condition: r.tree_condition || t.tree_condition || 'Healthy',
+              status: 'completed',
+              date: r.survey_date || r.submitted_at || t.submitted_at,
+              latitude: r.latitude ?? t.latitude,
+              longitude: r.longitude ?? t.longitude,
+              surveyor: r.surveyor || t.surveyor,
+              project_id: r.project_id || t.project_id,
+              tree_id: resolveTreeId(t),
+              audit_round: r.monitoring_round ?? null,
+            });
+          }
+        }
+        setAuditItems(items);
+      } catch (auditErr) {
+        console.warn('[TreeApp] audit history load failed:', auditErr);
+      }
+    }
   }, [userId, setTrees, setTasks]);
 
   useFocusEffect(
@@ -112,40 +175,49 @@ export default function HistoryScreen() {
     setActiveCategory(cat);
     setConditionFilter('all');
     setStatusFilter('all');
+    setAuditFilter('all');
   };
 
   // Merge trees + approved/rejected tasks into history items
   const allItems: HistoryItem[] = [];
 
-  // Trees
+  // Trees (enriched with latest audit data if available)
   trees.forEach((t) => {
-    let meta: Record<string, any> = {};
-    const metaMatch = (t.notes || '').match(/##META##({.*})/s);
-    if (metaMatch) { try { meta = JSON.parse(metaMatch[1]); } catch {} }
+    const meta = parseTreeMeta(t.notes);
+    const treeAudits = auditsByTree[t.id] ?? [];
+    const latest = getLatestAudit(treeAudits);
+    const rawCondition = latest?.tree_condition || t.tree_condition || meta.tree_condition || 'Healthy';
+    const normalizedCondition = rawCondition.charAt(0).toUpperCase() + rawCondition.slice(1).toLowerCase();
+    const photo = latest?.photo_url || t.photo_url;
     allItems.push({
       id: t.id,
+      tree_record_id: t.id,
       type: 'tree',
       title: t.species || 'Tree',
-      photo_url: t.photo_url,
-      condition: t.tree_condition || meta.tree_condition,
+      photo_url: photo,
+      condition: normalizedCondition,
       status: 'completed',
-      date: t.submitted_at,
-      latitude: t.latitude,
-      longitude: t.longitude,
-      surveyor: t.surveyor || meta.surveyor,
+      date: latest?.survey_date || latest?.submitted_at || t.submitted_at,
+      latitude: latest?.latitude ?? t.latitude,
+      longitude: latest?.longitude ?? t.longitude,
+      surveyor: latest?.surveyor || t.surveyor || meta.surveyor,
       project_id: t.project_id,
+      tree_id: resolveTreeId(t),
+      audit_round: latest?.monitoring_round ?? null,
     });
   });
 
   // Tasks (approved/rejected/completed with tree data)
   tasks.forEach((t) => {
     if (t.status === 'approved' || t.status === 'rejected') {
+      const rawCondition = t.tree_condition || '';
+      const normalizedCondition = rawCondition.charAt(0).toUpperCase() + rawCondition.slice(1).toLowerCase();
       allItems.push({
         id: t.id,
         type: 'task',
         title: t.name || 'Task',
         photo_url: t.photo_url,
-        condition: t.tree_condition,
+        condition: normalizedCondition,
         status: t.status,
         date: t.created_at,
         latitude: t.latitude,
@@ -157,9 +229,22 @@ export default function HistoryScreen() {
   });
 
   // Filter
-  const filtered = allItems.filter((item) => {
+  const sourceItems =
+    activeCategory === 'audit'
+      ? auditItems
+      : activeCategory === 'condition'
+      ? trees.map((t) => allItems.find((i) => i.id === t.id)).filter(Boolean) as HistoryItem[]
+      : allItems.filter((i) => i.type === 'task' || i.status === 'completed');
+
+  const filtered = sourceItems.filter((item) => {
     const projectMatch = activeProjectId ? item.project_id === activeProjectId : true;
-    const conditionMatch = conditionFilter === 'all' || item.condition === conditionFilter;
+    if (activeCategory === 'audit') {
+      const roundMatch = auditFilter === 'all' || String(item.audit_round ?? '') === auditFilter;
+      return projectMatch && roundMatch;
+    }
+    const itemCondition = (item.condition || '').toLowerCase();
+    const filterCondition = (conditionFilter || 'all').toLowerCase();
+    const conditionMatch = filterCondition === 'all' || itemCondition === filterCondition;
     const statusMatch = statusFilter === 'all' || item.status === statusFilter;
     return projectMatch && conditionMatch && statusMatch;
   });
@@ -187,16 +272,35 @@ export default function HistoryScreen() {
         selectedValue = statusFilter;
         onPress = setStatusFilter;
         break;
+      case 'audit':
+        filters = AUDIT_FILTERS;
+        selectedValue = auditFilter;
+        onPress = setAuditFilter;
+        break;
     }
 
     return (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
         {filters.map((f) => {
           const active = selectedValue === f.value;
+          const chipColor =
+            activeCategory === 'condition' && f.value !== 'all'
+              ? CONDITION_COLORS[f.value] || '#1a5c2a'
+              : activeCategory === 'status' && f.value !== 'all'
+              ? STATUS_COLORS[f.value] || '#1a5c2a'
+              : activeCategory === 'audit' && f.value !== 'all'
+              ? AUDIT_COLORS[f.value] || '#1a5c2a'
+              : '#1a5c2a';
           return (
             <TouchableOpacity
               key={f.value}
-              style={[styles.chip, active && styles.chipActive]}
+              style={[
+                styles.chip,
+                active && { backgroundColor: chipColor, borderColor: chipColor },
+                !active && f.value !== 'all' && activeCategory === 'condition' && { backgroundColor: CONDITION_COLORS[f.value] + '15', borderColor: CONDITION_COLORS[f.value] + '40' },
+                !active && f.value !== 'all' && activeCategory === 'status' && { backgroundColor: STATUS_COLORS[f.value] + '15', borderColor: STATUS_COLORS[f.value] + '40' },
+                !active && f.value !== 'all' && activeCategory === 'audit' && { backgroundColor: AUDIT_COLORS[f.value] + '15', borderColor: AUDIT_COLORS[f.value] + '40' },
+              ]}
               onPress={() => onPress(f.value)}
             >
               <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
@@ -221,7 +325,10 @@ export default function HistoryScreen() {
       <TouchableOpacity
         key={item.id}
         style={[styles.historyCard, { borderLeftColor: statusColor }]}
-        onPress={() => navigation.navigate('TreeDetail', { treeId: item.id })}
+        onPress={() => {
+          const targetTreeId = item.tree_record_id || item.id;
+          navigation.navigate('TreeDetail', { treeId: targetTreeId });
+        }}
         activeOpacity={0.7}
       >
         {/* Photo */}
@@ -240,7 +347,9 @@ export default function HistoryScreen() {
         <View style={styles.cardContent}>
           <View style={styles.cardTop}>
             <View style={styles.cardTitleWrap}>
-              <Text style={styles.taskId}>ID: {item.id.slice(0, 8).toUpperCase()}</Text>
+              <Text style={styles.taskId}>
+                ID: <Text style={styles.taskIdValue}>{item.tree_id || TREE_ID_PLACEHOLDER}</Text>
+              </Text>
               <Text style={styles.taskName} numberOfLines={1}>{item.title}</Text>
             </View>
             {/* Status badge on right */}
@@ -250,13 +359,23 @@ export default function HistoryScreen() {
             </View>
           </View>
 
-          {/* Condition badge */}
-          {item.condition ? (
-            <View style={[styles.conditionBadge, { backgroundColor: conditionColor + '15', borderColor: conditionColor + '40' }]}>
-              <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
-              <Text style={[styles.conditionText, { color: conditionColor }]}>{item.condition}</Text>
-            </View>
-          ) : null}
+          {/* Badges row: Audit round + Condition */}
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
+            {item.audit_round != null ? (
+              <View style={[styles.conditionBadge, { backgroundColor: (AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a') + '15', borderColor: (AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a') + '40' }]}>
+                <View style={[styles.conditionDot, { backgroundColor: AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a' }]} />
+                <Text style={[styles.conditionText, { color: AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a' }]}>
+                  Audit {item.audit_round}
+                </Text>
+              </View>
+            ) : null}
+            {item.condition ? (
+              <View style={[styles.conditionBadge, { backgroundColor: conditionColor + '15', borderColor: conditionColor + '40' }]}>
+                <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
+                <Text style={[styles.conditionText, { color: conditionColor }]}>{item.condition}</Text>
+              </View>
+            ) : null}
+          </View>
 
           {/* Location + Date */}
           <View style={styles.bottomRow}>
@@ -309,9 +428,6 @@ export default function HistoryScreen() {
         {renderFilterChips()}
       </View>
 
-      {/* Count */}
-      <Text style={styles.count}>{filtered.length} record{filtered.length !== 1 ? 's' : ''}</Text>
-
       {/* List */}
       <FlatList
         data={filtered}
@@ -326,8 +442,10 @@ export default function HistoryScreen() {
             <Text style={styles.emptyEmoji}>🌱</Text>
             <Text style={styles.emptyText}>No records found</Text>
             <Text style={styles.emptySubText}>
-              {conditionFilter !== 'all' || statusFilter !== 'all'
+              {conditionFilter !== 'all' || statusFilter !== 'all' || auditFilter !== 'all'
                 ? 'Try a different filter'
+                : activeCategory === 'audit'
+                ? 'Your audit records will appear here'
                 : 'Your work history will appear here'}
             </Text>
           </View>
@@ -338,7 +456,7 @@ export default function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: '#f0f4f1' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -349,7 +467,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 19,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: '#fff',
     flex: 1,
   },
@@ -357,21 +475,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 7.5,
+    borderRadius: 14,
   },
   headerCountText: {
     color: '#fff',
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   categoryBar: {
     flexDirection: 'row',
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 6,
+    paddingVertical: 12,
+    gap: 8,
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
   },
   categoryBtn: {
     flex: 1,
@@ -379,8 +495,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    paddingVertical: 8,
-    borderRadius: 7.5,
+    paddingVertical: 10,
+    borderRadius: 14,
     backgroundColor: '#E8F5E9',
   },
   categoryBtnActive: {
@@ -388,7 +504,7 @@ const styles = StyleSheet.create({
   },
   categoryText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#1a5c2a',
   },
   categoryTextActive: {
@@ -396,71 +512,67 @@ const styles = StyleSheet.create({
   },
   chipBar: {
     backgroundColor: '#fff',
-    paddingBottom: 10,
+    paddingBottom: 12,
   },
   chipScroll: {
     paddingHorizontal: 16,
     gap: 8,
   },
   chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 7.5,
-    backgroundColor: '#f3f4f6',
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: '#E8F5E9',
   },
   chipActive: {
     backgroundColor: '#1a5c2a',
-    borderColor: '#1a5c2a',
   },
   chipText: {
     fontSize: 12,
     color: '#555',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   chipTextActive: {
     color: '#fff',
-    fontWeight: '700',
+    fontWeight: '800',
   },
-  count: { fontSize: 12, color: '#888', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 },
-  list: { padding: 16, paddingTop: 8 },
+  list: { padding: 16, paddingTop: 8, paddingBottom: 100 },
 
-  // History card
   historyCard: {
     backgroundColor: '#fff',
-    borderRadius: 7.5,
-    marginBottom: 10,
+    borderRadius: 14,
+    marginBottom: 12,
     overflow: 'hidden',
-    elevation: 2,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
     flexDirection: 'row',
     borderLeftWidth: 3,
     borderLeftColor: '#22c55e',
-    padding: 10,
+    padding: 12,
   },
   photoWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 7.5,
+    width: 90,
+    height: 90,
+    borderRadius: 14,
     overflow: 'hidden',
-    marginRight: 12,
+    marginRight: 14,
   },
   photo: {
-    width: 80,
-    height: 80,
+    width: 90,
+    height: 90,
   },
   photoPlaceholder: {
-    width: 80,
-    height: 80,
+    width: 90,
+    height: 90,
     backgroundColor: '#e8f5e9',
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 14,
   },
-  photoPlaceholderText: { fontSize: 32 },
+  photoPlaceholderText: { fontSize: 36 },
   cardContent: {
     flex: 1,
   },
@@ -468,7 +580,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   cardTitleWrap: {
     flex: 1,
@@ -476,22 +588,27 @@ const styles = StyleSheet.create({
   },
   taskId: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#999',
     marginBottom: 2,
   },
+  taskIdValue: {
+    color: '#1a5c2a',
+    fontFamily: 'monospace',
+    fontWeight: '800',
+  },
   taskName: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#222',
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 7.5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
     borderWidth: 1,
   },
   statusDot: {
@@ -501,18 +618,18 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 9,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   conditionBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 7.5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
     borderWidth: 1,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   conditionDot: {
     width: 6,
@@ -521,7 +638,7 @@ const styles = StyleSheet.create({
   },
   conditionText: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   bottomRow: {
     flexDirection: 'row',
@@ -535,12 +652,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8F5E9',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 7.5,
+    borderRadius: 14,
   },
   locationText: {
     fontSize: 10,
     color: '#1a5c2a',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   dateRow: {
     flexDirection: 'row',
@@ -554,6 +671,6 @@ const styles = StyleSheet.create({
 
   empty: { alignItems: 'center', paddingVertical: 60 },
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
-  emptyText: { fontSize: 16, fontWeight: '600', color: '#555' },
+  emptyText: { fontSize: 16, fontWeight: '800', color: '#555' },
   emptySubText: { fontSize: 13, color: '#888', marginTop: 4 },
 });

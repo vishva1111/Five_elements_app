@@ -31,7 +31,7 @@ import {
 } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
-import { insertTreeRecord, syncUserCredits, computeCreditsForProject, fetchAllProjects } from '../../services/treeService';
+import { insertTreeRecord, syncUserCredits, computeCreditsForProject, fetchAllProjects, generateProjectTreeId } from '../../services/treeService';
 import { Project } from '../../types';
 import { uploadTreePhoto } from '../../services/storageService';
 import { completeTask } from '../../services/taskService';
@@ -75,11 +75,18 @@ export default function TreeFormScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [showNoteHelper, setShowNoteHelper] = useState(false);
 
-  // Auto-generate TreeID on mount
+  // Auto-generate project-wise sequential TreeID on mount
   useEffect(() => {
-    const seq = String(Date.now()).slice(-4).padStart(4, '0');
-    setForm((f) => ({ ...f, tree_id: `TREE-${seq}` }));
-  }, []);
+    (async () => {
+      const projects = allProjects.length > 0 ? allProjects : (await fetchAllProjects()).data ?? [];
+      const project = projects.find((p) => p.id === (activeProjectId ?? form.project_id));
+      const treeId = await generateProjectTreeId(
+        project?.id ?? activeProjectId,
+        project?.name
+      );
+      setForm((f) => ({ ...f, tree_id: treeId }));
+    })();
+  }, [activeProjectId, allProjects.length]);
 
   // Refs used to keep fields visible above the keyboard while typing
   const scrollRef = useRef<ScrollView>(null);
@@ -778,9 +785,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 7.5,
+    borderRadius: 14,
     minWidth: 48,
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   headerCreditsText: {
     color: '#1a5c2a',
@@ -819,7 +831,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 7.5,
+    borderRadius: 14,
   },
   photoBadgeText: {
     color: '#fff',
@@ -831,7 +843,7 @@ const styles = StyleSheet.create({
     height: 120,
     marginHorizontal: 16,
     marginTop: 12,
-    borderRadius: 7.5,
+    borderRadius: 14,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#E5E5E5',
@@ -884,11 +896,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     backgroundColor: '#F5F5F5',
-    borderRadius: 7.5,
+    borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderWidth: 1,
     borderColor: '#E5E5E5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   readOnlyText: {
     fontSize: 14,
@@ -899,13 +916,18 @@ const styles = StyleSheet.create({
   // Text input
   textInput: {
     backgroundColor: '#fff',
-    borderRadius: 7.5,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: '#D4E8D0',
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 14,
     color: '#1a1a1a',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
   },
   // Measurement grid
   measureGrid: {
@@ -925,7 +947,7 @@ const styles = StyleSheet.create({
   },
   measureInput: {
     backgroundColor: '#fff',
-    borderRadius: 7.5,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: '#D4E8D0',
     paddingHorizontal: 6,
@@ -934,6 +956,11 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
     textAlign: 'center',
     minHeight: 40,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
   // Event Type
   eventTypeScroll: {
@@ -943,12 +970,17 @@ const styles = StyleSheet.create({
   eventTypeBtn: {
     height: 44,
     paddingHorizontal: 18,
-    borderRadius: 7.5,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: '#AACBA7',
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
   },
   eventTypeBtnActive: {
     backgroundColor: '#1a5c2a',
@@ -971,12 +1003,17 @@ const styles = StyleSheet.create({
   multiStemBtn: {
     flex: 1,
     height: 40,
-    borderRadius: 7.5,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: '#D4E8D0',
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
   },
   multiStemBtnActive: {
     backgroundColor: '#1a5c2a',
@@ -1009,7 +1046,7 @@ const styles = StyleSheet.create({
   quantityBtn: {
     width: 56,
     height: 56,
-    borderRadius: 7.5,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: '#1a5c2a',
     backgroundColor: '#fff',
@@ -1025,7 +1062,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 1.5,
     borderColor: '#AACBA7',
-    borderRadius: 7.5,
+    borderRadius: 14,
     backgroundColor: '#fff',
     flexDirection: 'row',
     alignItems: 'center',
@@ -1047,12 +1084,17 @@ const styles = StyleSheet.create({
     height: 52,
     borderWidth: 1.5,
     borderColor: '#AACBA7',
-    borderRadius: 7.5,
+    borderRadius: 14,
     paddingHorizontal: 16,
     backgroundColor: '#fff',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
   speciesInputText: {
     fontSize: 15,
@@ -1065,10 +1107,15 @@ const styles = StyleSheet.create({
   speciesList: {
     borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 7.5,
+    borderRadius: 14,
     overflow: 'hidden',
     maxHeight: 240,
     backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   // Internal scroll area of the species dropdown — every name stays reachable
   speciesListScroll: {
@@ -1080,6 +1127,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
     backgroundColor: '#fff',
+    borderRadius: 14,
   },
   speciesItemActive: {
     backgroundColor: '#EAF3DE',
@@ -1101,8 +1149,13 @@ const styles = StyleSheet.create({
   healthBtn: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 7.5,
+    borderRadius: 14,
     borderWidth: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   healthBtnCompact: {
     paddingHorizontal: 10,
@@ -1119,9 +1172,14 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 14,
     backgroundColor: '#F5F5F5',
-    borderRadius: 7.5,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#E5E5E5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
   noProjectsInfoText: {
     fontSize: 13,
@@ -1137,10 +1195,15 @@ const styles = StyleSheet.create({
     minHeight: 52,
     borderWidth: 1.5,
     borderColor: '#DDE7D8',
-    borderRadius: 7.5,
+    borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
     backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
   projectDropdownLeft: {
     flexDirection: 'row',
@@ -1158,11 +1221,16 @@ const styles = StyleSheet.create({
   projectDropdownList: {
     borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 7.5,
+    borderRadius: 14,
     overflow: 'hidden',
     maxHeight: 220,
     backgroundColor: '#fff',
     marginTop: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   projectDropdownScroll: {
     flexGrow: 0,
@@ -1175,6 +1243,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
+    borderRadius: 14,
   },
   projectDropdownItemActive: {
     backgroundColor: '#EAF3DE',
@@ -1192,13 +1261,18 @@ const styles = StyleSheet.create({
   notesInput: {
     borderWidth: 1.5,
     borderColor: '#AACBA7',
-    borderRadius: 7.5,
+    borderRadius: 14,
     padding: 14,
     backgroundColor: '#fff',
     minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
   notesInputText: {
     flex: 1,
@@ -1221,12 +1295,17 @@ const styles = StyleSheet.create({
   // Note Helper Modal
   noteModalSheet: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     paddingTop: 20,
     paddingBottom: 40,
     maxHeight: '70%',
     paddingHorizontal: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 12,
   },
   noteModalHeader: {
     flexDirection: 'row',
@@ -1242,7 +1321,7 @@ const styles = StyleSheet.create({
   noteModalInput: {
     borderWidth: 1.5,
     borderColor: '#D4E8D0',
-    borderRadius: 7.5,
+    borderRadius: 14,
     padding: 14,
     fontSize: 15,
     color: '#1a1a1a',
@@ -1250,6 +1329,11 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
     marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
   },
   noteSuggestionLabel: {
     fontSize: 12,
@@ -1268,11 +1352,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#E8F5E9',
-    borderRadius: 7.5,
+    borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
     borderColor: '#C8E6C9',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
   },
   noteChipText: {
     fontSize: 12,
@@ -1281,9 +1370,14 @@ const styles = StyleSheet.create({
   },
   noteDoneBtn: {
     backgroundColor: '#1a5c2a',
-    borderRadius: 7.5,
+    borderRadius: 14,
     paddingVertical: 14,
     alignItems: 'center',
+    shadowColor: '#1a5c2a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 6,
   },
   noteDoneBtnText: {
     color: '#fff',
@@ -1298,13 +1392,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF0E3',
     borderWidth: 1,
     borderColor: '#EF9F27',
-    borderRadius: 7.5,
+    borderRadius: 14,
     padding: 12,
+    shadowColor: '#EF9F27',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
   },
   accuracyDot: {
     width: 10,
     height: 10,
-    borderRadius: 7.5,
+    borderRadius: 14,
     backgroundColor: '#EF9F27',
     marginTop: 3,
   },
@@ -1321,7 +1420,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     backgroundColor: '#fff',
     borderTopWidth: 1,
-    borderTopColor: '#EDE6DF',
+    borderTopColor: '#E8F5E9',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.06,
@@ -1330,7 +1429,7 @@ const styles = StyleSheet.create({
   },
   saveBtn: {
     height: 48,
-    borderRadius: 7.5,
+    borderRadius: 14,
     backgroundColor: '#F09125',
     flexDirection: 'row',
     alignItems: 'center',
@@ -1338,9 +1437,9 @@ const styles = StyleSheet.create({
     gap: 8,
     shadowColor: '#F09125',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 14,
-    elevation: 6,
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
+    elevation: 8,
   },
   saveBtnDisabled: {
     backgroundColor: '#ccc',

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { TreeRecord } from '../types';
+import { displayTreeId } from '../utils/treeId';
 
 interface Props {
   tree: TreeRecord;
@@ -9,10 +10,10 @@ interface Props {
 }
 
 const CONDITION_COLORS: Record<string, string> = {
-  Healthy: '#22c55e',
-  Stressed: '#f59e0b',
-  Diseased: '#ef4444',
-  Dead: '#6b7280',
+  Healthy: '#16a34a',
+  Stressed: '#d97706',
+  Diseased: '#dc2626',
+  Dead: '#4b5563',
 };
 
 export default function TreeCard({ tree, onPress }: Props) {
@@ -23,8 +24,10 @@ export default function TreeCard({ tree, onPress }: Props) {
     year: 'numeric',
   });
 
-  const treeUniqueId = tree.id.slice(0, 8).toUpperCase();
-  const conditionColor = CONDITION_COLORS[tree.tree_condition || ''] || '#6b7280';
+  // Project-based tree ID only — tree_id column, with the legacy ##META## notes
+  // fallback. The database uuid is never shown.
+  const treeUniqueId = displayTreeId(tree);
+  const conditionColor = CONDITION_COLORS[tree.tree_condition || 'Healthy'] || '#16a34a';
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
@@ -42,7 +45,9 @@ export default function TreeCard({ tree, onPress }: Props) {
       {/* Info right */}
       <View style={styles.info}>
         <View style={styles.topRow}>
-          <Text style={styles.taskId}>ID: {treeUniqueId}</Text>
+          <Text style={styles.taskId}>
+            ID: <Text style={styles.taskIdValue}>{treeUniqueId}</Text>
+          </Text>
           <Text style={styles.taskName} numberOfLines={1}>{tree.species || 'Tree'}</Text>
         </View>
 
@@ -75,7 +80,7 @@ export default function TreeCard({ tree, onPress }: Props) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
-    borderRadius: 7.5,
+    borderRadius: 14,
     marginBottom: 10,
     overflow: 'hidden',
     elevation: 2,
@@ -91,7 +96,7 @@ const styles = StyleSheet.create({
   photoWrap: {
     width: 80,
     height: 80,
-    borderRadius: 7.5,
+    borderRadius: 14,
     overflow: 'hidden',
     marginRight: 12,
   },
@@ -120,6 +125,11 @@ const styles = StyleSheet.create({
     color: '#999',
     marginBottom: 2,
   },
+  taskIdValue: {
+    color: '#1a5c2a',
+    fontFamily: 'monospace',
+    fontWeight: '800',
+  },
   taskName: {
     fontSize: 14,
     fontWeight: '700',
@@ -132,7 +142,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 7.5,
+    borderRadius: 14,
     borderWidth: 1,
     marginBottom: 4,
   },
@@ -157,7 +167,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8F5E9',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 7.5,
+    borderRadius: 14,
   },
   locationText: {
     fontSize: 10,

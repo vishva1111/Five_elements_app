@@ -17,8 +17,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useTaskStore } from '../../store/taskStore';
-import { fetchMyTrees, fetchAllProjects } from '../../services/treeService';
-import { fetchAgentTasks } from '../../services/taskService';
+import { fetchMyTrees, fetchAllProjects, backfillProjectTreeIds } from '../../services/treeService';
+import { fetchAgentTasks, startTask } from '../../services/taskService';
 import {
   loadLocalTasks,
   saveLocalTasks,
@@ -26,7 +26,8 @@ import {
   refreshLocalProgress,
   isLocalTask,
 } from '../../services/localTaskService';
-import { Task, Project } from '../../types';
+import { Task, Project, TreeRecord } from '../../types';
+import { displayTreeId, parseTreeMeta, resolveTreeId } from '../../utils/treeId';
 import CircularProgress from '../../components/CircularProgress';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -39,18 +40,6 @@ const TABS: { key: TaskTab; label: string; color: string }[] = [
   { key: 'approved', label: 'Approved', color: '#8b5cf6' },
   { key: 'rejected', label: 'Rejected', color: '#ef4444' },
 ];
-
-// Local-calendar-day date string (YYYY-MM-DD), NOT UTC. `.toISOString()` on a local
-// Date object converts to UTC first, which silently rolls back a day for any positive
-// UTC offset (e.g. India, UTC+5:30) — that was the actual cause of dates looking wrong
-// on this screen.
-function localDateStr(d: Date | string = new Date()): string {
-  const date = typeof d === 'string' ? new Date(d) : d
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
 
 export default function TaskScreen() {
   const navigation = useNavigation<any>();
@@ -72,6 +61,8 @@ export default function TaskScreen() {
   const [addingDemo, setAddingDemo] = useState(false);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>('all');
+  // uuid (tree record) → project tree ID, e.g. "ARAV-001" (see utils/treeId.ts)
+  const [treeIds, setTreeIds] = useState<Record<string, string>>({});
   const loadSeqRef = useRef(0);
 
   // Dashboard boxes can open this screen on a specific tab (e.g. Rejected/Completed).
@@ -83,10 +74,10 @@ export default function TaskScreen() {
   // Filter tasks by selected date
   const filterByDate = (taskList: Task[]) => {
     if (selectedDate === 'all') return taskList;
-    const dateStr = selectedDate === 'today' ? localDateStr() : selectedDate;
+    const dateStr = selectedDate === 'today' ? new Date().toISOString().split('T')[0] : selectedDate;
     return taskList.filter((t) => {
       if (!t.created_at) return false;
-      return localDateStr(t.created_at) === dateStr;
+      return t.created_at.split('T')[0] === dateStr;
     });
   };
 
@@ -115,24 +106,36 @@ export default function TaskScreen() {
     const myTrees = treesRes.data ?? [];
     const localWithProgress = refreshLocalProgress(localTasks, myTrees);
 
-    // Tasks fetched from the backend are already scoped by assignee_id === me — if it's
-    // assigned to me, I should see it, full stop. No extra project filter on top of that;
-    // `assignedProjects` is never populated anywhere in the app, so that used to silently
-    // hide every real assigned task unless it happened to match whatever project the user
-    // currently had active for tree capture.
-    const visibleTasks = tasksRes.data ?? []
+    // Filter: tasks with no project, assigned projects, or active project
+    const filterByAssigned = (t: Task) =>
+      !t.project_id || (assignedProjects ?? []).some((p) => p.id === t.project_id) || t.project_id === activeProjectId;
 
-    // Local/demo tasks are created ad-hoc under whichever project context is active, so
-    // it still makes sense to scope those to the current project selection.
-    const filterLocalByProject = (t: Task) =>
-      !t.project_id || (assignedProjects ?? []).some((p) => p.id === t.project_id) || t.project_id === activeProjectId
+    let visibleTasks = (tasksRes.data ?? []).filter(filterByAssigned);
+    let visibleLocal = localWithProgress.filter(filterByAssigned);
 
-    let visibleLocal = localWithProgress.filter(filterLocalByProject)
     if (activeProjectId) {
-      visibleLocal = visibleLocal.filter((t) => t.project_id === activeProjectId)
+      visibleTasks = visibleTasks.filter((t) => t.project_id === activeProjectId);
+      visibleLocal = visibleLocal.filter((t) => t.project_id === activeProjectId);
     }
 
     setTasks([...visibleTasks, ...visibleLocal]);
+
+    // Tree capture cards are labelled with the project tree ID (e.g. ARAV-001).
+    // Trees captured before project IDs existed get an ID assigned + persisted
+    // here, so the label is right on this screen too (not only in History/Map).
+    if (myTrees.length > 0) {
+      backfillProjectTreeIds(myTrees).then((enriched) => {
+        if (seq !== loadSeqRef.current || !enriched) return;
+        const resolved: Record<string, string> = {};
+        enriched.forEach((t) => {
+          const id = resolveTreeId(t);
+          if (t?.id && id) resolved[t.id] = id;
+        });
+        if (Object.keys(resolved).length > 0) {
+          setTreeIds((prev) => ({ ...prev, ...resolved }));
+        }
+      });
+    }
   }, [userId, activeProjectId, assignedProjects, setTasks, localTasks]);
 
   useFocusEffect(
@@ -151,12 +154,27 @@ export default function TaskScreen() {
     setRefreshing(false);
   };
 
-  // "Start Now" — same as the original flow: go straight to the capture screen.
-  // We stash which task this was started from so TreeFormScreen can complete the
-  // *right* task on submit (works for both capture-style tasks and our existing-tree
-  // tickets), instead of guessing via fuzzy matching.
-  const handleStartNow = (task: Task) => {
-    useTaskStore.getState().setActiveTaskId(task.id);
+  const handleStartTask = async (task: Task) => {
+    if (!task.started_at) {
+      if (isLocalTask(task)) {
+        const startedAt = new Date().toISOString();
+        const updatedLocal = localTasks.map((t) =>
+          t.id === task.id
+            ? { ...t, started_at: startedAt, status: 'in_progress' as const }
+            : t
+        );
+        setLocalTasks(updatedLocal);
+        saveLocalTasks(updatedLocal);
+        setTasks(
+          tasks.map((t) =>
+            t.id === task.id ? { ...t, started_at: startedAt, status: 'in_progress' } : t
+          )
+        );
+      } else {
+        await startTask(task.id);
+        setTasks(tasks.map((t) => (t.id === task.id ? { ...t, started_at: new Date().toISOString(), status: 'in_progress' } : t)));
+      }
+    }
     navigation.navigate('Capture');
   };
 
@@ -207,8 +225,7 @@ export default function TaskScreen() {
   };
 
   const handleOpenMap = (location: string) => {
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
-    Linking.openURL(url);
+    navigation.getParent()?.navigate('Map');
   };
 
   const getTodayDate = () => {
@@ -226,25 +243,23 @@ export default function TaskScreen() {
   // Count tasks for each tab
   const treeCaptures = trees.length;
   const assignedCount = assignedTasks.length;
-  const inProgressCount = inProgressTasks.length;
   const completedCount = completedTasks.length + treeCaptures;
   const approvedCount = approvedTasks.length;
   const rejectedCount = rejectedTasks.length;
   const reviewedCount = approvedCount + rejectedCount;
-  const totalTasks = assignedCount + inProgressCount + completedCount + approvedCount + rejectedCount;
+  const totalTasks = assignedCount + completedCount + approvedCount + rejectedCount;
 
   // Extract unique dates from assigned tasks (descending, past first)
   const dates = useMemo(() => {
-    const todayStr = localDateStr();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split('T')[0];
     const dateSet = new Set<string>();
     assignedTasks.forEach((t) => {
-      if (t.created_at) dateSet.add(localDateStr(t.created_at));
-    });
-    inProgressTasks.forEach((t) => {
-      if (t.created_at) dateSet.add(localDateStr(t.created_at));
+      if (t.created_at) dateSet.add(t.created_at.split('T')[0]);
     });
     trees.forEach((t) => {
-      if (t.submitted_at) dateSet.add(localDateStr(t.submitted_at));
+      if (t.submitted_at) dateSet.add(t.submitted_at.split('T')[0]);
     });
     const sorted = Array.from(dateSet).sort((a, b) => b.localeCompare(a));
     return sorted.map((dateStr) => {
@@ -260,9 +275,19 @@ export default function TaskScreen() {
         isToday: dateStr === todayStr,
       };
     });
-  }, [assignedTasks, inProgressTasks, trees]);
+  }, [assignedTasks, trees]);
 
   const activeProject = allProjects.find((p) => p.id === activeProjectId);
+
+  // uuid → tree record: lets a completed card know it stands for a tree capture,
+  // so it can be labelled with the project tree ID instead of the DB uuid.
+  const treeByUuid = useMemo(() => {
+    const map = new Map<string, TreeRecord>();
+    trees.forEach((t) => {
+      if (t?.id) map.set(t.id, t);
+    });
+    return map;
+  }, [trees]);
 
   const renderTaskCard = (task: Task) => {
     const started = !!task.started_at;
@@ -273,14 +298,18 @@ export default function TaskScreen() {
       : task.status === 'approved' ? '#8b5cf6'
       : task.status === 'rejected' ? '#ef4444'
       : '#1a5c2a';
-    const isTreeCapture = task.status === 'completed' && task.photo_url;
     const isAssigned = task.status === 'assigned';
+    const isTreeCapture = task.status === 'completed' && task.photo_url;
+    // A card that stands for a tree record is labelled with that tree's project
+    // tree ID (ARAV-001) — the database uuid is never shown to the user.
+    const treeRecord = treeByUuid.get(task.id);
+    const projectTreeId = treeRecord ? treeIds[task.id] || displayTreeId(treeRecord) : '';
     
     const conditionColors: Record<string, string> = {
-      Healthy: '#22c55e',
-      Stressed: '#f59e0b',
-      Diseased: '#ef4444',
-      Dead: '#6b7280',
+      Healthy: '#16a34a',
+      Stressed: '#d97706',
+      Diseased: '#dc2626',
+      Dead: '#4b5563',
     };
     
     const handlePress = () => {
@@ -300,18 +329,24 @@ export default function TaskScreen() {
           <View style={s.taskCardTop}>
             <View style={s.taskTitleWrap}>
               <Text style={s.taskId} numberOfLines={1}>
-                {task.task_code ?? `ID: ${task.id.slice(0, 8).toUpperCase()}`}
+                ID: {treeRecord ? <Text style={s.taskIdValue}>{projectTreeId}</Text> : task.id.slice(0, 8).toUpperCase()}
               </Text>
               <Text style={s.taskName} numberOfLines={1}>{task.name}</Text>
+              {task.audit_round != null ? (
+                <View style={s.auditChip}>
+                  <Ionicons name="clipboard-outline" size={10} color="#1a5c2a" />
+                  <Text style={s.auditChipText}>Audit {task.audit_round}</Text>
+                </View>
+              ) : null}
             </View>
             {isAssigned ? (
               <TouchableOpacity
                 style={s.startBtn}
-                onPress={(e) => { e.stopPropagation(); handleStartNow(task); }}
+                onPress={(e) => { e.stopPropagation(); handleStartTask(task); }}
                 activeOpacity={0.7}
               >
                 <Ionicons name="play-circle-outline" size={14} color="#fff" />
-                <Text style={s.startBtnText}>Start Now</Text>
+                <Text style={s.startBtnText}>Start</Text>
               </TouchableOpacity>
             ) : (
               <View style={[s.statusBadge, { backgroundColor: statusColor + '18' }]}>
@@ -355,14 +390,6 @@ export default function TaskScreen() {
               <Text style={s.dueText}>{dayName}, {dateStr}</Text>
             </View>
           ) : null}
-
-          {/* Who assigned this task to me */}
-          {task.assigned_by_name ? (
-            <View style={s.surveyorRow}>
-              <Ionicons name="person-circle-outline" size={11} color="#888" />
-              <Text style={s.surveyorText}>Assigned by {task.assigned_by_name}</Text>
-            </View>
-          ) : null}
         </View>
       </TouchableOpacity>
     );
@@ -385,7 +412,7 @@ export default function TaskScreen() {
     <View style={s.container}>
       <ScrollView
         style={s.scroll}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 160 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a5c2a" />}
       >
         {/* Header with date and project location */}
@@ -442,11 +469,11 @@ export default function TaskScreen() {
               return (
                 <TouchableOpacity
                   key={tab.key}
-                  style={[s.tabBtn, active && { backgroundColor: tab.color + '15', borderColor: tab.color }]}
+                  style={[s.tabBtn, active && { backgroundColor: tab.color + '15', borderColor: tab.color }, !active && { borderColor: tab.color + '40' }]}
                   onPress={() => setActiveTab(tab.key)}
                   activeOpacity={0.7}
                 >
-                  <CircularProgress size={52} progress={pct} color={tab.color} strokeWidth={4} trackColor="#E8E8E8">
+                  <CircularProgress size={56} progress={pct} color={tab.color} strokeWidth={4} trackColor="#E8E8E8">
                     <Text style={[s.tabCountText, { color: tab.color }]}>{count}/{denominator}</Text>
                   </CircularProgress>
                   <Text numberOfLines={1} style={[s.tabText, active && { color: tab.color }]}>{tab.label}</Text>
@@ -487,46 +514,30 @@ export default function TaskScreen() {
 
         {/* Tab content */}
         <View style={s.content}>
-          {/* In-progress tasks stay in the Assigned tab (not a separate tab) so a task
-              never disappears the moment you tap Start — the card itself shows
-              Start/Complete depending on its own status. */}
-          {activeTab === 'assigned' && renderTaskList(filterByDate([...assignedTasks, ...inProgressTasks]))}
-
-          {activeTab === 'completed' && renderTaskList(filterByDate([...completedTasks, ...trees.map((t) => ({
-            id: t.id,
-            name: t.species || 'Tree Capture',
-            project_id: t.project_id,
-            assignee_id: t.user_id || '',
-            target_count: 1,
-            priority: 'medium' as const,
-            captured: 1,
-            remaining: 0,
-            progress: 100,
-            status: 'completed' as const,
-            created_at: t.submitted_at,
-            photo_url: t.photo_url,
-            latitude: t.latitude,
-            longitude: t.longitude,
-            tree_condition: (() => {
-              let meta: Record<string, any> = {};
-              const m = (t.notes || '').match(/##META##({.*})/s);
-              if (m) try { meta = JSON.parse(m[1]); } catch {}
-              return t.tree_condition || meta.tree_condition || 'Healthy';
-            })(),
-            tree_condition_color: (() => {
-              let meta: Record<string, any> = {};
-              const m = (t.notes || '').match(/##META##({.*})/s);
-              if (m) try { meta = JSON.parse(m[1]); } catch {}
-              const c = t.tree_condition || meta.tree_condition || 'Healthy';
-              return c === 'Healthy' ? '#22c55e' : c === 'Stressed' ? '#f59e0b' : c === 'Diseased' ? '#ef4444' : '#6b7280';
-            })(),
-            surveyor: t.surveyor || (() => {
-              let meta: Record<string, any> = {};
-              const m = (t.notes || '').match(/##META##({.*})/s);
-              if (m) try { meta = JSON.parse(m[1]); } catch {}
-              return meta.surveyor;
-            })(),
-          }))]))}
+          {activeTab === 'assigned' && renderTaskList(filterByDate(assignedTasks))}
+          {activeTab === 'completed' && renderTaskList(filterByDate([...completedTasks, ...trees.map((t) => {
+            const meta = parseTreeMeta(t.notes);
+            const condition = t.tree_condition || meta.tree_condition || 'Healthy';
+            return {
+              id: t.id,
+              name: t.species || 'Tree Capture',
+              project_id: t.project_id,
+              assignee_id: t.user_id || '',
+              target_count: 1,
+              priority: 'medium' as const,
+              captured: 1,
+              remaining: 0,
+              progress: 100,
+              status: 'completed' as const,
+              created_at: t.submitted_at,
+              photo_url: t.photo_url,
+              latitude: t.latitude,
+              longitude: t.longitude,
+              tree_condition: condition,
+              tree_condition_color: condition === 'Healthy' ? '#16a34a' : condition === 'Stressed' ? '#d97706' : condition === 'Diseased' ? '#dc2626' : '#4b5563',
+              surveyor: t.surveyor || meta.surveyor,
+            };
+          })]))}
           {activeTab === 'approved' && renderTaskList(filterByDate(approvedTasks))}
           {activeTab === 'rejected' && renderTaskList(filterByDate(rejectedTasks))}
         </View>
@@ -555,7 +566,7 @@ export default function TaskScreen() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: '#f0f4f1' },
   scroll: { flex: 1 },
   header: {
     paddingHorizontal: 20,
@@ -567,7 +578,7 @@ const s = StyleSheet.create({
     gap: 14,
   },
   headerLeft: { flex: 1 },
-  headerDate: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
+  headerDate: { fontSize: 18, fontWeight: '800', color: '#fff' },
   headerSub: { fontSize: 13, fontWeight: '600', color: '#cde8d3', marginTop: 2 },
   headerDivider: {
     width: 1,
@@ -588,52 +599,49 @@ const s = StyleSheet.create({
   },
   headerLocationLabel: { fontSize: 9, fontWeight: '600', color: '#cde8d3', letterSpacing: 0.5 },
   tabsWrap: { paddingHorizontal: 12, paddingTop: 12 },
-  tabsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
+  tabsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   tabBtn: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 6,
     backgroundColor: '#fff',
-    borderRadius: 7.5,
-    paddingVertical: 10,
+    borderRadius: 14,
+    paddingVertical: 12,
     paddingHorizontal: 4,
     borderWidth: 1.5,
-    borderColor: '#E8E8E8',
+    borderColor: '#E0ECDD',
   },
   tabBtnActive: {},
-  tabText: { fontSize: 11, fontWeight: '700', color: '#888' },
-  tabCountText: { fontSize: 12, fontWeight: '700' },
-  dateSelectorWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 4, gap: 8 },
+  tabText: { fontSize: 11, fontWeight: '800', color: '#888' },
+  tabCountText: { fontSize: 13, fontWeight: '800' },
+  dateSelectorWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 8, gap: 8 },
   dateAllBtn: {
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#fff',
-    borderRadius: 7.5,
-    paddingVertical: 8,
+    borderRadius: 14,
+    paddingVertical: 10,
     paddingHorizontal: 12,
-    borderWidth: 1.5,
-    borderColor: '#E0ECDD',
     minWidth: 56,
-    minHeight: 68,
+    height: 68,
   },
-  dateAllBtnActive: { backgroundColor: '#1a5c2a', borderColor: '#1a5c2a' },
-  dateAllText: { fontSize: 12, fontWeight: '700', color: '#1a5c2a' },
+  dateAllBtnActive: { backgroundColor: '#1a5c2a' },
+  dateAllText: { fontSize: 12, fontWeight: '800', color: '#1a5c2a' },
   dateAllTextActive: { color: '#fff' },
   dateList: { gap: 8 },
   dateItem: {
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#fff',
-    borderRadius: 7.5,
-    paddingVertical: 8,
+    borderRadius: 14,
+    paddingVertical: 10,
     paddingHorizontal: 12,
-    borderWidth: 1.5,
-    borderColor: '#E8E8E8',
     minWidth: 56,
+    height: 68,
   },
-  dateItemActive: { backgroundColor: '#1a5c2a', borderColor: '#1a5c2a' },
-  dateLabel: { fontSize: 9, fontWeight: '700', color: '#888', letterSpacing: 0.5 },
+  dateItemActive: { backgroundColor: '#1a5c2a' },
+  dateLabel: { fontSize: 9, fontWeight: '800', color: '#888', letterSpacing: 0.5 },
   dateLabelActive: { color: '#fff' },
   dateDay: { fontSize: 18, fontWeight: '800', color: '#222', marginTop: 1 },
   dateDayActive: { color: '#fff' },
@@ -642,14 +650,14 @@ const s = StyleSheet.create({
   content: { padding: 16, paddingTop: 12 },
   taskCard: {
     backgroundColor: '#fff',
-    borderRadius: 7.5,
+    borderRadius: 14,
     padding: 12,
     marginBottom: 8,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+    elevation: 4,
+    shadowColor: '#1a5c2a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
     borderLeftWidth: 3,
     borderLeftColor: '#1a5c2a',
     flexDirection: 'row',
@@ -657,7 +665,7 @@ const s = StyleSheet.create({
   taskPhotoWrap: {
     width: 80,
     height: 80,
-    borderRadius: 7.5,
+    borderRadius: 14,
     overflow: 'hidden',
     marginRight: 12,
   },
@@ -671,32 +679,41 @@ const s = StyleSheet.create({
   taskCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   taskTitleWrap: { flex: 1 },
   taskId: { fontSize: 10, fontWeight: '600', color: '#999', marginBottom: 2 },
-  taskName: { fontSize: 14, fontWeight: '700', color: '#222' },
-  statusBadge: { borderRadius: 7.5, paddingHorizontal: 8, paddingVertical: 3 },
-  statusText: { fontSize: 9, fontWeight: '700' },
+  // Project tree ID on a tree-capture card (same look as components/TreeCard.tsx)
+  taskIdValue: { color: '#1a5c2a', fontFamily: 'monospace', fontWeight: '800' },
+  taskName: { fontSize: 14, fontWeight: '800', color: '#222' },
+  statusBadge: { borderRadius: 14, paddingHorizontal: 8, paddingVertical: 3 },
+  statusText: { fontSize: 9, fontWeight: '800' },
   startBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#F09125',
-    borderRadius: 7.5,
+    borderRadius: 14,
     paddingVertical: 6,
     paddingHorizontal: 10,
+    elevation: 2,
+    shadowColor: '#F09125',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
-  startBtnText: { color: '#fff', fontWeight: '700', fontSize: 11 },
+  startBtnText: { color: '#fff', fontWeight: '800', fontSize: 11 },
   taskNote: { fontSize: 12, color: '#666', marginTop: 4, lineHeight: 16 },
   dueRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4 },
   dueText: { fontSize: 10, color: '#888' },
   treeDetailRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-  detailLink: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#E8F5E9', borderRadius: 7.5 },
-  detailLinkText: { fontSize: 10, color: '#1a5c2a', fontWeight: '600' },
-  conditionBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7.5, borderWidth: 1 },
+  detailLink: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#E8F5E9', borderRadius: 14 },
+  detailLinkText: { fontSize: 10, color: '#1a5c2a', fontWeight: '800' },
+  conditionBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 14, borderWidth: 1 },
   conditionDot: { width: 6, height: 6, borderRadius: 3 },
   surveyorRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   surveyorText: { fontSize: 10, color: '#666' },
+  auditChip: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, backgroundColor: '#E8F5E9', borderRadius: 12 },
+  auditChipText: { fontSize: 10, fontWeight: '800', color: '#1a5c2a' },
   emptyState: { alignItems: 'center', paddingVertical: 48 },
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
-  emptyText: { fontSize: 16, fontWeight: '600', color: '#555' },
+  emptyText: { fontSize: 16, fontWeight: '800', color: '#555' },
   emptySubText: { fontSize: 13, color: '#888', marginTop: 4, textAlign: 'center', paddingHorizontal: 24 },
   bottomBar: {
     position: 'absolute',
@@ -706,8 +723,13 @@ const s = StyleSheet.create({
     backgroundColor: '#fff',
     paddingHorizontal: 16,
     paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 10,
   },
   addDemoBtn: {
     flexDirection: 'row',
@@ -715,8 +737,13 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: '#1a5c2a',
-    borderRadius: 10,
+    borderRadius: 14,
     paddingVertical: 14,
+    elevation: 4,
+    shadowColor: '#1a5c2a',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
   },
-  addDemoBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  addDemoBtnText: { fontSize: 15, fontWeight: '800', color: '#fff' },
 });
