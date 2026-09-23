@@ -3,6 +3,7 @@ import { AuthState, User, Project } from '../types';
 import { supabase } from '../services/supabase';
 import { fetchMyTrees, computeCreditsForProject } from '../services/treeService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useProjectRefreshStore } from './projectRefreshStore';
 
 // ─── Persist the last active project so it survives app restarts ────────────
 const ACTIVE_PROJECT_CACHE_PREFIX = 'treeapp_active_project_';
@@ -39,6 +40,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Remember the last active project per user across app restarts
     persistActiveProject(get().user?.id ?? get().session?.user?.id, projectId);
     set({ activeProjectId: projectId });
+    // Signal all screens to instantly reload their project-specific data
+    useProjectRefreshStore.getState().triggerProjectRefresh();
   },
   setProjectSelectionPending: (pending) => set({ projectSelectionPending: pending }),
   setUserCredits: (credits) =>

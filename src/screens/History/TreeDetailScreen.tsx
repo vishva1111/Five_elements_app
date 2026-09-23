@@ -14,8 +14,9 @@ import { useRoute, useNavigation, useFocusEffect, RouteProp } from '@react-navig
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { HistoryStackParamList, TreeRecord, getMonitoringRoundInfo } from '../../types';
+import { HistoryStackParamList, TreeRecord, getMonitoringRoundInfo, Task } from '../../types';
 import { fetchTreeById, ensureProjectTreeId, fetchTreeMonitoringRecords } from '../../services/treeService';
+import { supabase } from '../../services/supabase';
 import {
   getAuditStatus,
   formatDateFriendly,
@@ -37,10 +38,11 @@ const CONDITION_THEMES: Record<string, { color: string; bg: string; text: string
 
 export default function TreeDetailScreen() {
   const route = useRoute<Route>();
-  const navigation = useNavigation<Nav>();
+  const navigation = useNavigation<any>();
   const { treeId } = route.params;
 
   const [tree, setTree] = useState<TreeRecord | null>(null);
+  const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
   const [audits, setAudits] = useState<any[]>([]);
 
@@ -102,6 +104,18 @@ export default function TreeDetailScreen() {
         }
       } catch (auditErr) {
         console.warn('[TreeApp] fetch audits failed:', auditErr);
+      }
+
+      // Fetch linked task for approval status & rejection notes
+      try {
+        const { data: taskData } = await supabase
+          .from('tasks')
+          .select('*')
+          .or(`tree_id.eq.${data.id},id.eq.${data.id}`)
+          .maybeSingle();
+        if (taskData) setTask(taskData);
+      } catch (taskErr) {
+        console.warn('[TreeApp] fetch linked task failed:', taskErr);
       }
     } catch (err) {
       console.warn('[TreeApp] fetchTreeById failed:', err);
@@ -189,6 +203,12 @@ export default function TreeDetailScreen() {
   const completedRoundsSet = new Set(audits.map((a) => Number(a.monitoring_round)).filter(Boolean));
   const liveTreeId = resolveTreeId(tree) || treeId;
 
+  // Approval status & modes
+  const isApproved = Boolean(tree.locked || task?.status === 'approved');
+  const isRejected = Boolean(task?.status === 'rejected');
+  const isPending = !isApproved && !isRejected;
+  const hasAudits = audits.length > 0;
+
   // Has updated photo
   const hasAuditPhoto = Boolean(latestAudit?.photo_url && latestAudit.photo_url !== tree.photo_url);
   const displayedPhoto =
@@ -204,33 +224,53 @@ export default function TreeDetailScreen() {
 
   return (
     <View style={styles.container}>
-      {/* ─── 1. TOP HEADER (CLEAN & MINIMAL) ─── */}
+      {/* ─── 1. TOP HEADER (STATUS & NAVIGATION) ─── */}
       <LinearGradient colors={['#0f331d', '#1a5c2a', '#226934']} style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={20} color="#fff" />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>TREE PROFILE</Text>
+          <Text style={styles.headerTitle}>
+            {hasAudits ? 'TREE PROFILE' : 'TREE DETAILS'}
+          </Text>
           <Text style={styles.headerSubtitle}>{displayId}</Text>
         </View>
 
-        {auditStatus.allCompleted ? (
+        {hasAudits && auditStatus.allCompleted ? (
           <View style={styles.completedPill}>
             <Ionicons name="checkmark-done" size={12} color="#fff" />
             <Text style={styles.completedPillText}>4/4 DONE</Text>
           </View>
-        ) : tree.locked ? (
-          <View style={styles.lockPill}>
-            <Ionicons name="lock-closed" size={12} color="#F09125" />
-            <Text style={styles.lockPillText}>LOCKED</Text>
+        ) : isApproved ? (
+          <View style={styles.approvedPill}>
+            <Ionicons name="shield-checkmark" size={12} color="#fff" />
+            <Text style={styles.approvedPillText}>APPROVED</Text>
+          </View>
+        ) : isRejected ? (
+          <View style={styles.rejectedPill}>
+            <Ionicons name="close-circle" size={12} color="#fff" />
+            <Text style={styles.rejectedPillText}>REJECTED</Text>
           </View>
         ) : (
-          <View style={{ width: 40 }} />
+          <View style={styles.pendingPill}>
+            <Ionicons name="time" size={12} color="#fff" />
+            <Text style={styles.pendingPillText}>PENDING</Text>
+          </View>
         )}
       </LinearGradient>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Rejection Notice Banner if rejected */}
+        {isRejected && task?.review_notes ? (
+          <View style={styles.rejectionNoticeCard}>
+            <Ionicons name="alert-circle" size={20} color="#ef4444" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rejectionNoticeTitle}>Rejection Reason:</Text>
+              <Text style={styles.rejectionNoticeBody}>{task.review_notes}</Text>
+            </View>
+          </View>
+        ) : null}
 
         {/* ─── 2. HERO PHOTO (SIMPLE 1-TAP SWAP & VITALITY STATUS) ─── */}
         <View style={styles.photoContainer}>
@@ -426,150 +466,145 @@ export default function TreeDetailScreen() {
           </View>
         </View>
 
-        {/* ─── 5. INTERACTIVE 4-STEP AUDIT JOURNEY ─── */}
-        <View style={styles.journeyCard}>
-          <View style={styles.journeyHeader}>
-            <View style={styles.journeyTitleWrap}>
-              <Ionicons name="git-network-outline" size={15} color="#15803d" />
-              <Text style={styles.journeyTitle}>Audit Monitoring Journey</Text>
-            </View>
-            <View style={styles.journeyBadge}>
-              <Text style={styles.journeyBadgeText}>
-                {completedRoundsSet.size} of 4 Recorded
-              </Text>
-            </View>
-          </View>
-
-          {/* 4 Interactive Nodes */}
-          <View style={styles.journeyNodesRow}>
-            {[1, 2, 3, 4].map((roundNum, idx) => {
-              const isDone = completedRoundsSet.has(roundNum);
-              const isNext = roundNum === auditStatus.currentRound && !auditStatus.allCompleted;
-              const isSelected = selectedAuditRound === roundNum;
-
-              return (
-                <React.Fragment key={roundNum}>
-                  <TouchableOpacity
-                    style={styles.nodeItem}
-                    activeOpacity={isDone ? 0.7 : 1}
-                    onPress={() => isDone && setSelectedAuditRound(roundNum)}
-                  >
-                    <View
-                      style={[
-                        styles.nodeCircle,
-                        isDone && styles.nodeCircleDone,
-                        isNext && styles.nodeCircleNext,
-                        !isDone && !isNext && styles.nodeCircleLocked,
-                        isSelected && styles.nodeCircleSelected,
-                      ]}
-                    >
-                      {isDone ? (
-                        <Ionicons name="checkmark" size={13} color="#fff" />
-                      ) : isNext ? (
-                        <Ionicons name="time" size={12} color="#d97706" />
-                      ) : (
-                        <Ionicons name="lock-closed" size={10} color="#9ca3af" />
-                      )}
-                    </View>
-
-                    <Text
-                      style={[
-                        styles.nodeLabel,
-                        isDone && styles.nodeLabelDone,
-                        isNext && styles.nodeLabelNext,
-                        !isDone && !isNext && styles.nodeLabelLocked,
-                        isSelected && { fontWeight: '900', color: '#15803d' },
-                      ]}
-                    >
-                      Audit {roundNum}
-                    </Text>
-
-                    <Text style={styles.nodeStatusSub}>
-                      {isDone ? 'View ✓' : isNext ? 'Next ⏳' : 'Locked'}
-                    </Text>
-                  </TouchableOpacity>
-
-                  {idx < 3 && (
-                    <View
-                      style={[
-                        styles.nodeConnectorLine,
-                        completedRoundsSet.has(roundNum + 1)
-                          ? styles.lineDone
-                          : isDone
-                          ? styles.lineNext
-                          : styles.lineLocked,
-                      ]}
-                    />
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </View>
-
-          {/* Selected Audit Snapshot (Clean Inspector) */}
-          {activeInspectorAudit ? (
-            <View style={styles.auditSnapshotCard}>
-              <View style={styles.snapshotTopRow}>
-                <View style={styles.snapshotBadge}>
-                  <Text style={styles.snapshotBadgeText}>
-                    Audit {activeInspectorAudit.monitoring_round} Details
-                  </Text>
-                </View>
-                <Text style={styles.snapshotDate}>
-                  {formatDateFriendly(activeInspectorAudit.survey_date ?? activeInspectorAudit.submitted_at)}
+        {/* ─── 5. INTERACTIVE 4-STEP AUDIT JOURNEY (POST-AUDIT MODE ONLY) ─── */}
+        {hasAudits ? (
+          <View style={styles.journeyCard}>
+            <View style={styles.journeyHeader}>
+              <View style={styles.journeyTitleWrap}>
+                <Ionicons name="git-network-outline" size={15} color="#15803d" />
+                <Text style={styles.journeyTitle}>Audit Monitoring Journey</Text>
+              </View>
+              <View style={styles.journeyBadge}>
+                <Text style={styles.journeyBadgeText}>
+                  {completedRoundsSet.size} of 4 Recorded
                 </Text>
               </View>
+            </View>
 
-              <View style={styles.snapshotBodyRow}>
-                <View style={{ flex: 1, gap: 4 }}>
-                  <Text style={styles.snapshotMetrics}>
-                    <Text style={{ fontWeight: '800' }}>DBH:</Text> {activeInspectorAudit.dbh_cm ?? '—'}cm  ·  <Text style={{ fontWeight: '800' }}>H:</Text> {activeInspectorAudit.height_m ?? '—'}m  ·  <Text style={{ fontWeight: '800' }}>Crown:</Text> {activeInspectorAudit.crown_diameter_m ?? '—'}m
+            {/* 4 Interactive Nodes */}
+            <View style={styles.journeyNodesRow}>
+              {[1, 2, 3, 4].map((roundNum, idx) => {
+                const isDone = completedRoundsSet.has(roundNum);
+                const isNext = roundNum === auditStatus.currentRound && !auditStatus.allCompleted;
+                const isSelected = selectedAuditRound === roundNum;
+
+                return (
+                  <React.Fragment key={roundNum}>
+                    <TouchableOpacity
+                      style={styles.nodeItem}
+                      activeOpacity={isDone ? 0.7 : 1}
+                      onPress={() => isDone && setSelectedAuditRound(roundNum)}
+                    >
+                      <View
+                        style={[
+                          styles.nodeCircle,
+                          isDone && styles.nodeCircleDone,
+                          isNext && styles.nodeCircleNext,
+                          !isDone && !isNext && styles.nodeCircleLocked,
+                          isSelected && styles.nodeCircleSelected,
+                        ]}
+                      >
+                        {isDone ? (
+                          <Ionicons name="checkmark" size={13} color="#fff" />
+                        ) : isNext ? (
+                          <Ionicons name="time" size={12} color="#d97706" />
+                        ) : (
+                          <Ionicons name="lock-closed" size={10} color="#9ca3af" />
+                        )}
+                      </View>
+
+                      <Text
+                        style={[
+                          styles.nodeLabel,
+                          isDone && styles.nodeLabelDone,
+                          isNext && styles.nodeLabelNext,
+                          !isDone && !isNext && styles.nodeLabelLocked,
+                          isSelected && { fontWeight: '900', color: '#15803d' },
+                        ]}
+                      >
+                        Audit {roundNum}
+                      </Text>
+
+                      <Text style={styles.nodeStatusSub}>
+                        {isDone ? 'View ✓' : isNext ? 'Next ⏳' : 'Locked'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {idx < 3 && (
+                      <View
+                        style={[
+                          styles.nodeConnectorLine,
+                          completedRoundsSet.has(roundNum + 1)
+                            ? styles.lineDone
+                            : isDone
+                            ? styles.lineNext
+                            : styles.lineLocked,
+                        ]}
+                      />
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </View>
+
+            {/* Selected Audit Snapshot (Clean Inspector) */}
+            {activeInspectorAudit ? (
+              <View style={styles.auditSnapshotCard}>
+                <View style={styles.snapshotTopRow}>
+                  <View style={styles.snapshotBadge}>
+                    <Text style={styles.snapshotBadgeText}>
+                      Audit {activeInspectorAudit.monitoring_round} Details
+                    </Text>
+                  </View>
+                  <Text style={styles.snapshotDate}>
+                    {formatDateFriendly(activeInspectorAudit.survey_date ?? activeInspectorAudit.submitted_at)}
                   </Text>
+                </View>
 
-                  {activeInspectorAudit.tree_condition ? (
-                    <Text style={styles.snapshotCondition}>
-                      Condition: <Text style={{ fontWeight: '800', color: '#15803d' }}>{activeInspectorAudit.tree_condition}</Text>
+                <View style={styles.snapshotBodyRow}>
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <Text style={styles.snapshotMetrics}>
+                      <Text style={{ fontWeight: '800' }}>DBH:</Text> {activeInspectorAudit.dbh_cm ?? '—'}cm  ·  <Text style={{ fontWeight: '800' }}>H:</Text> {activeInspectorAudit.height_m ?? '—'}m  ·  <Text style={{ fontWeight: '800' }}>Crown:</Text> {activeInspectorAudit.crown_diameter_m ?? '—'}m
                     </Text>
-                  ) : null}
 
-                  {activeInspectorAudit.surveyor ? (
-                    <Text style={styles.snapshotSurveyor}>
-                      Auditor: <Text style={{ fontWeight: '700' }}>{activeInspectorAudit.surveyor}</Text>
-                    </Text>
+                    {activeInspectorAudit.tree_condition ? (
+                      <Text style={styles.snapshotCondition}>
+                        Condition: <Text style={{ fontWeight: '800', color: '#15803d' }}>{activeInspectorAudit.tree_condition}</Text>
+                      </Text>
+                    ) : null}
+
+                    {activeInspectorAudit.surveyor ? (
+                      <Text style={styles.snapshotSurveyor}>
+                        Auditor: <Text style={{ fontWeight: '700' }}>{activeInspectorAudit.surveyor}</Text>
+                      </Text>
+                    ) : null}
+                  </View>
+
+                  {activeInspectorAudit.photo_url ? (
+                    <TouchableOpacity
+                      onPress={() => setFullscreenPhoto(activeInspectorAudit.photo_url)}
+                      activeOpacity={0.8}
+                    >
+                      <Image
+                        source={{ uri: activeInspectorAudit.photo_url }}
+                        style={styles.snapshotThumb as any}
+                        resizeMode="cover"
+                      />
+                    </TouchableOpacity>
                   ) : null}
                 </View>
 
-                {activeInspectorAudit.photo_url ? (
-                  <TouchableOpacity
-                    onPress={() => setFullscreenPhoto(activeInspectorAudit.photo_url)}
-                    activeOpacity={0.8}
-                  >
-                    <Image
-                      source={{ uri: activeInspectorAudit.photo_url }}
-                      style={styles.snapshotThumb as any}
-                      resizeMode="cover"
-                    />
-                  </TouchableOpacity>
+                {activeInspectorAudit.notes ? (
+                  <View style={styles.snapshotNotesBox}>
+                    <Text style={styles.snapshotNotesQuote}>
+                      "{activeInspectorAudit.notes}"
+                    </Text>
+                  </View>
                 ) : null}
               </View>
-
-              {activeInspectorAudit.notes ? (
-                <View style={styles.snapshotNotesBox}>
-                  <Text style={styles.snapshotNotesQuote}>
-                    "{activeInspectorAudit.notes}"
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-          ) : (
-            <View style={styles.noAuditTipBox}>
-              <Ionicons name="information-circle-outline" size={16} color="#15803d" />
-              <Text style={styles.noAuditTipText}>
-                No audits submitted yet. Tap the button below to record Audit 1.
-              </Text>
-            </View>
-          )}
-        </View>
+            ) : null}
+          </View>
+        ) : null}
 
         {/* ─── 6. PLANTING BASELINE & SPECS (CLEAN EXPANDABLE ACCORDION) ─── */}
         <View style={styles.accordionCard}>
@@ -673,8 +708,63 @@ export default function TreeDetailScreen() {
         </View>
       </Modal>
 
-      {/* ─── 8. CLEAN BOTTOM ACTION BUTTON (START NEXT AUDIT) ─── */}
-      {auditStatus.allCompleted ? (
+      {/* ─── 8. BOTTOM ACTION BUTTON (APPROVAL & AUDIT AWARE) ─── */}
+      {!hasAudits ? (
+        !isApproved ? (
+          // Pre-Audit, Unapproved or Rejected: Field Worker can edit the tree
+          <TouchableOpacity
+            style={styles.fab}
+            activeOpacity={0.85}
+            onPress={() =>
+              navigation.navigate('EditTree', {
+                treeId: tree.id,
+                taskId: task?.id || null,
+                rejectionNotes: task?.review_notes || null,
+              })
+            }
+          >
+            <LinearGradient
+              colors={isRejected ? ['#dc2626', '#ef4444'] : ['#1a5c2a', '#226934']}
+              style={styles.fabGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <Ionicons name={isRejected ? 'refresh-circle-outline' : 'create-outline'} size={18} color="#fff" />
+              <Text style={styles.fabText}>
+                {isRejected ? 'Update Rejected Tree' : 'Edit Tree Details'}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        ) : (
+          // Pre-Audit, Approved: Baseline editing is locked; Start Audit 1
+          <TouchableOpacity
+            style={styles.fab}
+            activeOpacity={0.85}
+            onPress={() =>
+              navigation.navigate('UpdateTree', {
+                treeId: tree.id,
+                treeIdDisplay: liveTreeId,
+                currentRound: 1,
+              })
+            }
+          >
+            <LinearGradient
+              colors={['#1a5c2a', '#226934']}
+              style={styles.fabGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <Ionicons name="clipboard-outline" size={18} color="#fff" />
+              <Text style={styles.fabText}>Start Audit 1</Text>
+              {auditStatus.isDue && (
+                <View style={styles.duePill}>
+                  <Text style={styles.duePillText}>{auditStatus.isOverdue ? 'OVERDUE' : 'DUE'}</Text>
+                </View>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+        )
+      ) : auditStatus.allCompleted ? (
         <View style={styles.allCompletedBar}>
           <LinearGradient
             colors={['#166534', '#15803d']}
@@ -686,7 +776,8 @@ export default function TreeDetailScreen() {
             <Text style={styles.fabText}>All 4 Audits Completed ✓</Text>
           </LinearGradient>
         </View>
-      ) : !tree.locked ? (
+      ) : (
+        // Post-Audit, Next Round
         <TouchableOpacity
           style={styles.fab}
           activeOpacity={0.85}
@@ -705,19 +796,15 @@ export default function TreeDetailScreen() {
             end={{ x: 1, y: 0 }}
           >
             <Ionicons name="clipboard-outline" size={18} color="#fff" />
-            <Text style={styles.fabText}>
-              {audits.length === 0 ? 'Start Audit 1' : `Start Audit ${auditStatus.currentRound}`}
-            </Text>
+            <Text style={styles.fabText}>Start Audit {auditStatus.currentRound}</Text>
             {auditStatus.isDue && (
               <View style={styles.duePill}>
-                <Text style={styles.duePillText}>
-                  {auditStatus.isOverdue ? 'OVERDUE' : 'DUE'}
-                </Text>
+                <Text style={styles.duePillText}>{auditStatus.isOverdue ? 'OVERDUE' : 'DUE'}</Text>
               </View>
             )}
           </LinearGradient>
         </TouchableOpacity>
-      ) : null}
+      )}
     </View>
   );
 }
@@ -778,16 +865,48 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   completedPillText: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  lockPill: {
+  approvedPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(240, 145, 37, 0.25)',
+    backgroundColor: '#8b5cf6',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
   },
-  lockPillText: { color: '#F09125', fontSize: 10, fontWeight: '800' },
+  approvedPillText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  rejectedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  rejectedPillText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  pendingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(245, 158, 11, 0.45)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  pendingPillText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  rejectionNoticeCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#fef2f2',
+    borderColor: '#fca5a5',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+  },
+  rejectionNoticeTitle: { fontSize: 12, fontWeight: '800', color: '#ef4444' },
+  rejectionNoticeBody: { fontSize: 12, color: '#991b1b', lineHeight: 16, marginTop: 2 },
 
   scroll: { flex: 1 },
   scrollContent: { padding: 14, gap: 14, paddingBottom: 20 },

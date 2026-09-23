@@ -13,6 +13,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
+import { useProjectRefreshStore } from '../../store/projectRefreshStore';
 import { fetchMyTrees, fetchAllProjects } from '../../services/treeService';
 import { fetchAgentTasks } from '../../services/taskService';
 import { loadLocalTasks } from '../../services/localTaskService';
@@ -33,6 +34,7 @@ export default function HomeScreen() {
   const setActiveProjectId = useAuthStore((s) => s.setActiveProjectId);
   const assignedProjects = useAuthStore((s) => s.assignedProjects) ?? [];
   const refreshCredits = useAuthStore((s) => s.refreshCredits);
+  const refreshKey = useProjectRefreshStore((s) => s.refreshKey);
   const trees = useTreeStore((s) => s.trees) ?? [];
   const setTrees = useTreeStore((s) => s.setTrees);
   const [refreshing, setRefreshing] = useState(false);
@@ -116,12 +118,14 @@ export default function HomeScreen() {
     }, [loadTrees, loadTasks, refreshCredits])
   );
 
-  // Auto-refresh when project changes
+  // Instantly reload when the active project changes
   useEffect(() => {
-    refreshCredits();
-    loadTrees();
-    loadTasks();
-  }, [activeProjectId]);
+    if (refreshKey > 0) {
+      refreshCredits();
+      loadTrees();
+      loadTasks();
+    }
+  }, [refreshKey]);
 
   const onRefresh = async () => {
     setRefreshing(true);

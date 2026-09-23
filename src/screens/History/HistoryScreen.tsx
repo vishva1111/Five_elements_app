@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,11 +13,13 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useTaskStore } from '../../store/taskStore';
+import { useProjectRefreshStore } from '../../store/projectRefreshStore';
 import { fetchMyTrees, backfillProjectTreeIds } from '../../services/treeService';
 import { parseTreeMeta, resolveTreeId, TREE_ID_PLACEHOLDER } from '../../utils/treeId';
 import { fetchAgentTasks } from '../../services/taskService';
 import { TreeCondition, LandType, Task, TreeRecord, HistoryCategory, MONITORING_ROUNDS } from '../../types';
 import { fetchAuditsForTrees, getLatestAudit } from '../../services/auditService';
+import TreeCard from '../../components/TreeCard';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -91,6 +93,7 @@ export default function HistoryScreen() {
   const user = useAuthStore((s) => s.user);
   const userId = user?.id;
   const activeProjectId = useAuthStore((s) => s.activeProjectId);
+  const refreshKey = useProjectRefreshStore((s) => s.refreshKey);
   const trees = useTreeStore((s) => s.trees) ?? [];
   const setTrees = useTreeStore((s) => s.setTrees);
   const tasks = useTaskStore((s) => s.tasks) ?? [];
@@ -164,6 +167,11 @@ export default function HistoryScreen() {
       loadData();
     }, [loadData])
   );
+
+  // Instantly reload when the active project changes
+  useEffect(() => {
+    if (refreshKey > 0) loadData();
+  }, [refreshKey]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -312,86 +320,31 @@ export default function HistoryScreen() {
   };
 
   const renderHistoryCard = (item: HistoryItem) => {
-    const statusColor = STATUS_COLORS[item.status || ''] || '#888';
-    const conditionColor = CONDITION_COLORS[item.condition || ''] || '#6b7280';
-    const dateStr = new Date(item.date).toLocaleDateString('en-IN', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
-
+    const targetTreeId = item.tree_record_id || item.id;
     return (
-      <TouchableOpacity
+      <TreeCard
         key={item.id}
-        style={[styles.historyCard, { borderLeftColor: statusColor }]}
+        tree={{
+          id: targetTreeId,
+          tree_id: item.tree_id,
+          species: item.title,
+          photo_url: item.photo_url || '',
+          latitude: item.latitude || 0,
+          longitude: item.longitude || 0,
+          tree_condition: (item.condition as TreeCondition) || 'Healthy',
+          health_status: 'healthy',
+          submitted_at: item.date,
+          synced: true,
+          locked: item.status === 'approved',
+          user_id: '',
+        }}
+        status={item.status as any}
+        auditRound={item.audit_round}
+        displayId={item.tree_id || undefined}
         onPress={() => {
-          const targetTreeId = item.tree_record_id || item.id;
           navigation.navigate('TreeDetail', { treeId: targetTreeId });
         }}
-        activeOpacity={0.7}
-      >
-        {/* Photo */}
-        {item.photo_url ? (
-          <View style={styles.photoWrap}>
-            <Image source={{ uri: item.photo_url }} style={styles.photo} resizeMode="cover" />
-          </View>
-        ) : (
-          <View style={styles.photoWrap}>
-            <View style={styles.photoPlaceholder}>
-              <Text style={styles.photoPlaceholderText}>🌳</Text>
-            </View>
-          </View>
-        )}
-
-        <View style={styles.cardContent}>
-          <View style={styles.cardTop}>
-            <View style={styles.cardTitleWrap}>
-              <Text style={styles.taskId}>
-                ID: <Text style={styles.taskIdValue}>{item.tree_id || TREE_ID_PLACEHOLDER}</Text>
-              </Text>
-              <Text style={styles.taskName} numberOfLines={1}>{item.title}</Text>
-            </View>
-            {/* Status badge on right */}
-            <View style={[styles.statusBadge, { backgroundColor: statusColor + '20', borderColor: statusColor }]}>
-              <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-              <Text style={[styles.statusText, { color: statusColor }]}>{(item.status || '').toUpperCase()}</Text>
-            </View>
-          </View>
-
-          {/* Badges row: Audit round + Condition */}
-          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
-            {item.audit_round != null ? (
-              <View style={[styles.conditionBadge, { backgroundColor: (AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a') + '15', borderColor: (AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a') + '40' }]}>
-                <View style={[styles.conditionDot, { backgroundColor: AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a' }]} />
-                <Text style={[styles.conditionText, { color: AUDIT_COLORS[String(item.audit_round)] || '#1a5c2a' }]}>
-                  Audit {item.audit_round}
-                </Text>
-              </View>
-            ) : null}
-            {item.condition ? (
-              <View style={[styles.conditionBadge, { backgroundColor: conditionColor + '15', borderColor: conditionColor + '40' }]}>
-                <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
-                <Text style={[styles.conditionText, { color: conditionColor }]}>{item.condition}</Text>
-              </View>
-            ) : null}
-          </View>
-
-          {/* Location + Date */}
-          <View style={styles.bottomRow}>
-            {item.latitude && item.longitude ? (
-              <View style={styles.locationBadge}>
-                <Ionicons name="location-outline" size={10} color="#1a5c2a" />
-                <Text style={styles.locationText}>Location</Text>
-              </View>
-            ) : null}
-            <View style={styles.dateRow}>
-              <Ionicons name="calendar-outline" size={10} color="#888" />
-              <Text style={styles.date}>{dateStr}</Text>
-            </View>
-          </View>
-        </View>
-      </TouchableOpacity>
+      />
     );
   };
 

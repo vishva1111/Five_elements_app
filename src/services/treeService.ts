@@ -1505,3 +1505,89 @@ export async function updateTreeFromMonitoring(
 
   return { data: await attachProjectName(mapTreeRecord(data)), error: null };
 }
+
+/**
+ * Update baseline tree details (species, condition, height, DBH, photo, notes, etc.)
+ * Only permitted when tree is not yet approved (pending or rejected).
+ * Also resets linked task status from 'rejected' back to 'completed' (pending approval).
+ */
+export async function updateBaselineTree(
+  treeRecordId: string,
+  updates: {
+    species?: string;
+    scientific_name?: string;
+    photo_url?: string;
+    dbh_cm?: number;
+    height_m?: number;
+    tree_condition?: string;
+    health_status?: string;
+    land_type?: string;
+    notes?: string;
+    surveyor?: string;
+    survey_date?: string;
+    latitude?: number;
+    longitude?: number;
+  },
+  taskId?: string | null
+): Promise<ApiResponse<TreeRecord>> {
+  try {
+    useTreeStore.getState().updateTree(treeRecordId, updates as Partial<TreeRecord>);
+  } catch {}
+
+  const { data, error } = await supabase
+    .from('tree_records')
+    .update(updates)
+    .eq('id', treeRecordId)
+    .select('*, projects(name)')
+    .single();
+
+  if (error) {
+    console.warn('[TreeApp] updateBaselineTree error:', error.message);
+    if (isMissingSchemaError(error)) {
+      const coreUpdates: any = {};
+      if (updates.species) coreUpdates.species = updates.species;
+      if (updates.tree_condition) coreUpdates.tree_condition = updates.tree_condition;
+      if (updates.health_status) coreUpdates.health_status = updates.health_status;
+      if (updates.photo_url) coreUpdates.photo_url = updates.photo_url;
+      if (updates.notes) coreUpdates.notes = updates.notes;
+      const retry = await supabase
+        .from('tree_records')
+        .update(coreUpdates)
+        .eq('id', treeRecordId)
+        .select('*, projects(name)')
+        .single();
+      if (retry.data) {
+        return { data: await attachProjectName(mapTreeRecord(retry.data)), error: null };
+      }
+    }
+    return { data: null, error: error.message };
+  }
+
+  // If a task is linked to this tree, update task status back to 'completed' (pending review)
+  try {
+    let resolvedTaskId = taskId;
+    if (!resolvedTaskId) {
+      const { data: tRow } = await supabase
+        .from('tasks')
+        .select('id, status')
+        .or(`tree_id.eq.${treeRecordId},id.eq.${treeRecordId}`)
+        .maybeSingle();
+      if (tRow) resolvedTaskId = tRow.id;
+    }
+    if (resolvedTaskId) {
+      await supabase
+        .from('tasks')
+        .update({
+          status: 'completed',
+          review_notes: null,
+          photo_url: updates.photo_url,
+          tree_condition: updates.tree_condition,
+        })
+        .eq('id', resolvedTaskId);
+    }
+  } catch (tErr) {
+    console.warn('[TreeApp] Task status reset on tree update failed:', tErr);
+  }
+
+  return { data: await attachProjectName(mapTreeRecord(data)), error: null };
+}

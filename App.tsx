@@ -27,6 +27,7 @@ import SubmitSuccessScreen from './src/screens/Capture/SubmitSuccessScreen';
 import HistoryScreen from './src/screens/History/HistoryScreen';
 import TreeDetailScreen from './src/screens/History/TreeDetailScreen';
 import UpdateTreeScreen from './src/screens/History/UpdateTreeScreen';
+import EditTreeScreen from './src/screens/History/EditTreeScreen';
 import UpdateLookupScreen from './src/screens/History/UpdateLookupScreen';
 import ProfileScreen from './src/screens/Profile/ProfileScreen';
 import TaskScreen from './src/screens/Task/TaskScreen';
@@ -72,6 +73,7 @@ function HistoryNavigator() {
       <HistoryStack.Screen name="HistoryList" component={HistoryScreen} options={{ title: 'MY SUBMISSIONS', headerShown: false }} />
       <HistoryStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS', headerShown: false }} />
       <HistoryStack.Screen name="UpdateTree" component={UpdateTreeScreen} options={{ title: 'AUDIT TREE', headerShown: false }} />
+      <HistoryStack.Screen name="EditTree" component={EditTreeScreen} options={{ title: 'EDIT TREE', headerShown: false }} />
     </HistoryStack.Navigator>
   );
 }
@@ -81,6 +83,7 @@ function UpdateLookupNavigator() {
     <UpdateLookupStack.Navigator screenOptions={{ headerShown: false }}>
       <UpdateLookupStack.Screen name="UpdateLookup" component={UpdateLookupScreen} />
       <UpdateLookupStack.Screen name="UpdateTree" component={UpdateTreeScreen} />
+      <UpdateLookupStack.Screen name="EditTree" component={EditTreeScreen} />
     </UpdateLookupStack.Navigator>
   );
 }
@@ -91,7 +94,7 @@ function MainTabs() {
     <Tab.Navigator
       screenOptions={({ route }) => {
         const focusedName = getFocusedRouteNameFromRoute(route);
-        const hideTabBar = focusedName === 'UpdateTree';
+        const hideTabBar = focusedName === 'UpdateTree' || focusedName === 'EditTree';
         return {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
@@ -324,6 +327,7 @@ export default function App() {
                   <RootStack.Screen name="Capture" component={CaptureNavigator} />
                   <RootStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS' }} />
                   <RootStack.Screen name="UpdateTree" component={UpdateTreeScreen} options={{ title: 'AUDIT TREE', headerShown: false }} />
+                  <RootStack.Screen name="EditTree" component={EditTreeScreen} options={{ title: 'EDIT TREE', headerShown: false }} />
                   <RootStack.Screen name="Map" component={TreeMapScreen} options={{ title: 'MAP', headerShown: false }} />
                 </>
               )}

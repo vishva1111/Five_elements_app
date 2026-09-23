@@ -6,10 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  Alert,
-  ActivityIndicator,
-  Linking,
-  FlatList,
   Image,
 } from 'react-native';
 import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
@@ -17,18 +13,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useTaskStore } from '../../store/taskStore';
+import { useProjectRefreshStore } from '../../store/projectRefreshStore';
 import { fetchMyTrees, fetchAllProjects, backfillProjectTreeIds } from '../../services/treeService';
 import { fetchAgentTasks, startTask } from '../../services/taskService';
-import {
-  loadLocalTasks,
-  saveLocalTasks,
-  makeLocalTask,
-  refreshLocalProgress,
-  isLocalTask,
-} from '../../services/localTaskService';
 import { Task, Project, TreeRecord } from '../../types';
 import { displayTreeId, parseTreeMeta, resolveTreeId } from '../../utils/treeId';
 import CircularProgress from '../../components/CircularProgress';
+import TreeCard from '../../components/TreeCard';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -48,22 +39,21 @@ export default function TaskScreen() {
   const user = useAuthStore((s) => s.user);
   const userId = user?.id;
   const activeProjectId = useAuthStore((s) => s.activeProjectId);
-  const assignedProjects = useAuthStore((s) => s.assignedProjects) ?? [];
-  const refreshCredits = useAuthStore((s) => s.refreshCredits);
+  const refreshKey = useProjectRefreshStore((s) => s.refreshKey);
   const trees = useTreeStore((s) => s.trees) ?? [];
   const setTrees = useTreeStore((s) => s.setTrees);
   const tasks = useTaskStore((s) => s.tasks) ?? [];
   const setTasks = useTaskStore((s) => s.setTasks);
-  const localTasks = useTaskStore((s) => s.localTasks) ?? [];
-  const setLocalTasks = useTaskStore((s) => s.setLocalTasks);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<TaskTab>('assigned');
-  const [addingDemo, setAddingDemo] = useState(false);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>('all');
   // uuid (tree record) → project tree ID, e.g. "ARAV-001" (see utils/treeId.ts)
   const [treeIds, setTreeIds] = useState<Record<string, string>>({});
   const loadSeqRef = useRef(0);
+  // Keep stable refs so loadTasks never needs to be recreated on value changes
+  const activeProjectIdRef = useRef(activeProjectId);
+  useEffect(() => { activeProjectIdRef.current = activeProjectId; }, [activeProjectId]);
 
   // Dashboard boxes can open this screen on a specific tab (e.g. Rejected/Completed).
   useEffect(() => {
@@ -83,15 +73,10 @@ export default function TaskScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    loadLocalTasks().then((loaded) => {
-      if (!cancelled && loaded.length > 0) setLocalTasks(loaded);
-    });
-
     (async () => {
       const { data } = await fetchAllProjects();
       if (!cancelled && data) setAllProjects(data);
     })();
-
     return () => { cancelled = true; };
   }, []);
 
@@ -104,25 +89,18 @@ export default function TaskScreen() {
     ]);
     if (seq !== loadSeqRef.current) return;
     const myTrees = treesRes.data ?? [];
-    const localWithProgress = refreshLocalProgress(localTasks, myTrees);
+    if (treesRes.data) setTrees(treesRes.data);
 
-    // Filter: tasks with no project, assigned projects, or active project
-    const filterByAssigned = (t: Task) =>
-      !t.project_id || (assignedProjects ?? []).some((p) => p.id === t.project_id) || t.project_id === activeProjectId;
-
-    let visibleTasks = (tasksRes.data ?? []).filter(filterByAssigned);
-    let visibleLocal = localWithProgress.filter(filterByAssigned);
-
-    if (activeProjectId) {
-      visibleTasks = visibleTasks.filter((t) => t.project_id === activeProjectId);
-      visibleLocal = visibleLocal.filter((t) => t.project_id === activeProjectId);
+    // Filter by active project (read from ref — always current, no stale closure)
+    let visibleTasks = tasksRes.data ?? [];
+    const pid = activeProjectIdRef.current;
+    if (pid) {
+      visibleTasks = visibleTasks.filter((t) => t.project_id === pid);
     }
 
-    setTasks([...visibleTasks, ...visibleLocal]);
+    setTasks(visibleTasks);
 
-    // Tree capture cards are labelled with the project tree ID (e.g. ARAV-001).
-    // Trees captured before project IDs existed get an ID assigned + persisted
-    // here, so the label is right on this screen too (not only in History/Map).
+    // Tree capture cards labelled with the project tree ID (e.g. ARAV-001).
     if (myTrees.length > 0) {
       backfillProjectTreeIds(myTrees).then((enriched) => {
         if (seq !== loadSeqRef.current || !enriched) return;
@@ -136,7 +114,8 @@ export default function TaskScreen() {
         }
       });
     }
-  }, [userId, activeProjectId, assignedProjects, setTasks, localTasks]);
+  // activeProjectId read via ref — stable callback, no recreation on project change
+  }, [userId, setTasks]);
 
   useFocusEffect(
     useCallback(() => {
@@ -144,9 +123,11 @@ export default function TaskScreen() {
     }, [loadTasks])
   );
 
+  // Instantly reload whenever the active project changes (refreshKey incremented
+  // by setActiveProjectId in authStore — fires even when this screen is not focused)
   useEffect(() => {
-    loadTasks();
-  }, [activeProjectId, loadTasks]);
+    if (refreshKey > 0) loadTasks();
+  }, [refreshKey]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -156,72 +137,10 @@ export default function TaskScreen() {
 
   const handleStartTask = async (task: Task) => {
     if (!task.started_at) {
-      if (isLocalTask(task)) {
-        const startedAt = new Date().toISOString();
-        const updatedLocal = localTasks.map((t) =>
-          t.id === task.id
-            ? { ...t, started_at: startedAt, status: 'in_progress' as const }
-            : t
-        );
-        setLocalTasks(updatedLocal);
-        saveLocalTasks(updatedLocal);
-        setTasks(
-          tasks.map((t) =>
-            t.id === task.id ? { ...t, started_at: startedAt, status: 'in_progress' } : t
-          )
-        );
-      } else {
-        await startTask(task.id);
-        setTasks(tasks.map((t) => (t.id === task.id ? { ...t, started_at: new Date().toISOString(), status: 'in_progress' } : t)));
-      }
+      await startTask(task.id);
+      setTasks(tasks.map((t) => (t.id === task.id ? { ...t, started_at: new Date().toISOString(), status: 'in_progress' } : t)));
     }
     navigation.navigate('Capture');
-  };
-
-  const handleAddDemoTask = async () => {
-    setAddingDemo(true);
-    const names = ['Demo Survey — Phase 1', 'Demo Planting Drive', 'Demo Health Check'];
-    const localOnly = localTasks.filter(isLocalTask).filter((t) => activeProjectId ? t.project_id === activeProjectId : true);
-    const used = new Set(localOnly.map((t) => t.name));
-    const name = names.find((n) => !used.has(n)) ?? `Demo Task ${localOnly.length + 1}`;
-    const due = new Date(Date.now() + 30 * 86400000).toISOString();
-    const newTask = makeLocalTask({
-      name,
-      target_count: 50,
-      location: 'Demo field site',
-      priority: 'medium',
-      due_date: due,
-      project_id: activeProjectId ?? undefined,
-    });
-    const updated = [...localTasks, newTask];
-    setLocalTasks(updated);
-    await saveLocalTasks(updated);
-
-    // Reload tasks with the updated local list (loadTasks uses stale closure)
-    if (userId) {
-      const [treesRes, tasksRes] = await Promise.all([
-        fetchMyTrees(userId),
-        fetchAgentTasks(userId),
-      ]);
-      const myTrees = treesRes.data ?? [];
-      const localWithProgress = refreshLocalProgress(updated, myTrees);
-      const assignedProjectIds = new Set((assignedProjects ?? []).map((p) => p.id));
-      const filterByAssigned = (t: Task) => !t.project_id || assignedProjectIds.has(t.project_id);
-      if (tasksRes.data) {
-        let visibleTasks = tasksRes.data.filter(filterByAssigned);
-        if (activeProjectId) visibleTasks = visibleTasks.filter((t) => t.project_id === activeProjectId);
-        let visibleLocal = localWithProgress.filter(filterByAssigned);
-        if (activeProjectId) visibleLocal = visibleLocal.filter((t) => t.project_id === activeProjectId);
-        setTasks([...visibleTasks, ...visibleLocal]);
-      } else {
-        let visibleLocal = localWithProgress.filter(filterByAssigned);
-        if (activeProjectId) visibleLocal = visibleLocal.filter((t) => t.project_id === activeProjectId);
-        setTasks(visibleLocal);
-      }
-    }
-
-    setAddingDemo(false);
-    Alert.alert('Demo task added', `"${name}" saved for this project.`);
   };
 
   const handleOpenMap = (location: string) => {
@@ -234,28 +153,27 @@ export default function TaskScreen() {
     return now.toLocaleDateString('en-IN', options);
   };
 
-  const assignedTasks = tasks.filter((t) => t.status === 'assigned');
-  const inProgressTasks = tasks.filter((t) => t.status === 'in_progress');
+  // assigned + in_progress both show in the Assigned tab
+  const assignedTasks = tasks.filter((t) => t.status === 'assigned' || t.status === 'in_progress');
   const completedTasks = tasks.filter((t) => t.status === 'completed');
   const approvedTasks = tasks.filter((t) => t.status === 'approved');
   const rejectedTasks = tasks.filter((t) => t.status === 'rejected');
 
-  // Count tasks for each tab
-  const treeCaptures = trees.length;
+  // Tab counts
   const assignedCount = assignedTasks.length;
-  const completedCount = completedTasks.length + treeCaptures;
+  const completedCount = completedTasks.length + trees.length;
   const approvedCount = approvedTasks.length;
   const rejectedCount = rejectedTasks.length;
   const reviewedCount = approvedCount + rejectedCount;
   const totalTasks = assignedCount + completedCount + approvedCount + rejectedCount;
 
-  // Extract unique dates from assigned tasks (descending, past first)
+  // Date selector — pull dates from all tasks so every tab's date filter works
   const dates = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayStr = today.toISOString().split('T')[0];
     const dateSet = new Set<string>();
-    assignedTasks.forEach((t) => {
+    tasks.forEach((t) => {
       if (t.created_at) dateSet.add(t.created_at.split('T')[0]);
     });
     trees.forEach((t) => {
@@ -275,7 +193,7 @@ export default function TaskScreen() {
         isToday: dateStr === todayStr,
       };
     });
-  }, [assignedTasks, trees]);
+  }, [tasks, trees]);
 
   const activeProject = allProjects.find((p) => p.id === activeProjectId);
 
@@ -290,108 +208,67 @@ export default function TaskScreen() {
   }, [trees]);
 
   const renderTaskCard = (task: Task) => {
-    const started = !!task.started_at;
-    const createdDate = task.created_at ? new Date(task.created_at) : null;
-    const dayName = createdDate ? createdDate.toLocaleDateString('en-IN', { weekday: 'short' }) : '';
-    const dateStr = createdDate ? createdDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-    const statusColor = task.status === 'completed' ? '#22c55e'
-      : task.status === 'approved' ? '#8b5cf6'
-      : task.status === 'rejected' ? '#ef4444'
-      : '#1a5c2a';
-    const isAssigned = task.status === 'assigned';
-    const isTreeCapture = task.status === 'completed' && task.photo_url;
-    // A card that stands for a tree record is labelled with that tree's project
-    // tree ID (ARAV-001) — the database uuid is never shown to the user.
-    const treeRecord = treeByUuid.get(task.id);
-    const projectTreeId = treeRecord ? treeIds[task.id] || displayTreeId(treeRecord) : '';
-    
-    const conditionColors: Record<string, string> = {
-      Healthy: '#16a34a',
-      Stressed: '#d97706',
-      Diseased: '#dc2626',
-      Dead: '#4b5563',
-    };
-    
-    const handlePress = () => {
-      if (isTreeCapture && task.id) {
-        navigation.navigate('TreeDetail', { treeId: task.id });
+    // For rejected tasks or tree captures, resolve the linked tree record
+    let treeRecord =
+      treeByUuid.get(task.id) ||
+      (task.tree_id ? treeByUuid.get(task.tree_id) : undefined) ||
+      (task.tree_record_id ? treeByUuid.get(task.tree_record_id) : undefined);
+
+    if (!treeRecord && task.name) {
+      const match = task.name.match(/\(([A-Fa-f0-9]{4,36})\)/);
+      if (match && match[1]) {
+        const hex = match[1].toLowerCase();
+        treeRecord = trees.find(
+          (t) =>
+            t.id.toLowerCase().startsWith(hex) ||
+            resolveTreeId(t).toLowerCase().includes(hex)
+        );
       }
+    }
+
+    const projectTreeId = treeRecord ? treeIds[treeRecord.id] || displayTreeId(treeRecord) : undefined;
+    const isAssigned = task.status === 'assigned' || task.status === 'in_progress';
+    const isRejected = task.status === 'rejected';
+
+    const handlePress = () => {
+      const targetId = treeRecord?.id || task.tree_id || task.id;
+      navigation.navigate('TreeDetail', { treeId: targetId });
+    };
+
+    const handleUpdate = () => {
+      const targetId = treeRecord?.id || task.tree_id || task.id;
+      navigation.navigate('EditTree', {
+        treeId: targetId,
+        taskId: task.id,
+        rejectionNotes: task.review_notes || null,
+      });
     };
 
     return (
-      <TouchableOpacity key={task.id} style={[s.taskCard, { borderLeftColor: statusColor }]} onPress={handlePress} activeOpacity={0.7}>
-        {isTreeCapture && task.photo_url ? (
-          <View style={s.taskPhotoWrap}>
-            <Image source={{ uri: task.photo_url }} style={s.taskPhoto} resizeMode="cover" />
-          </View>
-        ) : null}
-        <View style={s.taskCardContent}>
-          <View style={s.taskCardTop}>
-            <View style={s.taskTitleWrap}>
-              <Text style={s.taskId} numberOfLines={1}>
-                ID: {treeRecord ? <Text style={s.taskIdValue}>{projectTreeId}</Text> : task.id.slice(0, 8).toUpperCase()}
-              </Text>
-              <Text style={s.taskName} numberOfLines={1}>{task.name}</Text>
-              {task.audit_round != null ? (
-                <View style={s.auditChip}>
-                  <Ionicons name="clipboard-outline" size={10} color="#1a5c2a" />
-                  <Text style={s.auditChipText}>Audit {task.audit_round}</Text>
-                </View>
-              ) : null}
-            </View>
-            {isAssigned ? (
-              <TouchableOpacity
-                style={s.startBtn}
-                onPress={(e) => { e.stopPropagation(); handleStartTask(task); }}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="play-circle-outline" size={14} color="#fff" />
-                <Text style={s.startBtnText}>Start</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={[s.statusBadge, { backgroundColor: statusColor + '18' }]}>
-                <Text style={[s.statusText, { color: statusColor }]}>{task.status.toUpperCase()}</Text>
-              </View>
-            )}
-          </View>
-          
-          {/* Extra details for tree captures */}
-          {isTreeCapture && (
-            <View style={s.treeDetailRow}>
-              {task.tree_condition ? (
-                <View style={[s.conditionBadge, { backgroundColor: (conditionColors[task.tree_condition] || '#6b7280') + '15', borderColor: (conditionColors[task.tree_condition] || '#6b7280') + '40' }]}>
-                  <View style={[s.conditionDot, { backgroundColor: conditionColors[task.tree_condition] || '#6b7280' }]} />
-                  <Text style={{ color: conditionColors[task.tree_condition] || '#6b7280', fontWeight: '700', fontSize: 10 }}>{task.tree_condition}</Text>
-                </View>
-              ) : null}
-              {task.latitude && task.longitude && (
-                <TouchableOpacity
-                  style={s.detailLink}
-                  onPress={(e) => { e.stopPropagation(); handleOpenMap(`${task.latitude},${task.longitude}`); }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="location-outline" size={11} color="#1a5c2a" />
-                  <Text style={s.detailLinkText}>Location</Text>
-                </TouchableOpacity>
-              )}
-              {task.surveyor ? (
-                <View style={s.surveyorRow}>
-                  <Ionicons name="person-outline" size={10} color="#888" />
-                  <Text style={s.surveyorText}>{task.surveyor}</Text>
-                </View>
-              ) : null}
-            </View>
-          )}
-          
-          {/* Date only - no priority badge */}
-          {createdDate ? (
-            <View style={s.dueRow}>
-              <Ionicons name="calendar-outline" size={10} color="#888" />
-              <Text style={s.dueText}>{dayName}, {dateStr}</Text>
-            </View>
-          ) : null}
-        </View>
-      </TouchableOpacity>
+      <TreeCard
+        key={task.id}
+        tree={treeRecord}
+        task={task}
+        displayId={projectTreeId}
+        onPress={isAssigned ? undefined : handlePress}
+        onAction={
+          isAssigned
+            ? () => handleStartTask(task)
+            : isRejected
+            ? handleUpdate
+            : undefined
+        }
+        actionLabel={isAssigned ? 'Start' : isRejected ? 'Update Submission' : undefined}
+        actionVariant={isAssigned ? 'start' : isRejected ? 'update' : undefined}
+        onLocationPress={
+          !isAssigned && ((task.latitude && task.longitude) || (treeRecord?.latitude && treeRecord?.longitude))
+            ? () =>
+                handleOpenMap(
+                  `${task.latitude ?? treeRecord?.latitude},${task.longitude ?? treeRecord?.longitude}`
+                )
+            : undefined
+        }
+      />
     );
   };
 
@@ -412,7 +289,7 @@ export default function TaskScreen() {
     <View style={s.container}>
       <ScrollView
         style={s.scroll}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 160 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a5c2a" />}
       >
         {/* Header with date and project location */}
@@ -542,25 +419,6 @@ export default function TaskScreen() {
           {activeTab === 'rejected' && renderTaskList(filterByDate(rejectedTasks))}
         </View>
       </ScrollView>
-
-      {/* Add Demo Button - Fixed at bottom */}
-      <View style={[s.bottomBar, { paddingBottom: insets.bottom + 8 }]}>
-        <TouchableOpacity
-          style={s.addDemoBtn}
-          onPress={handleAddDemoTask}
-          disabled={addingDemo}
-          activeOpacity={0.8}
-        >
-          {addingDemo ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="add-circle-outline" size={20} color="#fff" />
-              <Text style={s.addDemoBtnText}>Add Demo Task</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
@@ -673,6 +531,14 @@ const s = StyleSheet.create({
     width: 80,
     height: 80,
   },
+  taskPhotoPlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 14,
+    backgroundColor: '#E8F5E9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   taskCardContent: {
     flex: 1,
   },
@@ -688,17 +554,46 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#F09125',
+    backgroundColor: '#1a5c2a',
     borderRadius: 14,
     paddingVertical: 6,
     paddingHorizontal: 10,
     elevation: 2,
-    shadowColor: '#F09125',
+    shadowColor: '#1a5c2a',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
   },
   startBtnText: { color: '#fff', fontWeight: '800', fontSize: 11 },
+  // Update button — full-width below card details, only for rejected tasks
+  updateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    paddingVertical: 8,
+    marginTop: 10,
+    elevation: 2,
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  updateBtnText: { color: '#fff', fontWeight: '800', fontSize: 11 },
+  // Rejection reason row (review_notes)
+  rejectionReasonRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 4,
+    marginTop: 6,
+    backgroundColor: '#fef2f2',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  rejectionReasonText: { fontSize: 10, color: '#ef4444', flex: 1, lineHeight: 14 },
   taskNote: { fontSize: 12, color: '#666', marginTop: 4, lineHeight: 16 },
   dueRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4 },
   dueText: { fontSize: 10, color: '#888' },
@@ -715,35 +610,4 @@ const s = StyleSheet.create({
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
   emptyText: { fontSize: 16, fontWeight: '800', color: '#555' },
   emptySubText: { fontSize: 13, color: '#888', marginTop: 4, textAlign: 'center', paddingHorizontal: 24 },
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  addDemoBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#1a5c2a',
-    borderRadius: 14,
-    paddingVertical: 14,
-    elevation: 4,
-    shadowColor: '#1a5c2a',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-  },
-  addDemoBtnText: { fontSize: 15, fontWeight: '800', color: '#fff' },
 });

@@ -169,6 +169,7 @@ export type HistoryStackParamList = {
   HistoryList: undefined;
   TreeDetail: { treeId: string };
   UpdateTree: { treeId: string; treeIdDisplay: string; currentRound: number };
+  EditTree: { treeId: string; taskId?: string | null; rejectionNotes?: string | null };
 };
 
 // Audit category on History (filter by monitoring round 1..4)
