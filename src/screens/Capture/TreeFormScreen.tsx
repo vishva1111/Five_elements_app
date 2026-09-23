@@ -250,29 +250,38 @@ export default function TreeFormScreen() {
       // Keep the profile credits column in sync (best-effort, non-blocking)
       syncUserCredits(user.id, remainingCredits);
 
-      // 4. Auto-complete any in_progress task assigned to this user
-      //    that is linked to this tree_id OR is the first in_progress task
+      // 4. Complete the task this capture was started from ("Start Now" on the Task
+      //    screen sets activeTaskId), falling back to fuzzy-matching an assigned
+      //    capture-style task if this Capture wasn't reached from a specific task.
+      //    No in_progress step anywhere — assigned goes straight to completed.
       //    (best-effort — non-blocking, won't fail the submit)
       try {
         const allTasks = useTaskStore.getState().tasks ?? [];
-        const inProgressTask = allTasks.find(
-          (t) =>
-            t.status === 'assigned' &&
-            (t.tree_id === data.id || t.tree_id === form.tree_id || !t.tree_id)
-        );
-        if (inProgressTask) {
-          await completeTask(inProgressTask.id, data.id);
+        const activeTaskId = useTaskStore.getState().activeTaskId;
+
+        const matchingTask = activeTaskId
+          ? allTasks.find((t) => t.id === activeTaskId)
+          : allTasks.find(
+              (t) => t.status === 'assigned' && (t.tree_id === data.id || t.tree_id === form.tree_id || !t.tree_id)
+            );
+
+        if (matchingTask && matchingTask.status === 'assigned') {
+          // Use the coords already captured for this tree — exact and no extra GPS round-trip.
+          const location = `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`;
+          await completeTask(matchingTask.id, data.id, location);
           // Update local store so TaskScreen reflects immediately
           const updatedTasks = allTasks.map((t) =>
-            t.id === inProgressTask.id
-              ? { ...t, status: 'completed' as const, completed_at: new Date().toISOString(), tree_id: data.id }
+            t.id === matchingTask.id
+              ? { ...t, status: 'completed' as const, completed_at: new Date().toISOString(), tree_id: data.id, location }
               : t
           );
           useTaskStore.getState().setTasks(updatedTasks);
         }
+        useTaskStore.getState().setActiveTaskId(null);
       } catch (taskErr) {
         // Non-critical — tree was saved successfully
         console.warn('[TreeFormScreen] task auto-complete failed:', taskErr);
+        useTaskStore.getState().setActiveTaskId(null);
       }
 
       navigation.navigate('SubmitSuccess', { treeId: data.id });

@@ -682,3 +682,18 @@
 {"_e":"metro:bundling:progress","_t":1790077344849,"id":"c","progress":0,"total":1,"current":0}
 {"_e":"metro:bundling:done","_t":1790077344910,"id":"c","total":1,"ms":61.8318}
 {"_e":"metro:server_log","_t":1790077730544,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","host.exp.exponent","SM-A315F - 12 - API 31","60"]}
+{"_e":"metro:client_log","_t":1790079155525,"level":"log","data":["[Geofence] User entered zone \"Neem\" (13938062-510e-437a-b5ef-c10fa0ce7849)"]}
+{"_e":"metro:client_log","_t":1790079155582,"level":"log","data":["[Geofence] User entered zone \"Neem\" (ceb522dc-5490-4ff8-b55f-209866936f14)"]}
+{"_e":"metro:client_log","_t":1790079155583,"level":"log","data":["[Geofence] User entered zone \"Rhizophora mucronata\" (2dfad4c8-91be-4f82-8647-3d00b2b1a810)"]}
+{"_e":"metro:client_log","_t":1790081630590,"level":"error","data":["[ReferenceError: Property 'isAssigned' doesn't exist]"]}
+{"_e":"metro:client_log","_t":1790082627408,"level":"log","data":["[Geofence] User entered zone \"Neem\" (13938062-510e-437a-b5ef-c10fa0ce7849)"]}
+{"_e":"metro:client_log","_t":1790082627496,"level":"log","data":["[Geofence] User entered zone \"Neem\" (ceb522dc-5490-4ff8-b55f-209866936f14)"]}
+{"_e":"metro:client_log","_t":1790082627496,"level":"log","data":["[Geofence] User entered zone \"Rhizophora mucronata\" (2dfad4c8-91be-4f82-8647-3d00b2b1a810)"]}
+{"_e":"metro:client_log","_t":1790082828901,"level":"error","data":["[ReferenceError: Property 'completingId' doesn't exist]"]}
+{"_e":"root:init","_t":1790138438150,"format":"v0-jsonl","version":"57.0.25"}
+{"_e":"env:mode","_t":1790138438170,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1790138438202,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_SUPABASE_ANON_KEY":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlhdWhtaGttcmVvam1mYWh2eHhoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzNDgxODcsImV4cCI6MjEwMTkyNDE4N30.RKrSMG4vYHj4Hdm-27N6JStcr7seCROTvx7FNzY3jF4","EXPO_PUBLIC_SUPABASE_URL":"https://iauhmhkmreojmfahvxxh.supabase.co"}}
+{"_e":"devserver:start","_t":1790138461914,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1790138494034,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1790138510342,"plugins":[]}
+{"_e":"metro:instantiate","_t":1790138632767,"atlas":false,"workers":6,"host":"::","port":8081}

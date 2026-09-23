@@ -83,12 +83,13 @@ export async function startTask(taskId: string) {
  * Called automatically when a field user submits a tree capture linked to this task.
  * The task then goes into the partner/admin review queue.
  */
-export async function completeTask(taskId: string, treeId?: string) {
+export async function completeTask(taskId: string, treeId?: string, location?: string) {
   const updates: Record<string, any> = {
     status: 'completed',
     completed_at: new Date().toISOString(),
   };
   if (treeId) updates.tree_id = treeId;
+  if (location) updates.location = location;
 
   const { error } = await supabase
     .from('tasks')

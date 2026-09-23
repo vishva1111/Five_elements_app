@@ -141,6 +141,11 @@ export interface TaskState {
   localTasks: Task[]; // tasks created in the UI, stored on-device (no DB needed)
   setTasks: (tasks: Task[]) => void;
   setLocalTasks: (localTasks: Task[]) => void;
+  // The task "Start Now" was tapped from, if any — carried across the whole
+  // Capture flow (Camera → MapPicker → TreeForm) so the exact right task gets
+  // completed on submit, without threading a param through every screen.
+  activeTaskId: string | null;
+  setActiveTaskId: (taskId: string | null) => void;
 }
 
 // ─── Navigation Types ──────────────────────────────────────────────────────────

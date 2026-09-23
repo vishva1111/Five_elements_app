@@ -18,7 +18,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useTaskStore } from '../../store/taskStore';
 import { fetchMyTrees, fetchAllProjects } from '../../services/treeService';
-import { fetchAgentTasks, completeTask } from '../../services/taskService';
+import { fetchAgentTasks } from '../../services/taskService';
 import {
   loadLocalTasks,
   saveLocalTasks,
@@ -39,6 +39,18 @@ const TABS: { key: TaskTab; label: string; color: string }[] = [
   { key: 'approved', label: 'Approved', color: '#8b5cf6' },
   { key: 'rejected', label: 'Rejected', color: '#ef4444' },
 ];
+
+// Local-calendar-day date string (YYYY-MM-DD), NOT UTC. `.toISOString()` on a local
+// Date object converts to UTC first, which silently rolls back a day for any positive
+// UTC offset (e.g. India, UTC+5:30) — that was the actual cause of dates looking wrong
+// on this screen.
+function localDateStr(d: Date | string = new Date()): string {
+  const date = typeof d === 'string' ? new Date(d) : d
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
 export default function TaskScreen() {
   const navigation = useNavigation<any>();
@@ -71,10 +83,10 @@ export default function TaskScreen() {
   // Filter tasks by selected date
   const filterByDate = (taskList: Task[]) => {
     if (selectedDate === 'all') return taskList;
-    const dateStr = selectedDate === 'today' ? new Date().toISOString().split('T')[0] : selectedDate;
+    const dateStr = selectedDate === 'today' ? localDateStr() : selectedDate;
     return taskList.filter((t) => {
       if (!t.created_at) return false;
-      return t.created_at.split('T')[0] === dateStr;
+      return localDateStr(t.created_at) === dateStr;
     });
   };
 
@@ -139,34 +151,13 @@ export default function TaskScreen() {
     setRefreshing(false);
   };
 
-  const handleStartTask = async (task: Task) => {
-    // Navigate directly to Capture — no intermediate in_progress status.
-    // The task moves assigned → completed automatically when the tree is submitted.
+  // "Start Now" — same as the original flow: go straight to the capture screen.
+  // We stash which task this was started from so TreeFormScreen can complete the
+  // *right* task on submit (works for both capture-style tasks and our existing-tree
+  // tickets), instead of guessing via fuzzy matching.
+  const handleStartNow = (task: Task) => {
+    useTaskStore.getState().setActiveTaskId(task.id);
     navigation.navigate('Capture');
-  };
-
-  // For tickets already linked to an existing tree (our "go verify this tree" tasks) —
-  // there's nothing new to capture, so completion is a direct confirmation, not a form.
-  const [completingId, setCompletingId] = useState<string | null>(null);
-  const handleCompleteTask = async (task: Task) => {
-    if (isLocalTask(task) || !task.tree_id) return;
-    setCompletingId(task.id);
-    try {
-      const { error } = await completeTask(task.id);
-      if (error) {
-        Alert.alert('Could not complete task', error);
-        return;
-      }
-      setTasks(
-        tasks.map((t) =>
-          t.id === task.id
-            ? { ...t, status: 'completed' as const, completed_at: new Date().toISOString() }
-            : t
-        )
-      );
-    } finally {
-      setCompletingId(null);
-    }
   };
 
   const handleAddDemoTask = async () => {
@@ -244,15 +235,16 @@ export default function TaskScreen() {
 
   // Extract unique dates from assigned tasks (descending, past first)
   const dates = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString().split('T')[0];
+    const todayStr = localDateStr();
     const dateSet = new Set<string>();
     assignedTasks.forEach((t) => {
-      if (t.created_at) dateSet.add(t.created_at.split('T')[0]);
+      if (t.created_at) dateSet.add(localDateStr(t.created_at));
+    });
+    inProgressTasks.forEach((t) => {
+      if (t.created_at) dateSet.add(localDateStr(t.created_at));
     });
     trees.forEach((t) => {
-      if (t.submitted_at) dateSet.add(t.submitted_at.split('T')[0]);
+      if (t.submitted_at) dateSet.add(localDateStr(t.submitted_at));
     });
     const sorted = Array.from(dateSet).sort((a, b) => b.localeCompare(a));
     return sorted.map((dateStr) => {
@@ -268,7 +260,7 @@ export default function TaskScreen() {
         isToday: dateStr === todayStr,
       };
     });
-  }, [assignedTasks, trees]);
+  }, [assignedTasks, inProgressTasks, trees]);
 
   const activeProject = allProjects.find((p) => p.id === activeProjectId);
 
@@ -281,11 +273,8 @@ export default function TaskScreen() {
       : task.status === 'approved' ? '#8b5cf6'
       : task.status === 'rejected' ? '#ef4444'
       : '#1a5c2a';
-    const isAssigned = task.status === 'assigned';
     const isTreeCapture = task.status === 'completed' && task.photo_url;
-    // Already-linked-to-a-tree + in_progress = our "verify this tree" ticket, ready
-    // to be confirmed directly (no new capture needed for it).
-    const canMarkComplete = task.status === 'in_progress' && !!task.tree_id;
+    const isAssigned = task.status === 'assigned';
     
     const conditionColors: Record<string, string> = {
       Healthy: '#22c55e',
@@ -318,27 +307,11 @@ export default function TaskScreen() {
             {isAssigned ? (
               <TouchableOpacity
                 style={s.startBtn}
-                onPress={(e) => { e.stopPropagation(); handleStartTask(task); }}
+                onPress={(e) => { e.stopPropagation(); handleStartNow(task); }}
                 activeOpacity={0.7}
               >
                 <Ionicons name="play-circle-outline" size={14} color="#fff" />
-                <Text style={s.startBtnText}>Start</Text>
-              </TouchableOpacity>
-            ) : canMarkComplete ? (
-              <TouchableOpacity
-                style={[s.startBtn, { backgroundColor: '#22c55e' }]}
-                onPress={(e) => { e.stopPropagation(); handleCompleteTask(task); }}
-                activeOpacity={0.7}
-                disabled={completingId === task.id}
-              >
-                {completingId === task.id ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name="checkmark-circle-outline" size={14} color="#fff" />
-                    <Text style={s.startBtnText}>Complete</Text>
-                  </>
-                )}
+                <Text style={s.startBtnText}>Start Now</Text>
               </TouchableOpacity>
             ) : (
               <View style={[s.statusBadge, { backgroundColor: statusColor + '18' }]}>
@@ -514,8 +487,11 @@ export default function TaskScreen() {
 
         {/* Tab content */}
         <View style={s.content}>
-          {activeTab === 'assigned' && renderTaskList(filterByDate(assignedTasks))}
-          
+          {/* In-progress tasks stay in the Assigned tab (not a separate tab) so a task
+              never disappears the moment you tap Start — the card itself shows
+              Start/Complete depending on its own status. */}
+          {activeTab === 'assigned' && renderTaskList(filterByDate([...assignedTasks, ...inProgressTasks]))}
+
           {activeTab === 'completed' && renderTaskList(filterByDate([...completedTasks, ...trees.map((t) => ({
             id: t.id,
             name: t.species || 'Tree Capture',
