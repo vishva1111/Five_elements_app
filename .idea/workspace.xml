@@ -4,7 +4,8 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="audit page bug solve and tree profile page update.">
+    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="design update 1">
+      <change beforePath="$PROJECT_DIR$/.expo/dev/logs/start.log" beforeDir="false" afterPath="$PROJECT_DIR$/.expo/dev/logs/start.log" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" afterDir="false" />
     </list>
@@ -312,7 +313,15 @@
       <option name="project" value="LOCAL" />
       <updated>1790083184305</updated>
     </task>
-    <option name="localTasksCounter" value="30" />
+    <task id="LOCAL-00030" summary="design update 1">
+      <option name="closed" value="true" />
+      <created>1790083699418</created>
+      <option name="number" value="00030" />
+      <option name="presentableId" value="LOCAL-00030" />
+      <option name="project" value="LOCAL" />
+      <updated>1790083699418</updated>
+    </task>
+    <option name="localTasksCounter" value="31" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -326,7 +335,7 @@
                   <entry key="branch">
                     <value>
                       <list>
-                        <option value="origin/project_map" />
+                        <option value="project_map" />
                       </list>
                     </value>
                   </entry>
@@ -339,7 +348,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="design bug 2" />
     <MESSAGE value="new Feature- entire app work only with the selected project" />
     <MESSAGE value="clean project" />
     <MESSAGE value="small design bug" />
@@ -364,6 +372,7 @@
     <MESSAGE value="solve tree id problem and make project wies id." />
     <MESSAGE value="solve id bug." />
     <MESSAGE value="audit page bug solve and tree profile page update." />
-    <option name="LAST_COMMIT_MESSAGE" value="audit page bug solve and tree profile page update." />
+    <MESSAGE value="design update 1" />
+    <option name="LAST_COMMIT_MESSAGE" value="design update 1" />
   </component>
 </project>

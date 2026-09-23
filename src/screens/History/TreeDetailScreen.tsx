@@ -314,8 +314,9 @@ export default function TreeDetailScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ─── 3. SPECIES IDENTITY CARD ─── */}
-        <View style={styles.speciesCard}>
+        {/* ─── 3. MERGED SPECIES & GROWTH VITALS CARD ─── */}
+        <View style={styles.speciesGrowthCard}>
+          {/* Species Identity Top Row */}
           <View style={styles.speciesTopRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.speciesTitle}>{tree.species}</Text>
@@ -328,38 +329,15 @@ export default function TreeDetailScreen() {
             </View>
           </View>
 
-          <View style={styles.speciesMetaRow}>
-            <View style={styles.metaItem}>
-              <Ionicons name="calendar-outline" size={12} color="#15803d" />
-              <Text style={styles.metaItemText}>Planted {plantingDateStr}</Text>
-            </View>
-            {tree.project_name ? (
-              <View style={[styles.metaItem, styles.metaItemProject]}>
-                <Ionicons name="folder-outline" size={12} color="#15803d" />
-                <Text style={styles.metaItemText} numberOfLines={1} ellipsizeMode="tail">
-                  {tree.project_name}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        </View>
+          {/* Divider */}
+          <View style={styles.speciesGrowthDivider} />
 
-        {/* ─── 4. CLEAN 3-PILL GROWTH DASHBOARD (ZERO DUPLICATION) ─── */}
-        <View style={styles.growthSection}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionHeaderTitle}>GROWTH & VITALS</Text>
-            {latestAudit && (
-              <Text style={styles.sectionHeaderSub}>
-                Compared to planting baseline
-              </Text>
-            )}
-          </View>
-
+          {/* 3 Metric Pills */}
           <View style={styles.growthGrid}>
             {/* Trunk Diameter (DBH) */}
             <View style={styles.growthCard}>
               <View style={styles.growthCardTop}>
-                <Ionicons name="git-commit" size={14} color="#15803d" />
+                <Ionicons name="git-commit" size={13} color="#15803d" />
                 <Text style={styles.growthLabel}>TRUNK (DBH)</Text>
               </View>
               <Text style={styles.growthValue}>
@@ -397,7 +375,7 @@ export default function TreeDetailScreen() {
             {/* Height */}
             <View style={styles.growthCard}>
               <View style={styles.growthCardTop}>
-                <Ionicons name="trending-up" size={14} color="#15803d" />
+                <Ionicons name="trending-up" size={13} color="#15803d" />
                 <Text style={styles.growthLabel}>HEIGHT</Text>
               </View>
               <Text style={styles.growthValue}>
@@ -435,7 +413,7 @@ export default function TreeDetailScreen() {
             {/* Canopy Crown */}
             <View style={styles.growthCard}>
               <View style={styles.growthCardTop}>
-                <Ionicons name="aperture" size={14} color="#15803d" />
+                <Ionicons name="aperture" size={13} color="#15803d" />
                 <Text style={styles.growthLabel}>CANOPY</Text>
               </View>
               <Text style={styles.growthValue}>
@@ -633,6 +611,8 @@ export default function TreeDetailScreen() {
               </View>
 
               <View style={styles.specDetailsList}>
+                {tree.project_name ? <SpecRow label="Project Name" value={tree.project_name} /> : null}
+                <SpecRow label="Planting Date" value={plantingDateStr} />
                 <SpecRow label="Form" value={multiStem ?? 'Single stem'} />
                 <SpecRow label="Tree Age at Planting" value={ageYears ? `${ageYears}y` : '—'} />
                 <SpecRow label="Land / Soil Type" value={landType ?? '—'} />
@@ -914,10 +894,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
 
-  // Species Card
-  speciesCard: {
+  // Merged Species & Growth Card
+  speciesGrowthCard: {
     backgroundColor: '#fff',
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 14,
     elevation: 2,
     shadowColor: '#000',
@@ -925,6 +905,11 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     borderWidth: 1,
     borderColor: '#e8efe8',
+    gap: 12,
+  },
+  speciesGrowthDivider: {
+    height: 1,
+    backgroundColor: '#f3f4f6',
   },
   speciesTopRow: {
     flexDirection: 'row',
@@ -952,63 +937,15 @@ const styles = StyleSheet.create({
     borderColor: '#bbf7d0',
   },
   treeIdText: { fontSize: 11, fontWeight: '800', color: '#15803d' },
-  speciesMetaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 10,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#f8faf9',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e8efe8',
-  },
-  metaItemProject: {
-    flexShrink: 1,
-    maxWidth: '100%',
-  },
-  metaItemText: { fontSize: 11, color: '#4b5563', fontWeight: '600' },
 
   // Growth Section
-  growthSection: { gap: 8 },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 2,
-  },
-  sectionHeaderTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#374151',
-    letterSpacing: 0.5,
-  },
-  sectionHeaderSub: {
-    fontSize: 10,
-    color: '#15803d',
-    fontWeight: '600',
-  },
   growthGrid: { flexDirection: 'row', gap: 8 },
   growthCard: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 12,
+    backgroundColor: '#f8faf9',
+    borderRadius: 14,
+    padding: 10,
     alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
     borderWidth: 1,
     borderColor: '#e8efe8',
   },
