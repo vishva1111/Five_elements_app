@@ -16,6 +16,7 @@ import { useTaskStore } from '../../store/taskStore';
 import { useProjectRefreshStore } from '../../store/projectRefreshStore';
 import { fetchMyTrees, fetchAllProjects, backfillProjectTreeIds } from '../../services/treeService';
 import { fetchAgentTasks, startTask } from '../../services/taskService';
+import { loadLocalTasks } from '../../services/localTaskService';
 import { Task, Project, TreeRecord } from '../../types';
 import { displayTreeId, parseTreeMeta, resolveTreeId } from '../../utils/treeId';
 import CircularProgress from '../../components/CircularProgress';
@@ -83,21 +84,22 @@ export default function TaskScreen() {
   const loadTasks = useCallback(async () => {
     if (!userId) return;
     const seq = ++loadSeqRef.current;
-    const [treesRes, tasksRes] = await Promise.all([
+    const [treesRes, tasksRes, localTasks] = await Promise.all([
       fetchMyTrees(userId),
       fetchAgentTasks(userId),
+      loadLocalTasks(),
     ]);
     if (seq !== loadSeqRef.current) return;
     const myTrees = treesRes.data ?? [];
-    if (treesRes.data) setTrees(treesRes.data);
-
-    // Filter by active project (read from ref — always current, no stale closure)
-    let visibleTasks = tasksRes.data ?? [];
     const pid = activeProjectIdRef.current;
-    if (pid) {
-      visibleTasks = visibleTasks.filter((t) => t.project_id === pid);
-    }
 
+    // Filter trees by active project if selected
+    const visibleTrees = pid ? myTrees.filter((t) => t.project_id === pid) : myTrees;
+    setTrees(visibleTrees);
+
+    // Filter DB + local tasks by active project if selected
+    const combinedTasks: Task[] = [...(tasksRes.data ?? []), ...localTasks];
+    const visibleTasks = pid ? combinedTasks.filter((t) => t.project_id === pid) : combinedTasks;
     setTasks(visibleTasks);
 
     // Tree capture cards labelled with the project tree ID (e.g. ARAV-001).
@@ -115,7 +117,7 @@ export default function TaskScreen() {
       });
     }
   // activeProjectId read via ref — stable callback, no recreation on project change
-  }, [userId, setTasks]);
+  }, [userId, setTasks, setTrees]);
 
   useFocusEffect(
     useCallback(() => {
@@ -153,6 +155,12 @@ export default function TaskScreen() {
     return now.toLocaleDateString('en-IN', options);
   };
 
+  // Ensure trees are filtered by active project
+  const projectTrees = useMemo(() => {
+    if (!activeProjectId) return trees;
+    return trees.filter((t) => t.project_id === activeProjectId);
+  }, [trees, activeProjectId]);
+
   // assigned + in_progress both show in the Assigned tab
   const assignedTasks = tasks.filter((t) => t.status === 'assigned' || t.status === 'in_progress');
   const completedTasks = tasks.filter((t) => t.status === 'completed');
@@ -161,13 +169,13 @@ export default function TaskScreen() {
 
   // Tab counts
   const assignedCount = assignedTasks.length;
-  const completedCount = completedTasks.length + trees.length;
+  const completedCount = completedTasks.length + projectTrees.length;
   const approvedCount = approvedTasks.length;
   const rejectedCount = rejectedTasks.length;
   const reviewedCount = approvedCount + rejectedCount;
   const totalTasks = assignedCount + completedCount + approvedCount + rejectedCount;
 
-  // Date selector — pull dates from all tasks so every tab's date filter works
+  // Date selector — pull dates from active tasks and trees so every tab's date filter works
   const dates = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -176,7 +184,7 @@ export default function TaskScreen() {
     tasks.forEach((t) => {
       if (t.created_at) dateSet.add(t.created_at.split('T')[0]);
     });
-    trees.forEach((t) => {
+    projectTrees.forEach((t) => {
       if (t.submitted_at) dateSet.add(t.submitted_at.split('T')[0]);
     });
     const sorted = Array.from(dateSet).sort((a, b) => b.localeCompare(a));
@@ -193,7 +201,7 @@ export default function TaskScreen() {
         isToday: dateStr === todayStr,
       };
     });
-  }, [tasks, trees]);
+  }, [tasks, projectTrees]);
 
   const activeProject = allProjects.find((p) => p.id === activeProjectId);
 
@@ -201,11 +209,11 @@ export default function TaskScreen() {
   // so it can be labelled with the project tree ID instead of the DB uuid.
   const treeByUuid = useMemo(() => {
     const map = new Map<string, TreeRecord>();
-    trees.forEach((t) => {
+    projectTrees.forEach((t) => {
       if (t?.id) map.set(t.id, t);
     });
     return map;
-  }, [trees]);
+  }, [projectTrees]);
 
   const renderTaskCard = (task: Task) => {
     // For rejected tasks or tree captures, resolve the linked tree record
@@ -392,7 +400,7 @@ export default function TaskScreen() {
         {/* Tab content */}
         <View style={s.content}>
           {activeTab === 'assigned' && renderTaskList(filterByDate(assignedTasks))}
-          {activeTab === 'completed' && renderTaskList(filterByDate([...completedTasks, ...trees.map((t) => {
+          {activeTab === 'completed' && renderTaskList(filterByDate([...completedTasks, ...projectTrees.map((t) => {
             const meta = parseTreeMeta(t.notes);
             const condition = t.tree_condition || meta.tree_condition || 'Healthy';
             return {

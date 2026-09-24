@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,28 +6,51 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Image,
+  Dimensions,
+  Animated,
+  StatusBar,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import * as ImagePicker from 'expo-image-picker';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCamera } from '../../hooks/useCamera';
 import { CaptureStackParamList, Project } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import { fetchAllProjects } from '../../services/treeService';
 
 type Nav = NativeStackNavigationProp<CaptureStackParamList, 'CaptureCamera'>;
 
+const REQUIRED_PHOTOS = 3;
+const { width: SCREEN_W } = Dimensions.get('window');
+
+const SLOT_CONFIG = [
+  { label: 'Front View', shortLabel: 'Front', icon: 'leaf' },
+  { label: 'Side View', shortLabel: 'Side', icon: 'git-network-outline' },
+  { label: 'Close-up', shortLabel: 'Close-up', icon: 'scan-outline' },
+];
+
 export default function CaptureScreen() {
   const navigation = useNavigation<Nav>();
+  const isFocused = useIsFocused();
   const [permission, requestPermission] = useCameraPermissions();
-  const { cameraRef, flash, facing, setIsReady, takePicture, toggleFlash, toggleFacing } = useCamera();
   const { user, activeProjectId } = useAuthStore();
   const [allProjects, setAllProjects] = useState<Project[]>([]);
+
+  // Camera settings
+  const cameraRef = useRef<any>(null);
+  const [facing, setFacing] = useState<'back' | 'front'>('back');
+  const [isCameraReady, setIsCameraReady] = useState(false);
+
+  // 3-photo state: [photo1, photo2, photo3]
+  const [photos, setPhotos] = useState<(string | null)[]>([null, null, null]);
+  // Currently active slot (0: Front, 1: Side, 2: Close-up)
+  const [activeSlot, setActiveSlot] = useState<number>(0);
   const [capturing, setCapturing] = useState(false);
-  const [mediaPermission, setMediaPermission] = useState(false);
+
+  // Shutter flash animation
+  const flashAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!permission?.granted) {
@@ -35,8 +58,7 @@ export default function CaptureScreen() {
     }
   }, []);
 
-  // Load ALL projects so the header can show the ACTIVE project's name —
-  // matching the dashboard (which lists every project, not just assigned ones).
+  // Load active project info
   useEffect(() => {
     let active = true;
     (async () => {
@@ -48,51 +70,93 @@ export default function CaptureScreen() {
     };
   }, []);
 
+  // Flash white screen on snap
+  const triggerFlash = () => {
+    flashAnim.setValue(1);
+    Animated.timing(flashAnim, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  // Capture current active slot
   const handleCapture = async () => {
+    if (capturing) return;
+
+    if (!cameraRef.current) {
+      Alert.alert('Camera Error', 'Camera is initializing. Please try in a moment.');
+      return;
+    }
+
     setCapturing(true);
     try {
-      const photoUri = await takePicture();
-      if (!photoUri) {
-        Alert.alert('Error', 'Failed to capture photo. Please try again.');
-        return;
+      const result = await cameraRef.current.takePictureAsync({
+        quality: 0.85,
+        skipProcessing: false,
+      });
+
+      if (!result?.uri) {
+        throw new Error('No photo received from camera.');
       }
 
-      navigation.navigate('MapPicker', {
-        photoUri,
-      });
-    } catch (err) {
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      triggerFlash();
+
+      const newPhotos = [...photos];
+      newPhotos[activeSlot] = result.uri;
+      setPhotos(newPhotos);
+
+      // Auto-advance to next empty slot
+      const nextEmpty = [0, 1, 2].find((i) => i !== activeSlot && newPhotos[i] === null);
+      if (nextEmpty !== undefined) {
+        setActiveSlot(nextEmpty);
+      }
+    } catch (err: any) {
+      console.error('[CaptureScreen] capture error:', err);
+      Alert.alert('Capture Failed', 'Could not capture photo. Please try again.');
     } finally {
       setCapturing(false);
     }
   };
 
-  const handleGallery = async () => {
-    // Request media library permission
-    if (!mediaPermission) {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please grant access to your photo library in settings.');
-        return;
-      }
-      setMediaPermission(true);
-    }
+  const handleSlotPress = (index: number) => {
+    setActiveSlot(index);
+  };
 
-    // Open image picker
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
+  const handleRemoveSlotPhoto = (index: number) => {
+    setPhotos((prev) => {
+      const next = [...prev];
+      next[index] = null;
+      return next;
     });
+    setActiveSlot(index);
+  };
 
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      const photoUri = result.assets[0].uri;
-
-      navigation.navigate('MapPicker', {
-        photoUri,
-      });
+  // Proceed to MapPicker
+  const handleProceed = () => {
+    const filledPhotos = photos.filter(Boolean) as string[];
+    if (filledPhotos.length < REQUIRED_PHOTOS) {
+      Alert.alert(
+        '3 Photos Required',
+        `Please capture all 3 photos:\n1. Front View\n2. Side View\n3. Close-up`
+      );
+      return;
     }
+    navigation.navigate('MapPicker', { photoUris: filledPhotos });
+  };
+
+  const handleResetAll = () => {
+    Alert.alert('Retake All Photos?', 'This will clear all 3 captured photos.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Retake All',
+        style: 'destructive',
+        onPress: () => {
+          setPhotos([null, null, null]);
+          setActiveSlot(0);
+        },
+      },
+    ]);
   };
 
   if (!permission) {
@@ -108,7 +172,7 @@ export default function CaptureScreen() {
       <View style={styles.center}>
         <Ionicons name="camera-outline" size={64} color="#888" />
         <Text style={styles.permTitle}>Camera Permission Required</Text>
-        <Text style={styles.permSub}>TreeApp needs camera access to photograph trees.</Text>
+        <Text style={styles.permSub}>TreeApp needs camera access to photograph trees in the field.</Text>
         <TouchableOpacity style={styles.permBtn} onPress={requestPermission}>
           <Text style={styles.permBtnText}>Grant Permission</Text>
         </TouchableOpacity>
@@ -116,94 +180,196 @@ export default function CaptureScreen() {
     );
   }
 
-  // Show the ACTIVE project in the header — the one the user is currently working in
   const activeProject = allProjects.find((p) => p.id === activeProjectId);
-  const projectName =
-    allProjects.length === 0
-      ? 'No project available'
-      : activeProject?.name ?? 'Select a project';
+  const projectName = activeProject?.name ?? 'Tree Plantation';
+  const filledCount = photos.filter(Boolean).length;
+  const isAllFilled = filledCount === REQUIRED_PHOTOS;
+  const currentConfig = SLOT_CONFIG[activeSlot] || SLOT_CONFIG[0];
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={styles.header}>
-        <View style={styles.headerLeft}>
-          <View style={styles.pentagon}>
-            <Ionicons name="leaf" size={20} color="#AACBA7" />
-          </View>
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Field capture</Text>
-            <Text style={styles.headerSubtitle} numberOfLines={1}>{projectName}</Text>
-          </View>
+      <StatusBar barStyle="light-content" backgroundColor="#0f331d" />
+
+      {/* ─── 1. TOP GREEN CONTAINER ─── */}
+      <LinearGradient
+        colors={['#0f331d', '#155227', '#1a5c2a']}
+        style={styles.topGreenContainer}
+      >
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="arrow-back" size={22} color="#fff" />
+        </TouchableOpacity>
+
+        <View style={styles.headerInfo}>
+          <Text style={styles.headerTitle}>FIELD CAPTURE</Text>
+          <Text style={styles.headerSubtitle} numberOfLines={1}>
+            {projectName}
+          </Text>
+        </View>
+
+        {/* Counter Badge */}
+        <View style={[styles.counterBadge, isAllFilled && styles.counterBadgeDone]}>
+          <Ionicons
+            name={isAllFilled ? 'checkmark-circle' : 'camera'}
+            size={13}
+            color={isAllFilled ? '#fff' : '#86efac'}
+          />
+          <Text style={[styles.counterBadgeText, isAllFilled && { color: '#fff' }]}>
+            {filledCount}/{REQUIRED_PHOTOS}
+          </Text>
         </View>
       </LinearGradient>
 
-      {/* Camera View */}
-      <View style={styles.cameraContainer}>
-        <CameraView
-          ref={cameraRef}
-          style={styles.camera}
-          facing={facing}
-          flash={flash}
-          onCameraReady={() => setIsReady(true)}
-        />
+      {/* ─── 2. DEFINED CAMERA FRAME VIEWPORT (Center) ─── */}
+      <View style={styles.cameraViewport}>
+        {isFocused && (
+          <CameraView
+            ref={cameraRef}
+            style={styles.camera}
+            facing={facing}
+            onCameraReady={() => setIsCameraReady(true)}
+          />
+        )}
 
-        {/* Overlay on top of camera */}
-        <View style={styles.cameraOverlay}>
-          {/* Viewfinder Corners */}
-          <View style={styles.viewfinder}>
-            <View style={styles.corner} />
-            <View style={[styles.corner, styles.cornerTR]} />
-            <View style={[styles.corner, styles.cornerBL]} />
-            <View style={[styles.corner, styles.cornerBR]} />
+        {/* Shutter flash effect */}
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.shutterFlash,
+            {
+              opacity: flashAnim,
+            },
+          ]}
+        />
+      </View>
+
+      {/* ─── 3. DOWNSIDE GREEN CONTAINER (Controls & 3 Photo Boxes) ─── */}
+      <LinearGradient
+        colors={['#1a5c2a', '#12441f', '#0c2e15']}
+        style={styles.bottomGreenContainer}
+      >
+        {/* Active Target Pill */}
+        <View style={styles.activeTagRow}>
+          <View style={styles.activeTagPill}>
+            <Ionicons name={currentConfig.icon as any} size={13} color="#86efac" />
+            <Text style={styles.activeTagText}>
+              {isAllFilled ? 'All 3 Photos Ready' : `Now Shooting: ${currentConfig.label}`}
+            </Text>
           </View>
         </View>
-      </View>
 
-      {/* Capture Row */}
-      <View style={styles.captureRow}>
-        {/* Gallery Button */}
-        <TouchableOpacity style={styles.galleryBtn} onPress={handleGallery}>
-          <Ionicons name="images-outline" size={24} color="#fff" />
-        </TouchableOpacity>
+        {/* ─── 3 PHOTO CARDS TRAY ─── */}
+        <View style={styles.trayRow}>
+          {SLOT_CONFIG.map((cfg, idx) => {
+            const uri = photos[idx];
+            const isActive = activeSlot === idx;
+            const isDone = uri !== null;
 
-        {/* Shutter Button */}
-        <TouchableOpacity
-          style={[styles.shutterBtn, capturing && styles.shutterBtnDisabled]}
-          onPress={handleCapture}
-          disabled={capturing}
-          activeOpacity={0.8}
-        >
-          {capturing ? (
-            <ActivityIndicator color="#1a5c2a" size="small" />
-          ) : (
-            <View style={styles.shutterBtnInner} />
-          )}
-        </TouchableOpacity>
-
-        {/* Flash + Flip Buttons */}
-        <View style={styles.sideButtons}>
-          <TouchableOpacity
-            style={[styles.sideBtn, flash === 'on' && styles.sideBtnActive]}
-            onPress={toggleFlash}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name={flash === 'on' ? 'flash' : 'flash-off'}
-              size={20}
-              color={flash === 'on' ? '#F09125' : '#fff'}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.sideBtn} onPress={toggleFacing}>
-            <Ionicons name="camera-reverse" size={20} color="#fff" />
-          </TouchableOpacity>
+            return (
+              <TouchableOpacity
+                key={idx}
+                activeOpacity={0.85}
+                onPress={() => handleSlotPress(idx)}
+                style={[
+                  styles.slotCard,
+                  isActive && styles.slotCardActive,
+                  isDone && styles.slotCardDone,
+                ]}
+              >
+                {isDone ? (
+                  <View style={styles.slotCardFilled}>
+                    <Image source={{ uri }} style={styles.slotCardThumb} resizeMode="cover" />
+                    <TouchableOpacity
+                      style={styles.slotCardRemove}
+                      onPress={() => handleRemoveSlotPhoto(idx)}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    >
+                      <Ionicons name="close-circle" size={16} color="#ef4444" />
+                    </TouchableOpacity>
+                    <View style={styles.slotCardBadge}>
+                      <Ionicons name="checkmark" size={9} color="#fff" />
+                      <Text style={styles.slotCardBadgeText}>{cfg.shortLabel}</Text>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.slotCardEmpty}>
+                    <Ionicons
+                      name={cfg.icon as any}
+                      size={18}
+                      color={isActive ? '#86efac' : 'rgba(255,255,255,0.7)'}
+                    />
+                    <Text
+                      style={[styles.slotCardTitle, isActive && styles.slotCardTitleActive]}
+                      numberOfLines={1}
+                    >
+                      {cfg.shortLabel}
+                    </Text>
+                    <View
+                      style={[
+                        styles.slotCardDot,
+                        isActive && styles.slotCardDotActive,
+                      ]}
+                    />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
-      </View>
 
-      {/* Hint */}
-      <View style={styles.hintBar}>
-        <Text style={styles.hintText}>Position the tree in frame</Text>
-      </View>
+        {/* ─── SHUTTER / PROCEED ROW ─── */}
+        {isAllFilled ? (
+          <View style={styles.proceedWrap}>
+            <TouchableOpacity
+              style={styles.proceedBtn}
+              onPress={handleProceed}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="checkmark-circle" size={22} color="#FFFFFF" />
+              <Text style={styles.proceedBtnText}>Confirm Location (3/3)</Text>
+              <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.retakeBtn} onPress={handleResetAll} activeOpacity={0.7}>
+              <Ionicons name="refresh-outline" size={14} color="#fca5a5" />
+              <Text style={styles.retakeBtnText}>Retake All Photos</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.shutterRow}>
+            {/* Flip Camera */}
+            <TouchableOpacity
+              style={styles.flipBtn}
+              onPress={() => setFacing((prev) => (prev === 'back' ? 'front' : 'back'))}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="camera-reverse-outline" size={22} color="#fff" />
+            </TouchableOpacity>
+
+            {/* Main Shutter Button */}
+            <TouchableOpacity
+              style={[styles.shutterOuter, capturing && styles.shutterOuterDisabled]}
+              onPress={handleCapture}
+              disabled={capturing}
+              activeOpacity={0.8}
+            >
+              <View style={styles.shutterMiddle}>
+                {capturing ? (
+                  <ActivityIndicator size="small" color="#15803d" />
+                ) : (
+                  <View style={styles.shutterInner} />
+                )}
+              </View>
+            </TouchableOpacity>
+
+            {/* Spacer on right for symmetry */}
+            <View style={{ width: 46 }} />
+          </View>
+        )}
+      </LinearGradient>
     </View>
   );
 }
@@ -211,7 +377,7 @@ export default function CaptureScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0D1A17',
+    backgroundColor: '#000',
   },
   center: {
     flex: 1,
@@ -226,7 +392,6 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlign: 'center',
     marginTop: 16,
-    letterSpacing: 0.3,
   },
   permSub: {
     fontSize: 14,
@@ -234,292 +399,308 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
     marginBottom: 24,
-    letterSpacing: 0.2,
   },
   permBtn: {
     backgroundColor: '#1a5c2a',
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 14,
-    shadowColor: '#1a5c2a',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 6,
   },
   permBtnText: {
     color: '#fff',
     fontWeight: '800',
     fontSize: 16,
-    letterSpacing: 0.5,
   },
-  // Header
-  header: {
+
+  // ─── 1. TOP GREEN CONTAINER ───
+  topGreenContainer: {
+    paddingTop: 48,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    paddingTop: 48,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    zIndex: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-  },
-  pentagon: {
-    width: 36,
-    height: 36,
-    borderRadius: 14,
-    backgroundColor: 'rgba(170, 203, 167, 0.3)',
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
   },
-  headerTextContainer: {
+  headerInfo: {
     flex: 1,
+    marginHorizontal: 12,
   },
   headerTitle: {
     color: '#fff',
-    fontSize: 19,
-    fontWeight: '800',
-    textTransform: 'uppercase',
+    fontSize: 16,
+    fontWeight: '900',
     letterSpacing: 0.8,
   },
   headerSubtitle: {
-    color: '#AACBA7',
+    color: '#86efac',
     fontSize: 11,
-    marginTop: 2,
-    letterSpacing: 0.3,
+    fontWeight: '600',
+    marginTop: 1,
   },
-  // Camera
-  cameraContainer: {
-    flex: 1,
-    position: 'relative',
-  },
-  camera: {
-    flex: 1,
-  },
-  cameraOverlay: {
-    ...StyleSheet.absoluteFill,
-    zIndex: 1,
-  },
-  // GPS Chip
-  gpsChip: {
-    position: 'absolute',
-    top: 12,
-    alignSelf: 'center',
+  counterBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#EAF3DE',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 14,
-    zIndex: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 4,
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#86efac',
   },
-  gpsChipGood: {
-    backgroundColor: '#EAF3DE',
+  counterBadgeDone: {
+    backgroundColor: '#15803d',
+    borderColor: '#22c55e',
   },
-  gpsChipBad: {
-    backgroundColor: '#FEF0E3',
-  },
-  gpsChipWarn: {
-    backgroundColor: '#FEF0E3',
-  },
-  gpsDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 14,
-    backgroundColor: '#6B7B6E',
-  },
-  gpsDotGood: {
-    backgroundColor: '#1a5c2a',
-  },
-  gpsDotPulse: {
-    backgroundColor: '#6B7B6E',
-    opacity: 0.5,
-  },
-  gpsText: {
-    color: '#27500A',
+  counterBadgeText: {
+    color: '#86efac',
     fontSize: 12,
+    fontWeight: '800',
+  },
+
+  // ─── 2. DEFINED CAMERA FRAME VIEWPORT ───
+  cameraViewport: {
+    flex: 1,
+    position: 'relative',
+    backgroundColor: '#000',
+    overflow: 'hidden',
+  },
+  camera: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  shutterFlash: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#fff',
+    zIndex: 99,
+  },
+
+  // ─── 3. DOWNSIDE GREEN CONTAINER ───
+  bottomGreenContainer: {
+    paddingTop: 12,
+    paddingBottom: 32,
+    paddingHorizontal: 16,
+    zIndex: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  activeTagRow: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  activeTagPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(134, 239, 172, 0.35)',
+  },
+  activeTagText: {
+    color: '#fff',
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.2,
   },
-  // Viewfinder
-  viewfinder: {
+
+  // ─── 3 PHOTO CARDS TRAY ───
+  trayRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+    justifyContent: 'center',
+  },
+  slotCard: {
     flex: 1,
-    margin: 40,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    overflow: 'hidden',
+  },
+  slotCardActive: {
+    borderColor: '#86efac',
+    backgroundColor: 'rgba(134, 239, 172, 0.2)',
+    borderWidth: 2,
+  },
+  slotCardDone: {
+    borderColor: '#22c55e',
+    backgroundColor: '#000',
+  },
+  slotCardFilled: {
+    flex: 1,
     position: 'relative',
   },
-  corner: {
+  slotCardThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  slotCardRemove: {
     position: 'absolute',
-    width: 26,
-    height: 26,
-    borderColor: 'rgba(255,255,255,0.85)',
-    borderTopWidth: 3,
-    borderLeftWidth: 3,
-    top: 0,
-    left: 0,
+    top: 2,
+    right: 2,
+    backgroundColor: '#fff',
+    borderRadius: 8,
   },
-  cornerTR: {
-    borderLeftWidth: 0,
-    borderRightWidth: 3,
-    left: undefined,
-    right: 0,
-  },
-  cornerBL: {
-    borderTopWidth: 0,
-    borderBottomWidth: 3,
-    top: undefined,
-    bottom: 0,
-  },
-  cornerBR: {
-    borderTopWidth: 0,
-    borderLeftWidth: 0,
-    borderBottomWidth: 3,
-    borderRightWidth: 3,
-    top: undefined,
-    left: undefined,
-    bottom: 0,
-    right: 0,
-  },
-  // Coordinates Overlay
-  coordsOverlay: {
+  slotCardBadge: {
     position: 'absolute',
-    bottom: 14,
-    left: 14,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
+    bottom: 2,
+    left: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#16a34a',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
   },
-  coordsText: {
+  slotCardBadgeText: {
     color: '#fff',
-    fontSize: 11,
-    fontFamily: 'monospace',
-    lineHeight: 16,
-    letterSpacing: 0.4,
+    fontSize: 8,
+    fontWeight: '800',
   },
-  timestampText: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 10,
-    fontFamily: 'monospace',
-    marginTop: 2,
-    letterSpacing: 0.3,
+  slotCardEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 4,
+    gap: 2,
   },
-  // Capture Row
-  captureRow: {
+  slotCardTitle: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#cbd5e1',
+  },
+  slotCardTitleActive: {
+    color: '#86efac',
+  },
+  slotCardDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    marginTop: 1,
+  },
+  slotCardDotActive: {
+    backgroundColor: '#86efac',
+    width: 10,
+  },
+
+  // ─── SHUTTER ROW ───
+  shutterRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 22,
-    paddingVertical: 14,
-    backgroundColor: '#1a5c2a',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 10,
+    paddingHorizontal: 16,
   },
-  galleryBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.4)',
-    backgroundColor: 'transparent',
+  flipBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
   },
-  shutterBtn: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
+  shutterOuter: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 3.5,
+    borderColor: '#86efac',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#22c55e',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  shutterOuterDisabled: {
+    opacity: 0.5,
+  },
+  shutterMiddle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 5,
-    borderColor: '#AACBA7',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
-    shadowRadius: 20,
-    elevation: 12,
   },
-  shutterBtnDisabled: {
-    backgroundColor: '#6B7B6E',
+  shutterInner: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#15803d',
+    borderWidth: 2,
+    borderColor: '#dcfce7',
   },
-  shutterBtnInner: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    borderWidth: 2.5,
-    borderColor: '#1a5c2a',
-  },
-  sideButtons: {
+
+  // ─── PROCEED WRAP ───
+  proceedWrap: {
+    width: '100%',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
-  sideBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  sideBtnActive: {
-    backgroundColor: 'rgba(240,145,37,0.35)',
-  },
-  // Hint Bar
-  hintBar: {
-    backgroundColor: '#1a5c2a',
+  proceedBtn: {
+    width: '100%',
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: '#16a34a',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 28,
-    paddingBottom: 24,
-    paddingTop: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
+    justifyContent: 'center',
+    gap: 10,
+    shadowColor: '#16a34a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1.5,
+    borderColor: '#86efac',
   },
-  hintText: {
-    color: '#ddd',
-    fontSize: 13,
+  proceedBtnText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '900',
     letterSpacing: 0.3,
   },
-  gpsHintText: {
-    color: '#AACBA7',
+  retakeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+  },
+  retakeBtnText: {
+    color: '#fca5a5',
     fontSize: 12,
-    letterSpacing: 0.2,
+    fontWeight: '700',
   },
 });

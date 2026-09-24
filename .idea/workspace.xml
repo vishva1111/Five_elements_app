@@ -4,10 +4,21 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="approve/reject according update/audit and chnage some designs.">
+    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="tree card update.">
       <change beforePath="$PROJECT_DIR$/.expo/dev/logs/start.log" beforeDir="false" afterPath="$PROJECT_DIR$/.expo/dev/logs/start.log" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/App.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/components/TreeCard.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/TreeCard.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/Capture/CaptureScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/CaptureScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/Capture/MapPickerScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/MapPickerScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/Capture/TreeFormScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/TreeFormScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/History/HistoryScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/HistoryScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/Home/HomeScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Home/HomeScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/services/storageService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/storageService.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/services/treeService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/treeService.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/types/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/types/index.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -257,7 +268,15 @@
       <option name="project" value="LOCAL" />
       <updated>1790168524506</updated>
     </task>
-    <option name="localTasksCounter" value="23" />
+    <task id="LOCAL-00023" summary="tree card update.">
+      <option name="closed" value="true" />
+      <created>1790230610123</created>
+      <option name="number" value="00023" />
+      <option name="presentableId" value="LOCAL-00023" />
+      <option name="project" value="LOCAL" />
+      <updated>1790230610123</updated>
+    </task>
+    <option name="localTasksCounter" value="24" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -271,14 +290,7 @@
                   <entry key="branch">
                     <value>
                       <list>
-                        <option value="origin/feature/project-tree-photo-upload" />
-                      </list>
-                    </value>
-                  </entry>
-                  <entry key="text">
-                    <value>
-                      <list>
-                        <option value="task" />
+                        <option value="audit-update_flow" />
                       </list>
                     </value>
                   </entry>
@@ -315,6 +327,7 @@
     <MESSAGE value="Add Tree Markers, Geotagging, Geofencing &amp; Location Lock" />
     <MESSAGE value="location detch bug solve and project according tree fanching show." />
     <MESSAGE value="approve/reject according update/audit and chnage some designs." />
-    <option name="LAST_COMMIT_MESSAGE" value="approve/reject according update/audit and chnage some designs." />
+    <MESSAGE value="tree card update." />
+    <option name="LAST_COMMIT_MESSAGE" value="tree card update." />
   </component>
 </project>

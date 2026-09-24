@@ -44,7 +44,9 @@ type Route = RouteProp<CaptureStackParamList, 'TreeForm'>;
 export default function TreeFormScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const { photoUri, coords } = route.params;
+  const { photoUris, coords } = route.params;
+  // Primary photo is the first in the array; all 3 are uploaded
+  const photoUri = photoUris?.[0] ?? '';
   const { user, activeProjectId, setUserCredits } = useAuthStore();
   const trees = useTreeStore((s) => s.trees) ?? [];
   const addTree = useTreeStore((s) => s.addTree);
@@ -212,15 +214,22 @@ export default function TreeFormScreen() {
 
     setSubmitting(true);
     try {
-      // 1. Upload photo
-      const photoUrl = await uploadTreePhoto(photoUri, user.id);
-      if (!photoUrl) throw new Error('Photo upload failed');
+      // 1. Upload all 3 photos; the first becomes the main photo_url
+      const uploadedUrls: string[] = [];
+      for (const uri of photoUris) {
+        const url = await uploadTreePhoto(uri, user.id);
+        if (!url) throw new Error('Photo upload failed');
+        uploadedUrls.push(url);
+      }
+      const primaryPhotoUrl = uploadedUrls[0];
 
       // 2. Insert tree record with all fields
       const { data, error } = await insertTreeRecord({
         user_id: user.id,
         project_id: form.project_id || undefined,
-        photo_url: photoUrl,
+        photo_url: primaryPhotoUrl,
+        // Store all 3 photo URLs (fall back gracefully if DB column missing)
+        ...(uploadedUrls.length > 1 ? { photo_urls: uploadedUrls } : {}),
         latitude: coords.latitude,
         longitude: coords.longitude,
         species: form.species.trim(),
@@ -349,13 +358,22 @@ export default function TreeFormScreen() {
         }}
         scrollEventThrottle={32}
       >
-        {/* Photo Preview */}
+        {/* Photo Preview — all 3 captured photos */}
         <View style={styles.photoSection}>
-          <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
+          <View style={styles.photoGalleryRow}>
+            {photoUris.map((uri, idx) => (
+              <View key={idx} style={styles.photoThumbWrap}>
+                <Image source={{ uri }} style={styles.photoThumb} resizeMode="cover" />
+                <View style={styles.photoThumbBadge}>
+                  <Text style={styles.photoThumbBadgeText}>Photo {idx + 1}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
           <View style={styles.photoOverlay}>
             <View style={styles.photoBadge}>
               <Ionicons name="camera" size={14} color="#fff" />
-              <Text style={styles.photoBadgeText}>Captured</Text>
+              <Text style={styles.photoBadgeText}>{photoUris.length} Photos Captured</Text>
             </View>
           </View>
         </View>
@@ -809,11 +827,38 @@ const styles = StyleSheet.create({
   scrollContent: {
     flex: 1,
   },
-  // Photo Section
+  // Photo Section — 3-photo gallery
   photoSection: {
-    height: 200,
     backgroundColor: '#0D1A17',
     position: 'relative',
+  },
+  photoGalleryRow: {
+    flexDirection: 'row',
+    height: 160,
+  },
+  photoThumbWrap: {
+    flex: 1,
+    position: 'relative',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(0,0,0,0.3)',
+  },
+  photoThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  photoThumbBadge: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  photoThumbBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
   },
   photo: {
     width: '100%',
@@ -821,8 +866,8 @@ const styles = StyleSheet.create({
   },
   photoOverlay: {
     position: 'absolute',
-    top: 12,
-    right: 12,
+    top: 8,
+    right: 8,
   },
   photoBadge: {
     flexDirection: 'row',

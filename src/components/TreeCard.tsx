@@ -1,15 +1,19 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { TreeRecord, Task, TreeCondition } from '../types';
 import { displayTreeId, resolveTreeId } from '../utils/treeId';
+import { getAuditStatus, getDueLabel, AuditStatus } from '../services/auditService';
 
 export interface TreeCardProps {
   tree?: TreeRecord | null;
   task?: Task | null;
   status?: 'assigned' | 'in_progress' | 'completed' | 'approved' | 'rejected';
   auditRound?: number | null;
+  audits?: any[];
+  dueLabel?: string;
+  auditStatus?: AuditStatus;
   rejectionNotes?: string | null;
   displayId?: string;
   onPress?: () => void;
@@ -41,6 +45,9 @@ export default function TreeCard({
   task,
   status: statusProp,
   auditRound: auditRoundProp,
+  audits: auditsProp,
+  dueLabel: dueLabelProp,
+  auditStatus: auditStatusProp,
   rejectionNotes: rejectionNotesProp,
   displayId: displayIdProp,
   onPress,
@@ -59,6 +66,17 @@ export default function TreeCard({
     | 'approved'
     | 'rejected';
 
+  // Compute audit status & due label for approved trees
+  const computedAuditStatus = useMemo(() => {
+    if (auditStatusProp) return auditStatusProp;
+    if (tree || task) {
+      return getAuditStatus(tree ?? { submitted_at: task?.created_at }, auditsProp ?? []);
+    }
+    return null;
+  }, [tree, task, auditsProp, auditStatusProp]);
+
+  const effectiveDueLabel = dueLabelProp || (computedAuditStatus ? getDueLabel(computedAuditStatus) : null);
+
   const statusColor = STATUS_COLORS[effectiveStatus] || '#1a5c2a';
   const isRejected = effectiveStatus === 'rejected';
   const isAssigned = effectiveStatus === 'assigned' || effectiveStatus === 'in_progress';
@@ -70,8 +88,26 @@ export default function TreeCard({
     (task?.task_code) ||
     (task?.id ? task.id.slice(0, 8).toUpperCase() : 'TREE');
 
-  // Title: task name or species
-  const title = task?.name || tree?.species || 'Tree';
+  // Title: clean species / tree name (strip "Tree Survey — " prefix)
+  const title = useMemo(() => {
+    const rawName = task?.name;
+    const species = tree?.species;
+    if (species && species.trim() && species !== 'Tree Capture') {
+      const match = rawName?.match(/\(([A-Fa-f0-9]{4,36})\)/);
+      if (match) {
+        return `${species} (${match[1]})`;
+      }
+      return species;
+    }
+    if (rawName) {
+      const parts = rawName.split(/ — | - | · /);
+      if (parts.length > 1) {
+        return parts[parts.length - 1].trim();
+      }
+      return rawName.trim();
+    }
+    return species || 'Tree';
+  }, [task?.name, tree?.species]);
 
   // Photo URL resolution
   const photoUrl = task?.photo_url || tree?.photo_url;
@@ -222,6 +258,52 @@ export default function TreeCard({
             </View>
           )}
 
+          {/* Audit Progress Dots + Remaining Time (Shown after approval) */}
+          {!isAssigned && effectiveStatus === 'approved' && computedAuditStatus ? (() => {
+            const isAuditNow = effectiveDueLabel === 'Audit Now';
+            const isOverdueLabel = effectiveDueLabel?.includes('overdue');
+            const mainColor = isAuditNow ? '#16a34a' : isOverdueLabel ? '#dc2626' : '#2563eb';
+            const bgColor = isAuditNow ? '#f0fdf4' : isOverdueLabel ? '#fef2f2' : '#eff6ff';
+            const borderColor = isAuditNow ? '#bbf7d0' : isOverdueLabel ? '#fecaca' : '#dbeafe';
+
+            const dotRounds = [1, 2, 3, 4];
+
+            return (
+              <View style={[styles.auditProgressRow, { backgroundColor: bgColor, borderColor }]}>
+                <View style={styles.dotsWrap}>
+                  {dotRounds.map((r) => {
+                    const isDone = r < computedAuditStatus.currentRound || (computedAuditStatus.allCompleted && r <= computedAuditStatus.completedCount);
+                    const isActive = r === computedAuditStatus.currentRound && !computedAuditStatus.allCompleted;
+                    return (
+                      <View
+                        key={r}
+                        style={[
+                          styles.auditDot,
+                          isDone && { backgroundColor: '#22c55e' },
+                          isActive && { backgroundColor: mainColor, width: 9, height: 9, borderRadius: 4.5 },
+                          !isDone && !isActive && { backgroundColor: '#d1d5db' },
+                        ]}
+                      />
+                    );
+                  })}
+                </View>
+                <Text style={styles.auditProgressText} numberOfLines={1}>
+                  {computedAuditStatus.allCompleted ? (
+                    <Text style={{ color: '#16a34a', fontWeight: '700' }}>All 4 Audits Completed ✓</Text>
+                  ) : (
+                    <>
+                      <Text style={{ color: mainColor, fontWeight: '800' }}>Audit {computedAuditStatus.currentRound}</Text>
+                      <Text style={{ color: '#9ca3af' }}> · </Text>
+                      <Text style={{ color: mainColor, fontWeight: '700' }}>
+                        {effectiveDueLabel}
+                      </Text>
+                    </>
+                  )}
+                </Text>
+              </View>
+            );
+          })() : null}
+
           {/* Date Row */}
           {dateStr ? (
             <View style={[styles.dateRow, isAssigned && styles.assignedDateRow]}>
@@ -235,7 +317,7 @@ export default function TreeCard({
       </View>
 
       {/* ─── BOTTOM FULL-WIDTH ACTION BUTTON (Footer CTA) ─── */}
-      {!isAssigned && onAction && actionLabel ? (
+      {!isAssigned && onAction && actionLabel && (actionVariant !== 'audit' || (computedAuditStatus && computedAuditStatus.isDue)) ? (
         <TouchableOpacity
           style={styles.actionBtnTouch}
           onPress={(e) => {
@@ -538,5 +620,33 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 10,
     paddingHorizontal: 16,
+  },
+  auditProgressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    backgroundColor: '#eff6ff',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+  },
+  dotsWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  auditDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  auditProgressText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1e40af',
   },
 });

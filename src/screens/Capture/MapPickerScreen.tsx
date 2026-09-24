@@ -131,7 +131,7 @@ map.on('load',function(){post({type:'ready'});});
 export default function MapPickerScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const { photoUri } = route.params;
+  const { photoUris } = route.params;
 
   const [coords, setCoords] = useState<Coordinates | null>(null);
   const [capturing, setCapturing] = useState(false);
@@ -256,7 +256,7 @@ export default function MapPickerScreen() {
       Alert.alert('Location Required', 'Wait for GNSS/GPS capture to finish or tap on the map.');
       return;
     }
-    navigation.navigate('TreeForm', { photoUri, coords });
+    navigation.navigate('TreeForm', { photoUris, coords });
   };
 
   const mapCoords = coords ?? DEFAULT_COORDS;

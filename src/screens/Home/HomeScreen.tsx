@@ -91,21 +91,27 @@ export default function HomeScreen() {
     // Fetch tree captures (count as completed tasks)
     const { data: treeData } = await fetchMyTrees(userId);
     if (seq !== loadSeqRef.current) return;
-    const treeCaptures = (treeData ?? []).length;
     
-    // Show ALL tasks across all projects
-    const allTasks: Task[] = [
+    // Filter tasks and tree captures by active project if selected
+    let visibleTasks: Task[] = [
       ...(dbTasks ?? []),
       ...localTasks,
     ];
+    let visibleTrees = treeData ?? [];
+
+    if (activeProjectId) {
+      visibleTasks = visibleTasks.filter((t) => t.project_id === activeProjectId);
+      visibleTrees = visibleTrees.filter((t) => t.project_id === activeProjectId);
+    }
+
+    const treeCaptures = visibleTrees.length;
+    const dbCompleted = visibleTasks.filter((t) => t.status === 'completed').length;
     
-    const dbCompleted = allTasks.filter((t) => t.status === 'completed').length;
-    
-    // Calculate stats from all tasks + tree captures
+    // Calculate stats from active project tasks + tree captures
     setTaskStats({
-      total: allTasks.length + treeCaptures,
-      assigned: allTasks.filter((t) => t.status === 'assigned').length,
-      rejected: allTasks.filter((t) => t.status === 'rejected').length,
+      total: visibleTasks.length + treeCaptures,
+      assigned: visibleTasks.filter((t) => t.status === 'assigned' || t.status === 'in_progress').length,
+      rejected: visibleTasks.filter((t) => t.status === 'rejected').length,
       completed: dbCompleted + treeCaptures,
     });
   }, [userId, activeProjectId]);

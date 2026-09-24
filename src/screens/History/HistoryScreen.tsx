@@ -40,6 +40,8 @@ interface HistoryItem {
   tree_id?: string;
   tree_record_id?: string;
   audit_round?: number | null;
+  rejection_notes?: string | null;
+  raw_task?: Task | null;
 }
 
 const CATEGORIES: { key: FilterCategory; label: string; icon: string }[] = [
@@ -215,13 +217,14 @@ export default function HistoryScreen() {
     });
   });
 
-  // Tasks (approved/rejected/completed with tree data)
+  // Tasks (completed, approved, rejected — all show in history with same TreeCard design)
   tasks.forEach((t) => {
-    if (t.status === 'approved' || t.status === 'rejected') {
+    if (t.status === 'approved' || t.status === 'rejected' || t.status === 'completed') {
       const rawCondition = t.tree_condition || '';
       const normalizedCondition = rawCondition.charAt(0).toUpperCase() + rawCondition.slice(1).toLowerCase();
       allItems.push({
         id: t.id,
+        tree_record_id: t.tree_record_id || t.tree_id || t.id,
         type: 'task',
         title: t.name || 'Task',
         photo_url: t.photo_url,
@@ -232,6 +235,8 @@ export default function HistoryScreen() {
         longitude: t.longitude,
         surveyor: t.surveyor,
         project_id: t.project_id,
+        rejection_notes: t.review_notes || t.notes || null,
+        raw_task: t,
       });
     }
   });
@@ -242,7 +247,8 @@ export default function HistoryScreen() {
       ? auditItems
       : activeCategory === 'condition'
       ? trees.map((t) => allItems.find((i) => i.id === t.id)).filter(Boolean) as HistoryItem[]
-      : allItems.filter((i) => i.type === 'task' || i.status === 'completed');
+      : // STATUS tab: show ALL tree cards (completed, approved, rejected)
+        allItems; // all statuses shown
 
   const filtered = sourceItems.filter((item) => {
     const projectMatch = activeProjectId ? item.project_id === activeProjectId : true;
@@ -321,6 +327,9 @@ export default function HistoryScreen() {
 
   const renderHistoryCard = (item: HistoryItem) => {
     const targetTreeId = item.tree_record_id || item.id;
+    const isRejected = item.status === 'rejected';
+    const treeAudits = auditsByTree[targetTreeId] || [];
+
     return (
       <TreeCard
         key={item.id}
@@ -337,13 +346,31 @@ export default function HistoryScreen() {
           synced: true,
           locked: item.status === 'approved',
           user_id: '',
+          surveyor: item.surveyor,
         }}
+        task={item.raw_task}
         status={item.status as any}
         auditRound={item.audit_round}
+        audits={treeAudits}
+        rejectionNotes={item.rejection_notes}
         displayId={item.tree_id || undefined}
+        showSurveyor={true}
         onPress={() => {
           navigation.navigate('TreeDetail', { treeId: targetTreeId });
         }}
+        onAction={
+          isRejected
+            ? () => {
+                navigation.navigate('EditTree', {
+                  treeId: targetTreeId,
+                  taskId: item.id,
+                  rejectionNotes: item.rejection_notes,
+                });
+              }
+            : undefined
+        }
+        actionLabel={isRejected ? 'Update Details' : undefined}
+        actionVariant={isRejected ? 'update' : undefined}
       />
     );
   };

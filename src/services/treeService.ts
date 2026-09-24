@@ -124,8 +124,11 @@ async function clearLocalTreeId(recordId: string): Promise<void> {
 // ─── Transform raw Supabase row into TreeRecord with joined project_name ───────
 function mapTreeRecord(raw: any): TreeRecord {
   if (!raw) return null as any;
+  const meta = parseTreeMeta(raw.notes);
   return {
     ...raw,
+    ...meta,
+    photo_urls: raw.photo_urls ?? meta.photo_urls ?? (raw.photo_url ? [raw.photo_url] : []),
     project_name: raw.projects?.name ?? raw.project_name,
   };
 }
@@ -170,9 +173,14 @@ export async function insertTreeRecord(
     'event_type', 'quantity', 'dbh_cm', 'height_m', 'wood_density',
     'crown_diameter_m', 'tree_condition', 'multi_stem', 'age_years',
     'land_type', 'surveyor', 'survey_date', 'tree_id', 'scientific_name',
+    'photo_urls',
   ];
 
-  const isMissingColumn = (msg: string) => msg.includes('column') && msg.includes('of') && msg.includes('schema cache');
+  const isMissingColumn = (msg: string) =>
+    isMissingSchemaError({ message: msg }) ||
+    msg.includes('column') ||
+    msg.includes('schema cache') ||
+    msg.includes('not find the');
 
   // Try full insert first
   let { data, error } = await supabase
@@ -194,7 +202,7 @@ export async function insertTreeRecord(
   // If missing columns, save extra data as ##META## JSON in notes
   if (error && isMissingColumn(error.message)) {
     console.warn(
-      '[TreeApp] tree_records missing columns — run supabase/migrations/001_add_tree_columns.sql. Saving extra data in notes.'
+      '[TreeApp] tree_records missing columns — saving extra data in notes.'
     );
     const meta: Record<string, any> = {};
     NEW_COLUMNS.forEach((col) => {
@@ -1517,6 +1525,7 @@ export async function updateBaselineTree(
     species?: string;
     scientific_name?: string;
     photo_url?: string;
+    photo_urls?: string[];
     dbh_cm?: number;
     height_m?: number;
     tree_condition?: string;
@@ -1549,7 +1558,17 @@ export async function updateBaselineTree(
       if (updates.tree_condition) coreUpdates.tree_condition = updates.tree_condition;
       if (updates.health_status) coreUpdates.health_status = updates.health_status;
       if (updates.photo_url) coreUpdates.photo_url = updates.photo_url;
-      if (updates.notes) coreUpdates.notes = updates.notes;
+      if (updates.dbh_cm) coreUpdates.dbh_cm = updates.dbh_cm;
+      if (updates.height_m) coreUpdates.height_m = updates.height_m;
+
+      // Pack photo_urls and extra fields into ##META## in notes
+      let finalNotes = updates.notes || '';
+      if (updates.photo_urls && updates.photo_urls.length > 0) {
+        const meta = { photo_urls: updates.photo_urls };
+        finalNotes = finalNotes ? `${finalNotes}\n##META##${JSON.stringify(meta)}` : `##META##${JSON.stringify(meta)}`;
+      }
+      coreUpdates.notes = finalNotes;
+
       const retry = await supabase
         .from('tree_records')
         .update(coreUpdates)

@@ -44,6 +44,7 @@ ALTER TABLE public.tree_records ADD COLUMN IF NOT EXISTS survey_date      text;
 ALTER TABLE public.tree_records ADD COLUMN IF NOT EXISTS event_type       text DEFAULT 'Planting';
 ALTER TABLE public.tree_records ADD COLUMN IF NOT EXISTS quantity         integer DEFAULT 1;
 ALTER TABLE public.tree_records ADD COLUMN IF NOT EXISTS locked           boolean NOT NULL DEFAULT false;
+ALTER TABLE public.tree_records ADD COLUMN IF NOT EXISTS photo_urls       text[];
 
 -- Per-project lookup index (used for ID sequencing)
 CREATE INDEX IF NOT EXISTS tree_records_project_id_idx
@@ -59,6 +60,7 @@ CREATE TABLE IF NOT EXISTS public.tree_monitoring_records (
   user_id           uuid,
   project_id        text,
   photo_url         text,
+  photo_urls        text[],
   latitude          double precision,
   longitude         double precision,
   dbh_cm            numeric,

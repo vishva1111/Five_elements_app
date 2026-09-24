@@ -23,6 +23,7 @@ export interface TreeRecord {
   user_id: string;
   project_id?: string;
   photo_url: string;
+  photo_urls?: string[];   // Up to 3 capture photos
   latitude: number;
   longitude: number;
   species: string;
@@ -160,8 +161,9 @@ export type RootStackParamList = {
 
 export type CaptureStackParamList = {
   CaptureCamera: undefined;
-  MapPicker: { photoUri: string; initialCoords?: Coordinates };
-  TreeForm: { photoUri: string; coords: Coordinates };
+  MapPicker: { photoUris: string[]; initialCoords?: Coordinates };
+  GNSSCapture: { photoUris: string[] };
+  TreeForm: { photoUris: string[]; coords: Coordinates };
   SubmitSuccess: { treeId: string };
 };
 
@@ -255,6 +257,7 @@ export interface TreeMonitoringRecord {
   user_id: string;
   project_id?: string;
   photo_url?: string;
+  photo_urls?: string[];   // Up to 3 audit photos
   latitude: number;
   longitude: number;
   dbh_cm?: number;

@@ -99,9 +99,9 @@ function MainTabs() {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
           if (route.name === 'Home') iconName = focused ? 'home' : 'home-outline';
-          else if (route.name === 'Task') iconName = focused ? 'clipboard' : 'clipboard-outline';
-          else if (route.name === 'Update') iconName = focused ? 'clipboard' : 'clipboard-outline';
-          else if (route.name === 'History') iconName = focused ? 'list' : 'list-outline';
+          else if (route.name === 'Task') iconName = focused ? 'checkbox' : 'checkbox-outline';
+          else if (route.name === 'Update') iconName = focused ? 'shield-checkmark' : 'shield-checkmark-outline';
+          else if (route.name === 'History') iconName = focused ? 'document-text' : 'document-text-outline';
           else if (route.name === 'Profile') iconName = focused ? 'person' : 'person-outline';
           return (
             <View style={{
