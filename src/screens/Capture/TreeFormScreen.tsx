@@ -31,9 +31,10 @@ import {
 } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
-import { insertTreeRecord, syncUserCredits, computeCreditsForProject, fetchAllProjects } from '../../services/treeService';
+import { syncUserCredits, computeCreditsForProject, fetchAllProjects } from '../../services/treeService';
+import { enqueueCapture, syncEntry } from '../../services/captureQueue';
+import { useQueueStore } from '../../store/queueStore';
 import { Project } from '../../types';
-import { uploadTreePhoto } from '../../services/storageService';
 import { completeTask } from '../../services/taskService';
 import { useTaskStore } from '../../store/taskStore';
 import MapPreview from '../../components/MapPreview';
@@ -205,38 +206,55 @@ export default function TreeFormScreen() {
 
     setSubmitting(true);
     try {
-      // 1. Upload photo
-      const photoUrl = await uploadTreePhoto(photoUri, user.id);
-      if (!photoUrl) throw new Error('Photo upload failed');
-
-      // 2. Insert tree record with all fields
-      const { data, error } = await insertTreeRecord({
-        user_id: user.id,
-        project_id: form.project_id || undefined,
-        photo_url: photoUrl,
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        species: form.species.trim(),
-        scientific_name: form.scientific_name.trim() || undefined,
-        health_status: form.health_status,
-        notes: form.notes.trim() || undefined,
-        synced: true,
-        event_type: form.event_type,
-        quantity: form.quantity,
-        tree_id: form.tree_id || undefined,
-        dbh_cm: parseFloat(form.dbh_cm) || undefined,
-        height_m: parseFloat(form.height_m) || undefined,
-        wood_density: parseFloat(form.wood_density) || undefined,
-        crown_diameter_m: parseFloat(form.crown_diameter_m) || undefined,
-        tree_condition: form.tree_condition,
-        multi_stem: form.multi_stem,
-        age_years: parseInt(form.age_years) || undefined,
-        land_type: form.land_type,
-        surveyor: form.surveyor.trim() || undefined,
-        survey_date: form.survey_date || undefined,
+      // ── 1. Save to this device FIRST ────────────────────────────────────
+      // Offline-first (P4-01, PG-01): the capture is durable on disk before a
+      // single byte goes near the network, so no signal, a force-close or a
+      // flat battery can lose the work. Only after this do we try to upload.
+      const activeTaskId = useTaskStore.getState().activeTaskId;
+      const entry = await enqueueCapture({
+        photoUri,
+        taskId: activeTaskId,
+        projectName: projects.find((p) => p.id === form.project_id)?.name ?? null,
+        record: {
+          user_id: user.id,
+          project_id: form.project_id || undefined,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          species: form.species.trim(),
+          scientific_name: form.scientific_name.trim() || undefined,
+          health_status: form.health_status,
+          notes: form.notes.trim() || undefined,
+          event_type: form.event_type,
+          quantity: form.quantity,
+          tree_id: form.tree_id || undefined,
+          dbh_cm: parseFloat(form.dbh_cm) || undefined,
+          height_m: parseFloat(form.height_m) || undefined,
+          wood_density: parseFloat(form.wood_density) || undefined,
+          crown_diameter_m: parseFloat(form.crown_diameter_m) || undefined,
+          tree_condition: form.tree_condition,
+          multi_stem: form.multi_stem,
+          age_years: parseInt(form.age_years) || undefined,
+          land_type: form.land_type,
+          surveyor: form.surveyor.trim() || undefined,
+          survey_date: form.survey_date || undefined,
+        },
       });
 
-      if (error || !data) throw new Error(error ?? 'Failed to save tree record');
+      // ── 2. Try to send it now ───────────────────────────────────────────
+      // Failure here is not an error the user must handle — the capture is
+      // already safe and the sync queue will retry it (P4-02, P5-02).
+      await useQueueStore.getState().refresh();
+
+      const result = await syncEntry(entry);
+      await useQueueStore.getState().refresh();
+
+      if (!result.ok || !result.tree) {
+        useTaskStore.getState().setActiveTaskId(null);
+        navigation.navigate('SubmitSuccess', { treeId: entry.id, queued: true });
+        return;
+      }
+
+      const data = result.tree;
 
       // 3. Deduct credit — 1 credit deducted per tree added within the ACTIVE
       //    project (each project has its own 500-credit pool)
@@ -250,15 +268,11 @@ export default function TreeFormScreen() {
       // Keep the profile credits column in sync (best-effort, non-blocking)
       syncUserCredits(user.id, remainingCredits);
 
-      // 4. Complete the task this capture was started from ("Start Now" on the Task
-      //    screen sets activeTaskId), falling back to fuzzy-matching an assigned
-      //    capture-style task if this Capture wasn't reached from a specific task.
-      //    No in_progress step anywhere — assigned goes straight to completed.
-      //    (best-effort — non-blocking, won't fail the submit)
+      // 4. Reflect the closed task locally. The server-side completion already
+      //    happened inside syncEntry, which owns it for queued captures too;
+      //    this only keeps TaskScreen in step without a refetch.
       try {
         const allTasks = useTaskStore.getState().tasks ?? [];
-        const activeTaskId = useTaskStore.getState().activeTaskId;
-
         const matchingTask = activeTaskId
           ? allTasks.find((t) => t.id === activeTaskId)
           : allTasks.find(
@@ -266,10 +280,11 @@ export default function TreeFormScreen() {
             );
 
         if (matchingTask && matchingTask.status === 'assigned') {
-          // Use the coords already captured for this tree — exact and no extra GPS round-trip.
           const location = `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`;
-          await completeTask(matchingTask.id, data.id, location);
-          // Update local store so TaskScreen reflects immediately
+          if (!activeTaskId) {
+            // Not reached from a specific task, so syncEntry had no id to close.
+            await completeTask(matchingTask.id, data.id, location);
+          }
           const updatedTasks = allTasks.map((t) =>
             t.id === matchingTask.id
               ? { ...t, status: 'completed' as const, completed_at: new Date().toISOString(), tree_id: data.id, location }
@@ -279,16 +294,21 @@ export default function TreeFormScreen() {
         }
         useTaskStore.getState().setActiveTaskId(null);
       } catch (taskErr) {
-        // Non-critical — tree was saved successfully
+        // Non-critical — the tree is saved either way.
         console.warn('[TreeFormScreen] task auto-complete failed:', taskErr);
         useTaskStore.getState().setActiveTaskId(null);
       }
 
       navigation.navigate('SubmitSuccess', { treeId: data.id });
     } catch (err: any) {
+      // Reaching here means the capture could not even be written to disk —
+      // the only genuinely unrecoverable case, so the user must know.
       const msg = err?.message ?? JSON.stringify(err) ?? 'Please try again.';
       console.error('Submit error:', msg);
-      Alert.alert('Submission Failed', msg);
+      Alert.alert(
+        'Could not save',
+        `${msg}\n\nNothing was recorded. Please try again — if this keeps happening, free up space on your device.`
+      );
     } finally {
       setSubmitting(false);
     }

@@ -1,27 +1,42 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/authStore';
+import { useQueueStore } from '../../store/queueStore';
 
 export default function SubmitSuccessScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const { user } = useAuthStore();
   const remainingCredits = user?.credits ?? 0;
+
+  // A queued capture is saved but not yet confirmed by the platform. Saying
+  // "synced" here would be a lie, and the queue badge would contradict it.
+  const queued = !!route.params?.queued;
+  const pending = useQueueStore((st) => st.pending);
 
   return (
     <View style={styles.container}>
       <View style={styles.card}>
         <View style={styles.iconCircle}>
-          <Ionicons name="checkmark-circle" size={80} color="#22c55e" />
+          <Ionicons
+            name={queued ? 'save' : 'checkmark-circle'}
+            size={80}
+            color={queued ? '#F09125' : '#22c55e'}
+          />
         </View>
 
-        <Text style={styles.title}>Tree Submitted! 🌳</Text>
+        <Text style={styles.title}>{queued ? 'Saved to this device' : 'Tree Submitted! 🌳'}</Text>
         <Text style={styles.subtitle}>
-          Your tree record has been saved and synced with the admin panel in real-time.
+          {queued
+            ? "It'll upload automatically when you're back online. Your work is safe — you can keep capturing."
+            : 'Your tree record has been saved and synced with the admin panel in real-time.'}
         </Text>
 
-        {/* Updated credit balance — shown immediately after the 1-credit deduction */}
+        {/* Credits are only deducted once the platform confirms the record, so
+            this card is meaningless for a queued capture. */}
+        {!queued && (
         <View style={styles.creditCard}>
           <View style={styles.creditRow}>
             <View style={styles.creditIconWrap}>
@@ -36,11 +51,34 @@ export default function SubmitSuccessScreen() {
           </View>
         </View>
 
+        )}
+
         <View style={styles.infoBox}>
-          <Text style={styles.infoItem}>✅ Photo uploaded to cloud</Text>
-          <Text style={styles.infoItem}>📍 GPS location saved</Text>
-          <Text style={styles.infoItem}>🔄 Synced with admin dashboard</Text>
+          {queued ? (
+            <>
+              <Text style={styles.infoItem}>💾 Saved on this device</Text>
+              <Text style={styles.infoItem}>📍 GPS location saved</Text>
+              <Text style={styles.infoItem}>
+                ⏳ {pending > 0 ? `${pending} waiting to upload` : 'Waiting to upload'}
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.infoItem}>✅ Photo uploaded to cloud</Text>
+              <Text style={styles.infoItem}>📍 GPS location saved</Text>
+              <Text style={styles.infoItem}>🔄 Synced with admin dashboard</Text>
+            </>
+          )}
         </View>
+
+        {queued && (
+          <TouchableOpacity
+            style={styles.homeBtn}
+            onPress={() => navigation.navigate('SyncQueue')}
+          >
+            <Text style={styles.homeBtnText}>View sync queue</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={styles.captureMoreBtn}

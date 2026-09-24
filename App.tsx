@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, View, ActivityIndicator, Text, Image } from 'react-native';
+import { StyleSheet, View, ActivityIndicator, Text, Image, AppState } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from './src/services/supabase';
 import { useAuthStore } from './src/store/authStore';
 import { useTreeStore } from './src/store/treeStore';
+import { useQueueStore } from './src/store/queueStore';
 import { fetchUserProfile, fetchMyTrees, fetchUserProjects, fetchAllProjects, buildUserFromProfile, computeCreditsForProject, INITIAL_CREDITS, getCachedUserProjects, cacheUserProjects } from './src/services/treeService';
 import { getCachedActiveProject } from './src/store/authStore';
 import logo from './src/assets/logo.png';
@@ -28,6 +29,7 @@ import TreeDetailScreen from './src/screens/History/TreeDetailScreen';
 import ProfileScreen from './src/screens/Profile/ProfileScreen';
 import TaskScreen from './src/screens/Task/TaskScreen';
 import TreeMapScreen from './src/screens/Map/TreeMapScreen';
+import SyncQueueScreen from './src/screens/Capture/SyncQueueScreen';
 
 const theme = {
   ...MD3LightTheme,
@@ -51,6 +53,7 @@ function CaptureNavigator() {
       <CaptureStack.Screen name="MapPicker" component={MapPickerScreen} />
       <CaptureStack.Screen name="TreeForm" component={TreeFormScreen} />
       <CaptureStack.Screen name="SubmitSuccess" component={SubmitSuccessScreen} />
+      <CaptureStack.Screen name="SyncQueue" component={SyncQueueScreen} />
     </CaptureStack.Navigator>
   );
 }
@@ -73,6 +76,21 @@ function HistoryNavigator() {
 
 function MainTabs() {
   const insets = useSafeAreaInsets();
+  const pendingCaptures = useQueueStore((s) => s.pending);
+  const refreshQueue = useQueueStore((s) => s.refresh);
+  const drainQueue = useQueueStore((s) => s.drain);
+
+  useEffect(() => {
+    // Read the queue on mount, then again whenever the app returns to the
+    // foreground — with no connectivity listener in this build, that is the
+    // most reliable moment to discover signal has come back (P5-02).
+    refreshQueue();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') drainQueue();
+    });
+    return () => sub.remove();
+  }, [refreshQueue, drainQueue]);
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -82,6 +100,7 @@ function MainTabs() {
           else if (route.name === 'Map') iconName = focused ? 'map' : 'map-outline';
           else if (route.name === 'Task') iconName = focused ? 'clipboard' : 'clipboard-outline';
           else if (route.name === 'History') iconName = focused ? 'list' : 'list-outline';
+          else if (route.name === 'Sync') iconName = focused ? 'cloud-upload' : 'cloud-upload-outline';
           else if (route.name === 'Profile') iconName = focused ? 'person' : 'person-outline';
           return (
             <View style={{
@@ -99,6 +118,7 @@ function MainTabs() {
             Home: 'Home',
             Map: 'Map',
             Task: 'Tasks',
+            Sync: 'Sync',
             History: 'History',
             Profile: 'Profile',
           };
@@ -141,6 +161,17 @@ function MainTabs() {
       <Tab.Screen name="Home" component={HomeScreen} options={{ headerShown: false, title: 'DASHBOARD' }} />
       <Tab.Screen name="Map" component={TreeMapScreen} options={{ headerShown: false, title: 'MAP' }} />
       <Tab.Screen name="Task" component={TaskScreen} options={{ headerShown: false, title: 'TASKS' }} />
+      <Tab.Screen
+        name="Sync"
+        component={SyncQueueScreen}
+        options={{
+          headerShown: false,
+          title: 'SYNC QUEUE',
+          // The queue count is always visible, from every tab (P4-06, PG-02).
+          tabBarBadge: pendingCaptures > 0 ? pendingCaptures : undefined,
+          tabBarBadgeStyle: { backgroundColor: '#F09125', color: '#fff', fontWeight: '700' },
+        }}
+      />
       <Tab.Screen name="History" component={HistoryNavigator} options={{ headerShown: false, title: 'HISTORY' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false, title: 'PROFILE' }} />
     </Tab.Navigator>
