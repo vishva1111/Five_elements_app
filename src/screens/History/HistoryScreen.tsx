@@ -135,18 +135,21 @@ export default function HistoryScreen() {
         if (seq !== loadSeqRef.current) return;
         setAuditsByTree(audits);
 
+        const currentTasks = tasksRes.data || [];
         const items: HistoryItem[] = [];
         for (const t of treesRes.data) {
           const records = audits[t.id] ?? [];
+          const linkedTask = currentTasks.find((tk) => tk.tree_id === t.id || tk.id === t.id);
+          const isApproved = Boolean(t.locked || linkedTask?.status === 'approved');
           for (const r of records) {
             items.push({
               id: r.id ?? `${t.id}-a${r.monitoring_round}`,
               tree_record_id: t.id,
               type: 'tree',
-              title: `Audit ${r.monitoring_round ?? 1} · ${t.species || 'Tree'}`,
+              title: t.species || 'Tree',
               photo_url: r.photo_url || t.photo_url,
               condition: r.tree_condition || t.tree_condition || 'Healthy',
-              status: 'completed',
+              status: isApproved ? 'approved' : 'completed',
               date: r.survey_date || r.submitted_at || t.submitted_at,
               latitude: r.latitude ?? t.latitude,
               longitude: r.longitude ?? t.longitude,
@@ -199,6 +202,9 @@ export default function HistoryScreen() {
     const rawCondition = latest?.tree_condition || t.tree_condition || meta.tree_condition || 'Healthy';
     const normalizedCondition = rawCondition.charAt(0).toUpperCase() + rawCondition.slice(1).toLowerCase();
     const photo = latest?.photo_url || t.photo_url;
+    const linkedTask = tasks.find((tk) => tk.tree_id === t.id || tk.id === t.id);
+    const isApproved = Boolean(t.locked || linkedTask?.status === 'approved');
+
     allItems.push({
       id: t.id,
       tree_record_id: t.id,
@@ -206,7 +212,7 @@ export default function HistoryScreen() {
       title: t.species || 'Tree',
       photo_url: photo,
       condition: normalizedCondition,
-      status: 'completed',
+      status: isApproved ? 'approved' : 'completed',
       date: latest?.survey_date || latest?.submitted_at || t.submitted_at,
       latitude: latest?.latitude ?? t.latitude,
       longitude: latest?.longitude ?? t.longitude,
@@ -327,7 +333,6 @@ export default function HistoryScreen() {
 
   const renderHistoryCard = (item: HistoryItem) => {
     const targetTreeId = item.tree_record_id || item.id;
-    const isRejected = item.status === 'rejected';
     const treeAudits = auditsByTree[targetTreeId] || [];
 
     return (
@@ -348,29 +353,16 @@ export default function HistoryScreen() {
           user_id: '',
           surveyor: item.surveyor,
         }}
-        task={item.raw_task}
+        task={null}
         status={item.status as any}
         auditRound={item.audit_round}
         audits={treeAudits}
-        rejectionNotes={item.rejection_notes}
+        rejectionNotes={null}
         displayId={item.tree_id || undefined}
-        showSurveyor={true}
+        showSurveyor={false}
         onPress={() => {
           navigation.navigate('TreeDetail', { treeId: targetTreeId });
         }}
-        onAction={
-          isRejected
-            ? () => {
-                navigation.navigate('EditTree', {
-                  treeId: targetTreeId,
-                  taskId: item.id,
-                  rejectionNotes: item.rejection_notes,
-                });
-              }
-            : undefined
-        }
-        actionLabel={isRejected ? 'Update Details' : undefined}
-        actionVariant={isRejected ? 'update' : undefined}
       />
     );
   };

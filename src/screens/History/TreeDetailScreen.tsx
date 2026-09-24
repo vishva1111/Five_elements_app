@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { useRoute, useNavigation, useFocusEffect, RouteProp } from '@react-navig
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HistoryStackParamList, TreeRecord, getMonitoringRoundInfo, Task } from '../../types';
 import { fetchTreeById, ensureProjectTreeId, fetchTreeMonitoringRecords } from '../../services/treeService';
 import { supabase } from '../../services/supabase';
@@ -31,6 +32,11 @@ import MapPreview from '../../components/MapPreview';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PHOTO_PAGE_W = SCREEN_WIDTH - 28; // 14px padding on each side
+const PHOTO_ANGLES = [
+  { label: 'Front View', short: 'Front', icon: 'leaf' },
+  { label: 'Side View', short: 'Side', icon: 'git-network-outline' },
+  { label: 'Close-up', short: 'Close-up', icon: 'scan-outline' },
+];
 
 type Route = RouteProp<HistoryStackParamList, 'TreeDetail'>;
 type Nav = NativeStackNavigationProp<HistoryStackParamList, 'TreeDetail'>;
@@ -45,6 +51,7 @@ const CONDITION_THEMES: Record<string, { color: string; bg: string; text: string
 export default function TreeDetailScreen() {
   const route = useRoute<Route>();
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const { treeId } = route.params;
 
   const [tree, setTree] = useState<TreeRecord | null>(null);
@@ -64,6 +71,7 @@ export default function TreeDetailScreen() {
 
   // Active photo index within the displayed photos pager
   const [activePhotoIdx, setActivePhotoIdx] = useState(0);
+  const photoScrollRef = useRef<ScrollView>(null);
 
   const loadTreeData = useCallback(async () => {
     try {
@@ -288,7 +296,11 @@ export default function TreeDetailScreen() {
         )}
       </LinearGradient>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 16) + 84 }]}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Rejection Notice Banner if rejected */}
         {isRejected && task?.review_notes ? (
           <View style={styles.rejectionNoticeCard}>
@@ -300,16 +312,17 @@ export default function TreeDetailScreen() {
           </View>
         ) : null}
 
-        {/* ─── 2. HERO PHOTO GALLERY (3-PHOTO PAGER + VITALITY STATUS) ─── */}
+        {/* ─── 2. HERO PHOTO STUDIO GALLERY (3 ANGLES + INTERACTIVE TABS) ─── */}
         <View style={styles.photoContainer}>
-          {/* Multi-photo horizontal strip */}
+          {/* Multi-photo horizontal strip with ref for smooth scrolling */}
           <ScrollView
+            ref={photoScrollRef}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             style={styles.photoStrip}
             onMomentumScrollEnd={(e) => {
-              const idx = Math.round(e.nativeEvent.contentOffset.x / e.nativeEvent.layoutMeasurement.width);
+              const idx = Math.round(e.nativeEvent.contentOffset.x / PHOTO_PAGE_W);
               setActivePhotoIdx(Math.max(0, Math.min(idx, displayedPhotos.length - 1)));
             }}
           >
@@ -322,11 +335,6 @@ export default function TreeDetailScreen() {
                   onPress={() => setFullscreenPhoto(uri)}
                 >
                   <Image source={{ uri }} style={styles.heroPhoto as any} resizeMode="cover" />
-                  {/* Photo number badge */}
-                  <View style={styles.photoNumBadge}>
-                    <Ionicons name="camera" size={10} color="#fff" />
-                    <Text style={styles.photoNumText}>{idx + 1}/{displayedPhotos.length}</Text>
-                  </View>
                 </TouchableOpacity>
               ))
             ) : (
@@ -339,64 +347,41 @@ export default function TreeDetailScreen() {
             )}
           </ScrollView>
 
-          {/* Gradient Overlay */}
-          <LinearGradient
-            colors={['rgba(0,0,0,0.3)', 'transparent', 'rgba(0,0,0,0.7)']}
-            style={styles.photoGradient}
-            pointerEvents="none"
-          >
-            {/* Top Row: Photo View Toggle (If audit photo exists) + Zoom hint */}
-            <View style={styles.photoTopRow}>
-              {hasAuditPhoto ? (
-                <View style={styles.photoTogglePill}>
-                  <TouchableOpacity
-                    style={[styles.toggleBtn, photoView === 'audit' && styles.toggleBtnActive]}
-                    onPress={() => { setPhotoView('audit'); setActivePhotoIdx(0); }}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="sparkles" size={11} color={photoView === 'audit' ? '#fff' : 'rgba(255,255,255,0.7)'} />
-                    <Text style={[styles.toggleText, photoView === 'audit' && styles.toggleTextActive]}>
-                      Audit {latestAudit?.monitoring_round} ({auditPhotos.length})
-                    </Text>
-                  </TouchableOpacity>
+          {/* Top Floating Glass Header: ALIVE on Left, 1/3 Counter on Right */}
+          <View style={styles.photoTopRow}>
+            {hasAuditPhoto ? (
+              <View style={styles.photoTogglePill}>
+                <TouchableOpacity
+                  style={[styles.toggleBtn, photoView === 'audit' && styles.toggleBtnActive]}
+                  onPress={() => {
+                    setPhotoView('audit');
+                    setActivePhotoIdx(0);
+                    photoScrollRef.current?.scrollTo({ x: 0, animated: true });
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="sparkles" size={11} color={photoView === 'audit' ? '#fff' : 'rgba(255,255,255,0.7)'} />
+                  <Text style={[styles.toggleText, photoView === 'audit' && styles.toggleTextActive]}>
+                    Audit {latestAudit?.monitoring_round}
+                  </Text>
+                </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={[styles.toggleBtn, photoView === 'planting' && styles.toggleBtnActive]}
-                    onPress={() => { setPhotoView('planting'); setActivePhotoIdx(0); }}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="leaf" size={11} color={photoView === 'planting' ? '#fff' : 'rgba(255,255,255,0.7)'} />
-                    <Text style={[styles.toggleText, photoView === 'planting' && styles.toggleTextActive]}>
-                      Planting ({plantingPhotos.length})
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View style={styles.singlePhotoBadge}>
-                  <Ionicons name="leaf" size={11} color="#86efac" />
-                  <Text style={styles.singlePhotoText}>Planting · {plantingPhotos.length} Photo{plantingPhotos.length !== 1 ? 's' : ''}</Text>
-                </View>
-              )}
-
-              <View style={styles.zoomHintBadge}>
-                <Ionicons name="scan-outline" size={13} color="#fff" />
+                <TouchableOpacity
+                  style={[styles.toggleBtn, photoView === 'planting' && styles.toggleBtnActive]}
+                  onPress={() => {
+                    setPhotoView('planting');
+                    setActivePhotoIdx(0);
+                    photoScrollRef.current?.scrollTo({ x: 0, animated: true });
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="leaf" size={11} color={photoView === 'planting' ? '#fff' : 'rgba(255,255,255,0.7)'} />
+                  <Text style={[styles.toggleText, photoView === 'planting' && styles.toggleTextActive]}>
+                    Planting
+                  </Text>
+                </TouchableOpacity>
               </View>
-            </View>
-
-            {/* Pager dots */}
-            {displayedPhotos.length > 1 && (
-              <View style={styles.pagerDotsRow}>
-                {displayedPhotos.map((_, idx) => (
-                  <View
-                    key={idx}
-                    style={[styles.pagerDot, idx === activePhotoIdx && styles.pagerDotActive]}
-                  />
-                ))}
-              </View>
-            )}
-
-            {/* Bottom Row: Vitality Capsule + Date */}
-            <View style={styles.photoBottomRow}>
+            ) : (
               <View style={styles.vitalityCapsule}>
                 <View style={[styles.vitalityDot, { backgroundColor: conditionTheme.color }]} />
                 <Text style={styles.vitalityStatusText}>{activeSurvival}</Text>
@@ -405,15 +390,52 @@ export default function TreeDetailScreen() {
                   {activeCondition}
                 </Text>
               </View>
+            )}
 
-              {latestAudit ? (
-                <Text style={styles.photoDateText}>
-                  Updated {formatDateFriendly(latestAudit.survey_date ?? latestAudit.submitted_at)}
+            {/* Right: ONLY 1/3 Photo Counter Pill */}
+            {displayedPhotos.length > 1 && (
+              <View style={styles.photoIndexPill}>
+                <Text style={styles.photoIndexText}>
+                  {activePhotoIdx + 1}/{displayedPhotos.length}
                 </Text>
-              ) : (
-                <Text style={styles.photoDateText}>Planted {plantingDateStr}</Text>
-              )}
-            </View>
+              </View>
+            )}
+          </View>
+
+          {/* Bottom Floating Glass Card: 3 Photo Tabs Set Downside */}
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.85)']}
+            style={styles.photoBottomGradient}
+            pointerEvents="box-none"
+          >
+            {displayedPhotos.length > 1 && (
+              <View style={styles.angleTabsRow}>
+                {displayedPhotos.map((_, idx) => {
+                  const angleCfg = PHOTO_ANGLES[idx] || { short: `Photo ${idx + 1}`, icon: 'camera' };
+                  const isActive = activePhotoIdx === idx;
+                  return (
+                    <TouchableOpacity
+                      key={idx}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        setActivePhotoIdx(idx);
+                        photoScrollRef.current?.scrollTo({ x: idx * PHOTO_PAGE_W, animated: true });
+                      }}
+                      style={[styles.angleTabBtn, isActive && styles.angleTabBtnActive]}
+                    >
+                      <Ionicons
+                        name={angleCfg.icon as any}
+                        size={12}
+                        color={isActive ? '#fff' : 'rgba(255,255,255,0.75)'}
+                      />
+                      <Text style={[styles.angleTabText, isActive && styles.angleTabTextActive]}>
+                        {angleCfg.short}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
           </LinearGradient>
         </View>
 
@@ -793,7 +815,7 @@ export default function TreeDetailScreen() {
         !isApproved ? (
           // Pre-Audit, Unapproved or Rejected: Field Worker can edit the tree
           <TouchableOpacity
-            style={styles.fab}
+            style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}
             activeOpacity={0.85}
             onPress={() =>
               navigation.navigate('EditTree', {
@@ -818,7 +840,7 @@ export default function TreeDetailScreen() {
         ) : !auditStatus.isDue ? (
           // Pre-Audit, Approved, but audit is NOT due yet (remaining time ticking)
           <TouchableOpacity
-            style={styles.fab}
+            style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}
             activeOpacity={0.8}
             onPress={() =>
               Alert.alert(
@@ -844,7 +866,7 @@ export default function TreeDetailScreen() {
         ) : (
           // Pre-Audit, Approved: Audit IS due -> Active Start Audit 1 button
           <TouchableOpacity
-            style={styles.fab}
+            style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}
             activeOpacity={0.85}
             onPress={() =>
               navigation.navigate('UpdateTree', {
@@ -869,21 +891,23 @@ export default function TreeDetailScreen() {
           </TouchableOpacity>
         )
       ) : auditStatus.allCompleted ? (
-        <View style={styles.allCompletedBar}>
-          <LinearGradient
-            colors={['#166534', '#15803d']}
-            style={styles.fabGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-          >
-            <Ionicons name="checkmark-done-circle" size={20} color="#fff" />
-            <Text style={styles.fabText}>All 4 Audits Completed ✓</Text>
-          </LinearGradient>
+        <View style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}>
+          <View style={styles.allCompletedBar}>
+            <LinearGradient
+              colors={['#166534', '#15803d']}
+              style={styles.fabGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <Ionicons name="checkmark-done-circle" size={20} color="#fff" />
+              <Text style={styles.fabText}>All 4 Audits Completed ✓</Text>
+            </LinearGradient>
+          </View>
         </View>
       ) : !auditStatus.isDue ? (
         // Post-Audit, Next Round NOT due yet (remaining time ticking)
         <TouchableOpacity
-          style={styles.fab}
+          style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}
           activeOpacity={0.8}
           onPress={() =>
             Alert.alert(
@@ -909,7 +933,7 @@ export default function TreeDetailScreen() {
       ) : (
         // Post-Audit, Next Round IS due -> Active Start Audit button
         <TouchableOpacity
-          style={styles.fab}
+          style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}
           activeOpacity={0.85}
           onPress={() =>
             navigation.navigate('UpdateTree', {
@@ -1044,59 +1068,23 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     backgroundColor: '#0f2918',
-    elevation: 3,
+    elevation: 4,
     shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    height: 250,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    height: 260,
     position: 'relative',
   },
   photoStrip: {
     width: '100%',
-    height: 250,
+    height: 260,
   },
   photoPage: {
     width: PHOTO_PAGE_W,
-    height: 250,
+    height: 260,
     position: 'relative',
   },
-  photoNumBadge: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  photoNumText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  pagerDotsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    alignSelf: 'center',
-  },
-  pagerDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.4)',
-  },
-  pagerDotActive: {
-    backgroundColor: '#fff',
-    width: 18,
-    borderRadius: 3,
-  },
-  photoTouch: { width: '100%', height: 250, position: 'relative' },
-  heroPhoto: { width: '100%', height: 250 },
+  heroPhoto: { width: '100%', height: 260 },
   emptyPhotoWrap: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1104,34 +1092,50 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   emptyPhotoText: { fontSize: 12, fontWeight: '700', color: '#15803d' },
-  photoGradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'space-between',
-    padding: 12,
-  },
+
+  // Top Row Controls
   photoTopRow: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    right: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    zIndex: 10,
+  },
+  photoTopRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  photoIndexPill: {
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  photoIndexText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
   },
   photoTogglePill: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.65)',
     borderRadius: 14,
     padding: 3,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   toggleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
     borderRadius: 11,
   },
   toggleBtnActive: {
@@ -1142,21 +1146,75 @@ const styles = StyleSheet.create({
   singlePhotoBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
+    gap: 5,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
-  singlePhotoText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  singlePhotoText: { color: '#fff', fontSize: 10, fontWeight: '800' },
   zoomHintBadge: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+
+  // Bottom Gradient & Angle Tabs (Downside)
+  photoBottomGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingTop: 36,
+    paddingBottom: 14,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  angleTabsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  angleTabBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  angleTabBtnActive: {
+    backgroundColor: '#15803d',
+    borderColor: '#22c55e',
+    shadowColor: '#22c55e',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  angleTabText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.75)',
+  },
+  angleTabTextActive: {
+    color: '#fff',
+    fontWeight: '900',
+  },
+
+  // Bottom Vitality & Date Row
   photoBottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1167,7 +1225,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.75)',
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 5,
     borderRadius: 12,
     gap: 6,
     borderWidth: 1,
@@ -1181,7 +1239,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 10,
     fontWeight: '600',
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
@@ -1547,23 +1605,20 @@ const styles = StyleSheet.create({
   // Bottom Fixed FAB
   fab: {
     position: 'absolute',
-    bottom: 16,
     left: 16,
     right: 16,
     borderRadius: 16,
-    elevation: 5,
-    shadowColor: '#15803d',
-    shadowOpacity: 0.3,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
+    zIndex: 50,
   },
   allCompletedBar: {
-    position: 'absolute',
-    bottom: 16,
-    left: 16,
-    right: 16,
+    width: '100%',
     borderRadius: 16,
-    elevation: 3,
+    overflow: 'hidden',
   },
   fabGradient: {
     flexDirection: 'row',

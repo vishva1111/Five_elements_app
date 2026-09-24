@@ -17,6 +17,7 @@ import { useProjectRefreshStore } from '../../store/projectRefreshStore';
 import { fetchMyTrees, fetchAllProjects, backfillProjectTreeIds } from '../../services/treeService';
 import { fetchAgentTasks, startTask } from '../../services/taskService';
 import { loadLocalTasks } from '../../services/localTaskService';
+import { fetchAuditsForTrees } from '../../services/auditService';
 import { Task, Project, TreeRecord } from '../../types';
 import { displayTreeId, parseTreeMeta, resolveTreeId } from '../../utils/treeId';
 import CircularProgress from '../../components/CircularProgress';
@@ -28,8 +29,8 @@ type TaskTab = 'assigned' | 'completed' | 'approved' | 'rejected';
 
 const TABS: { key: TaskTab; label: string; color: string }[] = [
   { key: 'assigned', label: 'Assigned', color: '#1a5c2a' },
-  { key: 'completed', label: 'Completed', color: '#22c55e' },
-  { key: 'approved', label: 'Approved', color: '#8b5cf6' },
+  { key: 'completed', label: 'Completed', color: '#16a34a' },
+  { key: 'approved', label: 'Approved', color: '#7c3aed' },
   { key: 'rejected', label: 'Rejected', color: '#ef4444' },
 ];
 
@@ -51,6 +52,7 @@ export default function TaskScreen() {
   const [selectedDate, setSelectedDate] = useState<string>('all');
   // uuid (tree record) → project tree ID, e.g. "ARAV-001" (see utils/treeId.ts)
   const [treeIds, setTreeIds] = useState<Record<string, string>>({});
+  const [auditsByTree, setAuditsByTree] = useState<Record<string, any[]>>({});
   const loadSeqRef = useRef(0);
   // Keep stable refs so loadTasks never needs to be recreated on value changes
   const activeProjectIdRef = useRef(activeProjectId);
@@ -101,6 +103,15 @@ export default function TaskScreen() {
     const combinedTasks: Task[] = [...(tasksRes.data ?? []), ...localTasks];
     const visibleTasks = pid ? combinedTasks.filter((t) => t.project_id === pid) : combinedTasks;
     setTasks(visibleTasks);
+
+    // Fetch audits for all trees so approved cards have complete audit schedules
+    if (visibleTrees.length > 0) {
+      fetchAuditsForTrees(visibleTrees.map((t) => t.id)).then((audits) => {
+        if (seq === loadSeqRef.current && audits) {
+          setAuditsByTree(audits);
+        }
+      });
+    }
 
     // Tree capture cards labelled with the project tree ID (e.g. ARAV-001).
     if (myTrees.length > 0) {
@@ -163,14 +174,109 @@ export default function TaskScreen() {
 
   // assigned + in_progress both show in the Assigned tab
   const assignedTasks = tasks.filter((t) => t.status === 'assigned' || t.status === 'in_progress');
-  const completedTasks = tasks.filter((t) => t.status === 'completed');
-  const approvedTasks = tasks.filter((t) => t.status === 'approved');
   const rejectedTasks = tasks.filter((t) => t.status === 'rejected');
+
+  // Approved Tasks + Approved Trees (locked or approved status)
+  const approvedItems = useMemo(() => {
+    const list: Task[] = [];
+    const seenIds = new Set<string>();
+
+    tasks.forEach((t) => {
+      if (t.status === 'approved') {
+        list.push(t);
+        seenIds.add(t.id);
+        if (t.tree_id) seenIds.add(t.tree_id);
+        if (t.tree_record_id) seenIds.add(t.tree_record_id);
+      }
+    });
+
+    projectTrees.forEach((t) => {
+      const linkedTask = tasks.find((tk) => tk.tree_id === t.id || tk.id === t.id);
+      const isApproved = Boolean(t.locked || linkedTask?.status === 'approved');
+      if (isApproved && !seenIds.has(t.id)) {
+        seenIds.add(t.id);
+        const meta = parseTreeMeta(t.notes);
+        const condition = t.tree_condition || meta.tree_condition || 'Healthy';
+        list.push({
+          id: t.id,
+          tree_id: t.id,
+          tree_record_id: t.id,
+          name: t.species || 'Tree Capture',
+          project_id: t.project_id,
+          assignee_id: t.user_id || '',
+          target_count: 1,
+          priority: 'medium' as const,
+          captured: 1,
+          remaining: 0,
+          progress: 100,
+          status: 'approved' as const,
+          created_at: t.submitted_at,
+          photo_url: t.photo_url,
+          latitude: t.latitude,
+          longitude: t.longitude,
+          tree_condition: condition,
+          tree_condition_color: condition === 'Healthy' ? '#16a34a' : condition === 'Stressed' ? '#d97706' : condition === 'Diseased' ? '#dc2626' : '#4b5563',
+          surveyor: t.surveyor || meta.surveyor,
+        });
+      }
+    });
+
+    return list;
+  }, [tasks, projectTrees]);
+
+  // Completed Tasks (pending review) + Completed Trees (pending review)
+  const completedItems = useMemo(() => {
+    const list: Task[] = [];
+    const seenIds = new Set<string>();
+
+    tasks.forEach((t) => {
+      if (t.status === 'completed') {
+        list.push(t);
+        seenIds.add(t.id);
+        if (t.tree_id) seenIds.add(t.tree_id);
+        if (t.tree_record_id) seenIds.add(t.tree_record_id);
+      }
+    });
+
+    projectTrees.forEach((t) => {
+      const linkedTask = tasks.find((tk) => tk.tree_id === t.id || tk.id === t.id);
+      const isApproved = Boolean(t.locked || linkedTask?.status === 'approved');
+      const isRejected = linkedTask?.status === 'rejected';
+      if (!isApproved && !isRejected && !seenIds.has(t.id)) {
+        seenIds.add(t.id);
+        const meta = parseTreeMeta(t.notes);
+        const condition = t.tree_condition || meta.tree_condition || 'Healthy';
+        list.push({
+          id: t.id,
+          tree_id: t.id,
+          tree_record_id: t.id,
+          name: t.species || 'Tree Capture',
+          project_id: t.project_id,
+          assignee_id: t.user_id || '',
+          target_count: 1,
+          priority: 'medium' as const,
+          captured: 1,
+          remaining: 0,
+          progress: 100,
+          status: 'completed' as const,
+          created_at: t.submitted_at,
+          photo_url: t.photo_url,
+          latitude: t.latitude,
+          longitude: t.longitude,
+          tree_condition: condition,
+          tree_condition_color: condition === 'Healthy' ? '#16a34a' : condition === 'Stressed' ? '#d97706' : condition === 'Diseased' ? '#dc2626' : '#4b5563',
+          surveyor: t.surveyor || meta.surveyor,
+        });
+      }
+    });
+
+    return list;
+  }, [tasks, projectTrees]);
 
   // Tab counts
   const assignedCount = assignedTasks.length;
-  const completedCount = completedTasks.length + projectTrees.length;
-  const approvedCount = approvedTasks.length;
+  const completedCount = completedItems.length;
+  const approvedCount = approvedItems.length;
   const rejectedCount = rejectedTasks.length;
   const reviewedCount = approvedCount + rejectedCount;
   const totalTasks = assignedCount + completedCount + approvedCount + rejectedCount;
@@ -234,17 +340,18 @@ export default function TaskScreen() {
       }
     }
 
-    const projectTreeId = treeRecord ? treeIds[treeRecord.id] || displayTreeId(treeRecord) : undefined;
+    const targetId = treeRecord?.id || task.tree_id || task.id;
+    const projectTreeId = treeRecord ? treeIds[treeRecord.id] || resolveTreeId(treeRecord) || displayTreeId(treeRecord) : undefined;
     const isAssigned = task.status === 'assigned' || task.status === 'in_progress';
     const isRejected = task.status === 'rejected';
+    const isApproved = task.status === 'approved' || Boolean(treeRecord?.locked);
+    const treeAudits = auditsByTree[targetId] || [];
 
     const handlePress = () => {
-      const targetId = treeRecord?.id || task.tree_id || task.id;
       navigation.navigate('TreeDetail', { treeId: targetId });
     };
 
     const handleUpdate = () => {
-      const targetId = treeRecord?.id || task.tree_id || task.id;
       navigation.navigate('EditTree', {
         treeId: targetId,
         taskId: task.id,
@@ -255,9 +362,12 @@ export default function TaskScreen() {
     return (
       <TreeCard
         key={task.id}
-        tree={treeRecord}
+        tree={treeRecord ? { ...treeRecord, locked: isApproved } : null}
         task={task}
+        status={isApproved ? 'approved' : task.status}
+        audits={treeAudits}
         displayId={projectTreeId}
+        showSurveyor={false}
         onPress={isAssigned ? undefined : handlePress}
         onAction={
           isAssigned
@@ -350,18 +460,33 @@ export default function TaskScreen() {
                 count = rejectedCount;
                 denominator = completedCount;
               }
+
               const pct = denominator > 0 ? (count / denominator) * 100 : 0;
               return (
                 <TouchableOpacity
                   key={tab.key}
-                  style={[s.tabBtn, active && { backgroundColor: tab.color + '15', borderColor: tab.color }, !active && { borderColor: tab.color + '40' }]}
+                  style={[
+                    s.tabBtn,
+                    active && { backgroundColor: tab.color + '15', borderColor: tab.color },
+                    !active && { borderColor: tab.color + '40' },
+                  ]}
                   onPress={() => setActiveTab(tab.key)}
                   activeOpacity={0.7}
                 >
-                  <CircularProgress size={56} progress={pct} color={tab.color} strokeWidth={4} trackColor="#E8E8E8">
-                    <Text style={[s.tabCountText, { color: tab.color }]}>{count}/{denominator}</Text>
+                  <CircularProgress
+                    size={56}
+                    progress={pct}
+                    color={tab.color}
+                    strokeWidth={4}
+                    trackColor="#E8E8E8"
+                  >
+                    <Text style={[s.tabCountText, { color: tab.color }]}>
+                      {count}/{denominator}
+                    </Text>
                   </CircularProgress>
-                  <Text numberOfLines={1} style={[s.tabText, active && { color: tab.color }]}>{tab.label}</Text>
+                  <Text numberOfLines={1} style={[s.tabText, active && { color: tab.color }]}>
+                    {tab.label}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
@@ -400,30 +525,8 @@ export default function TaskScreen() {
         {/* Tab content */}
         <View style={s.content}>
           {activeTab === 'assigned' && renderTaskList(filterByDate(assignedTasks))}
-          {activeTab === 'completed' && renderTaskList(filterByDate([...completedTasks, ...projectTrees.map((t) => {
-            const meta = parseTreeMeta(t.notes);
-            const condition = t.tree_condition || meta.tree_condition || 'Healthy';
-            return {
-              id: t.id,
-              name: t.species || 'Tree Capture',
-              project_id: t.project_id,
-              assignee_id: t.user_id || '',
-              target_count: 1,
-              priority: 'medium' as const,
-              captured: 1,
-              remaining: 0,
-              progress: 100,
-              status: 'completed' as const,
-              created_at: t.submitted_at,
-              photo_url: t.photo_url,
-              latitude: t.latitude,
-              longitude: t.longitude,
-              tree_condition: condition,
-              tree_condition_color: condition === 'Healthy' ? '#16a34a' : condition === 'Stressed' ? '#d97706' : condition === 'Diseased' ? '#dc2626' : '#4b5563',
-              surveyor: t.surveyor || meta.surveyor,
-            };
-          })]))}
-          {activeTab === 'approved' && renderTaskList(filterByDate(approvedTasks))}
+          {activeTab === 'completed' && renderTaskList(filterByDate(completedItems))}
+          {activeTab === 'approved' && renderTaskList(filterByDate(approvedItems))}
           {activeTab === 'rejected' && renderTaskList(filterByDate(rejectedTasks))}
         </View>
       </ScrollView>

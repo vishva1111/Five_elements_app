@@ -35,10 +35,26 @@ const CONDITION_COLORS: Record<string, string> = {
 const STATUS_COLORS: Record<string, string> = {
   assigned: '#1a5c2a',
   in_progress: '#1a5c2a',
-  completed: '#22c55e',
-  approved: '#8b5cf6',
+  completed: '#16a34a',
+  approved: '#7c3aed',
   rejected: '#ef4444',
 };
+
+function formatDateCustom(rawDate: string | number | Date | null | undefined): string {
+  if (!rawDate) return '';
+  const d = new Date(rawDate);
+  if (isNaN(d.getTime())) return '';
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec',
+  ];
+  const dayName = days[d.getDay()];
+  const dayNum = d.getDate();
+  const monthName = months[d.getMonth()];
+  const year = d.getFullYear();
+  return `${dayName}, ${dayNum} ${monthName}, ${year}`;
+}
 
 export default function TreeCard({
   tree,
@@ -77,7 +93,7 @@ export default function TreeCard({
 
   const effectiveDueLabel = dueLabelProp || (computedAuditStatus ? getDueLabel(computedAuditStatus) : null);
 
-  const statusColor = STATUS_COLORS[effectiveStatus] || '#1a5c2a';
+  const statusColor = STATUS_COLORS[effectiveStatus] || '#7c3aed';
   const isRejected = effectiveStatus === 'rejected';
   const isAssigned = effectiveStatus === 'assigned' || effectiveStatus === 'in_progress';
 
@@ -88,26 +104,38 @@ export default function TreeCard({
     (task?.task_code) ||
     (task?.id ? task.id.slice(0, 8).toUpperCase() : 'TREE');
 
-  // Title: clean species / tree name (strip "Tree Survey — " prefix)
+  // Title: clean species / tree name (e.g. "Neem (B4D3AE5B)")
   const title = useMemo(() => {
     const rawName = task?.name;
-    const species = tree?.species;
-    if (species && species.trim() && species !== 'Tree Capture') {
+    const species = tree?.species || '';
+    const cleanSpecies = species.trim() && species !== 'Tree Capture' ? species.trim() : '';
+
+    // Extract short hex code from tree.id or task
+    const uuidStr = (tree?.id || task?.tree_id || task?.id || '').replace(/-/g, '');
+    const shortHex = uuidStr ? uuidStr.slice(0, 8).toUpperCase() : '';
+
+    if (cleanSpecies) {
+      if (cleanSpecies.includes('(') && cleanSpecies.includes(')')) {
+        return cleanSpecies;
+      }
       const match = rawName?.match(/\(([A-Fa-f0-9]{4,36})\)/);
       if (match) {
-        return `${species} (${match[1]})`;
+        return `${cleanSpecies} (${match[1]})`;
       }
-      return species;
+      if (shortHex) {
+        return `${cleanSpecies} (${shortHex})`;
+      }
+      return cleanSpecies;
     }
+
     if (rawName) {
       const parts = rawName.split(/ — | - | · /);
-      if (parts.length > 1) {
-        return parts[parts.length - 1].trim();
-      }
-      return rawName.trim();
+      const mainPart = parts.length > 1 ? parts[parts.length - 1].trim() : rawName.trim();
+      return mainPart;
     }
-    return species || 'Tree';
-  }, [task?.name, tree?.species]);
+
+    return shortHex ? `Tree (${shortHex})` : 'Tree';
+  }, [task?.name, task?.tree_id, task?.id, tree?.species, tree?.id]);
 
   // Photo URL resolution
   const photoUrl = task?.photo_url || tree?.photo_url;
@@ -120,7 +148,7 @@ export default function TreeCard({
   const auditRound = auditRoundProp ?? task?.audit_round;
 
   // Rejection notes
-  const rejectionNotes = rejectionNotesProp || task?.review_notes;
+  const rejectionNotes = rejectionNotesProp !== undefined ? rejectionNotesProp : task?.review_notes;
 
   // Coordinates
   const lat = task?.latitude ?? tree?.latitude;
@@ -131,17 +159,10 @@ export default function TreeCard({
 
   // Date
   const rawDate = task?.created_at || tree?.submitted_at || tree?.survey_date;
-  const dateStr = rawDate
-    ? new Date(rawDate).toLocaleDateString('en-IN', {
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      })
-    : '';
+  const dateStr = formatDateCustom(rawDate);
 
   const CardContainer = isAssigned ? View : TouchableOpacity;
-  const containerProps = isAssigned ? {} : { onPress, activeOpacity: 0.8 };
+  const containerProps = isAssigned ? {} : { onPress, activeOpacity: 0.82 };
 
   return (
     <CardContainer
@@ -149,7 +170,7 @@ export default function TreeCard({
       {...containerProps}
     >
       <View style={styles.cardMainRow}>
-        {/* ─── LEFT: 80x80 Photo Thumbnail (Hidden for assigned tasks) ─── */}
+        {/* ─── LEFT: Photo Thumbnail (Hidden for assigned tasks) ─── */}
         {!isAssigned && (
           <View style={styles.photoWrap}>
             {photoUrl ? (
@@ -164,24 +185,12 @@ export default function TreeCard({
 
         {/* ─── RIGHT: Card Content ─── */}
         <View style={styles.cardContent}>
-          {/* Top: ID + Title + Status / Top Action */}
-          <View style={styles.cardTop}>
-            <View style={styles.titleWrap}>
-              <Text style={styles.idText} numberOfLines={1}>
-                ID: <Text style={[styles.idValue, { color: statusColor }]}>{resolvedId}</Text>
-              </Text>
-              <Text style={styles.nameText} numberOfLines={1}>
-                {title}
-              </Text>
-              {!isAssigned && auditRound != null ? (
-                <View style={styles.auditChip}>
-                  <Ionicons name="clipboard-outline" size={10} color="#1a5c2a" />
-                  <Text style={styles.auditChipText}>Audit {auditRound}</Text>
-                </View>
-              ) : null}
-            </View>
+          {/* Row 1: ID (left) + Status Badge (right) */}
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.idText} numberOfLines={1}>
+              ID: <Text style={[styles.idValue, { color: statusColor }]}>{resolvedId}</Text>
+            </Text>
 
-            {/* Top Right Action or Status Badge */}
             {isAssigned ? (
               onAction ? (
                 <TouchableOpacity
@@ -192,12 +201,26 @@ export default function TreeCard({
                   }}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="play-circle-outline" size={15} color="#fff" />
+                  <Ionicons name="play-circle-outline" size={14} color="#fff" />
                   <Text style={styles.startBtnText}>{actionLabel || 'Start'}</Text>
                 </TouchableOpacity>
               ) : null
             ) : (
-              <View style={[styles.statusBadge, { backgroundColor: statusColor + '18', borderColor: statusColor + '30' }]}>
+              <View
+                style={[
+                  styles.statusBadge,
+                  {
+                    backgroundColor:
+                      effectiveStatus === 'approved'
+                        ? '#f3e8ff'
+                        : statusColor + '15',
+                    borderColor:
+                      effectiveStatus === 'approved'
+                        ? '#ddd6fe'
+                        : statusColor + '30',
+                  },
+                ]}
+              >
                 <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
                 <Text style={[styles.statusText, { color: statusColor }]}>
                   {effectiveStatus.toUpperCase()}
@@ -206,7 +229,12 @@ export default function TreeCard({
             )}
           </View>
 
-          {/* Rejection Notes Box */}
+          {/* Row 2: Tree Title / Species */}
+          <Text style={styles.nameText} numberOfLines={1}>
+            {title}
+          </Text>
+
+          {/* Rejection Notes Box if rejected */}
           {isRejected && rejectionNotes ? (
             <View style={styles.rejectionBox}>
               <Ionicons name="alert-circle-outline" size={12} color="#ef4444" />
@@ -216,16 +244,11 @@ export default function TreeCard({
             </View>
           ) : null}
 
-          {/* Badges Row: Condition + Location + Surveyor (Hidden for assigned tasks) */}
+          {/* Row 3: Badges Row (Condition + Location) */}
           {!isAssigned && (
             <View style={styles.badgesRow}>
               {condition ? (
-                <View
-                  style={[
-                    styles.conditionBadge,
-                    { backgroundColor: conditionColor + '15', borderColor: conditionColor + '40' },
-                  ]}
-                >
+                <View style={styles.conditionBadge}>
                   <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
                   <Text style={[styles.conditionText, { color: conditionColor }]}>{condition}</Text>
                 </View>
@@ -242,7 +265,7 @@ export default function TreeCard({
                   }}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="location-outline" size={11} color="#1a5c2a" />
+                  <Ionicons name="location-outline" size={12} color="#15803d" />
                   <Text style={styles.locationText}>Location</Text>
                 </TouchableOpacity>
               ) : null}
@@ -258,13 +281,36 @@ export default function TreeCard({
             </View>
           )}
 
-          {/* Audit Progress Dots + Remaining Time (Shown after approval) */}
+          {/* Row 4: Audit Progress (4 Dots + Overdue/Due Status) */}
           {!isAssigned && effectiveStatus === 'approved' && computedAuditStatus ? (() => {
-            const isAuditNow = effectiveDueLabel === 'Audit Now';
-            const isOverdueLabel = effectiveDueLabel?.includes('overdue');
-            const mainColor = isAuditNow ? '#16a34a' : isOverdueLabel ? '#dc2626' : '#2563eb';
-            const bgColor = isAuditNow ? '#f0fdf4' : isOverdueLabel ? '#fef2f2' : '#eff6ff';
-            const borderColor = isAuditNow ? '#bbf7d0' : isOverdueLabel ? '#fecaca' : '#dbeafe';
+            const isCompleted = computedAuditStatus.allCompleted;
+            const isOverdue = computedAuditStatus.isOverdue || effectiveDueLabel?.toLowerCase().includes('overdue');
+            const isTaskDay = !isCompleted && !isOverdue && (computedAuditStatus.isDue || effectiveDueLabel === 'Audit Now' || effectiveDueLabel?.toLowerCase().includes('due today'));
+            const isRemaining = !isCompleted && !isOverdue && !isTaskDay;
+
+            const mainColor = isCompleted
+              ? '#16a34a'
+              : isOverdue
+              ? '#dc2626'
+              : isTaskDay
+              ? '#16a34a'
+              : '#2563eb';
+
+            const bgColor = isCompleted
+              ? '#f0fdf4'
+              : isOverdue
+              ? '#fef2f2'
+              : isTaskDay
+              ? '#f0fdf4'
+              : '#eff6ff';
+
+            const borderColor = isCompleted
+              ? '#bbf7d0'
+              : isOverdue
+              ? '#fca5a5'
+              : isTaskDay
+              ? '#bbf7d0'
+              : '#dbeafe';
 
             const dotRounds = [1, 2, 3, 4];
 
@@ -280,21 +326,21 @@ export default function TreeCard({
                         style={[
                           styles.auditDot,
                           isDone && { backgroundColor: '#22c55e' },
-                          isActive && { backgroundColor: mainColor, width: 9, height: 9, borderRadius: 4.5 },
-                          !isDone && !isActive && { backgroundColor: '#d1d5db' },
+                          isActive && { backgroundColor: mainColor, width: 8, height: 8, borderRadius: 4 },
+                          !isDone && !isActive && { backgroundColor: '#cbd5e1' },
                         ]}
                       />
                     );
                   })}
                 </View>
-                <Text style={styles.auditProgressText} numberOfLines={1}>
+                <Text style={[styles.auditProgressText, { color: mainColor }]} numberOfLines={1}>
                   {computedAuditStatus.allCompleted ? (
                     <Text style={{ color: '#16a34a', fontWeight: '700' }}>All 4 Audits Completed ✓</Text>
                   ) : (
                     <>
-                      <Text style={{ color: mainColor, fontWeight: '800' }}>Audit {computedAuditStatus.currentRound}</Text>
-                      <Text style={{ color: '#9ca3af' }}> · </Text>
-                      <Text style={{ color: mainColor, fontWeight: '700' }}>
+                      <Text style={{ fontWeight: '800' }}>Audit {computedAuditStatus.currentRound}</Text>
+                      <Text style={{ color: mainColor, opacity: 0.6, fontWeight: '400' }}> · </Text>
+                      <Text style={{ fontWeight: '700' }}>
                         {effectiveDueLabel}
                       </Text>
                     </>
@@ -304,10 +350,10 @@ export default function TreeCard({
             );
           })() : null}
 
-          {/* Date Row */}
+          {/* Row 5: Date Row */}
           {dateStr ? (
             <View style={[styles.dateRow, isAssigned && styles.assignedDateRow]}>
-              <Ionicons name="calendar-outline" size={isAssigned ? 12 : 10} color="#777" />
+              <Ionicons name="calendar-outline" size={12} color="#6b7280" />
               <Text style={[styles.dateText, isAssigned && styles.assignedDateText]}>
                 {isAssigned ? `Assigned: ${dateStr}` : dateStr}
               </Text>
@@ -316,7 +362,7 @@ export default function TreeCard({
         </View>
       </View>
 
-      {/* ─── BOTTOM FULL-WIDTH ACTION BUTTON (Footer CTA) ─── */}
+      {/* ─── OPTIONAL BOTTOM ACTION BUTTON ─── */}
       {!isAssigned && onAction && actionLabel && (actionVariant !== 'audit' || (computedAuditStatus && computedAuditStatus.isDue)) ? (
         <TouchableOpacity
           style={styles.actionBtnTouch}
@@ -368,239 +414,243 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
     borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
-    elevation: 3,
+    padding: 9,
+    marginBottom: 9,
+    elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1.5 },
     shadowOpacity: 0.07,
     shadowRadius: 6,
     borderLeftWidth: 3.5,
-    borderLeftColor: '#1a5c2a',
+    borderLeftColor: '#7c3aed',
     flexDirection: 'column',
   },
   cardMainRow: {
     flexDirection: 'row',
+    alignItems: 'center',
   },
   photoWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 14,
+    width: 76,
+    height: 76,
+    borderRadius: 12,
     overflow: 'hidden',
-    marginRight: 12,
+    marginRight: 10,
   },
   photo: {
-    width: 80,
-    height: 80,
+    width: 76,
+    height: 76,
   },
   photoPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 14,
+    width: 76,
+    height: 76,
+    borderRadius: 12,
     backgroundColor: '#E8F5E9',
     alignItems: 'center',
     justifyContent: 'center',
   },
   cardContent: {
     flex: 1,
+    justifyContent: 'center',
   },
-  cardTop: {
+  cardHeaderRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
-  },
-  titleWrap: {
-    flex: 1,
+    gap: 4,
   },
   idText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#999',
-    marginBottom: 2,
+    color: '#6b7280',
+    flex: 1,
   },
   idValue: {
-    color: '#1a5c2a',
-    fontFamily: 'monospace',
     fontWeight: '800',
+    fontSize: 10.5,
   },
   nameText: {
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '800',
-    color: '#222',
-  },
-  auditChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    marginTop: 3,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    backgroundColor: '#E8F5E9',
-    borderRadius: 10,
-  },
-  auditChipText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#1a5c2a',
+    color: '#111827',
+    marginTop: 1,
+    marginBottom: 3,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    gap: 3,
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderWidth: 1,
   },
   statusDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+    width: 4.5,
+    height: 4.5,
+    borderRadius: 2.25,
   },
   statusText: {
-    fontSize: 9,
+    fontSize: 8.5,
     fontWeight: '800',
+    letterSpacing: 0.3,
   },
   startBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     backgroundColor: '#1a5c2a',
-    borderRadius: 14,
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-    elevation: 3,
-    shadowColor: '#1a5c2a',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    borderRadius: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
   },
   startBtnText: {
     color: '#fff',
     fontWeight: '800',
-    fontSize: 12,
-    letterSpacing: 0.4,
+    fontSize: 10,
   },
   rejectionBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 4,
-    marginTop: 6,
+    marginTop: 3,
+    marginBottom: 3,
     backgroundColor: '#fef2f2',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderLeftWidth: 2,
     borderLeftColor: '#ef4444',
   },
   rejectionText: {
-    fontSize: 10,
+    fontSize: 9.5,
     color: '#ef4444',
     flex: 1,
-    lineHeight: 14,
+    lineHeight: 13,
     fontWeight: '600',
   },
   badgesRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 6,
+    gap: 5,
+    marginBottom: 2,
   },
   conditionBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    backgroundColor: '#e8f5e9',
     borderWidth: 1,
+    borderColor: '#bbf7d0',
   },
   conditionDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
   },
   conditionText: {
     fontWeight: '700',
     fontSize: 10,
+    color: '#15803d',
   },
   locationLink: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    backgroundColor: '#E8F5E9',
-    borderRadius: 12,
+    gap: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: '#e8f5e9',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
   },
   locationText: {
     fontSize: 10,
-    color: '#1a5c2a',
-    fontWeight: '800',
+    color: '#15803d',
+    fontWeight: '700',
   },
   surveyorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 2,
   },
   surveyorText: {
-    fontSize: 10,
+    fontSize: 9.5,
     color: '#777',
     maxWidth: 90,
+  },
+  auditProgressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 2,
+    paddingVertical: 2.5,
+    paddingHorizontal: 6,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+  },
+  dotsWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  auditDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  auditProgressText: {
+    fontSize: 9.5,
   },
   dateRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    marginTop: 5,
+    marginTop: 2,
   },
   assignedDateRow: {
-    marginTop: 8,
-    gap: 5,
+    marginTop: 4,
+    gap: 3,
   },
   dateText: {
-    fontSize: 10,
-    color: '#888',
+    fontSize: 9.5,
+    color: '#6b7280',
+    fontWeight: '600',
   },
   assignedDateText: {
-    fontSize: 11,
-    color: '#666',
+    fontSize: 9.5,
+    color: '#6b7280',
     fontWeight: '600',
   },
   actionBtnTouch: {
-    marginTop: 10,
-    borderRadius: 14,
-    elevation: 3,
-    shadowColor: '#dc2626',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.28,
-    shadowRadius: 6,
+    marginTop: 6,
+    borderRadius: 10,
+    overflow: 'hidden',
   },
   updateGradientBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
   },
   auditGradientBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
   },
   actionIconBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
@@ -608,7 +658,7 @@ const styles = StyleSheet.create({
   updateBtnText: {
     color: '#fff',
     fontWeight: '800',
-    fontSize: 13,
+    fontSize: 11,
     letterSpacing: 0.3,
   },
   defaultActionBtn: {
@@ -616,37 +666,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-  auditProgressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 6,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    backgroundColor: '#eff6ff',
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: '#dbeafe',
-  },
-  dotsWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  auditDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
-  auditProgressText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#1e40af',
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
   },
 });

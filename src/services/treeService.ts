@@ -13,6 +13,7 @@ import {
   makeProjectPrefix,
   nextProjectSequence,
   parseTreeIdLoose,
+  parseTreeMeta,
   resolveTreeId,
 } from '../utils/treeId';
 
