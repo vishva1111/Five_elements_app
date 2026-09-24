@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { TreeRecord, Task, TreeCondition } from '../types';
 import { displayTreeId, resolveTreeId } from '../utils/treeId';
 
@@ -111,151 +112,172 @@ export default function TreeCard({
       style={[styles.card, { borderLeftColor: statusColor }]}
       {...containerProps}
     >
-      {/* ─── LEFT: 80x80 Photo Thumbnail (Hidden for assigned tasks) ─── */}
-      {!isAssigned && (
-        <View style={styles.photoWrap}>
-          {photoUrl ? (
-            <Image source={{ uri: photoUrl }} style={styles.photo} resizeMode="cover" />
-          ) : (
-            <View style={styles.photoPlaceholder}>
-              <Ionicons name="leaf-outline" size={28} color="#1a5c2a" />
-            </View>
-          )}
-        </View>
-      )}
-
-      {/* ─── RIGHT: Card Content ─── */}
-      <View style={styles.cardContent}>
-        {/* Top: ID + Title + Status / Top Action */}
-        <View style={styles.cardTop}>
-          <View style={styles.titleWrap}>
-            <Text style={styles.idText} numberOfLines={1}>
-              ID: <Text style={[styles.idValue, { color: statusColor }]}>{resolvedId}</Text>
-            </Text>
-            <Text style={styles.nameText} numberOfLines={1}>
-              {title}
-            </Text>
-            {!isAssigned && auditRound != null ? (
-              <View style={styles.auditChip}>
-                <Ionicons name="clipboard-outline" size={10} color="#1a5c2a" />
-                <Text style={styles.auditChipText}>Audit {auditRound}</Text>
-              </View>
-            ) : null}
-          </View>
-
-          {/* Top Right Action or Status Badge */}
-          {isAssigned ? (
-            onAction ? (
-              <TouchableOpacity
-                style={[styles.startBtn, { backgroundColor: statusColor, shadowColor: statusColor }]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  onAction();
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="play-circle-outline" size={15} color="#fff" />
-                <Text style={styles.startBtnText}>{actionLabel || 'Start'}</Text>
-              </TouchableOpacity>
-            ) : null
-          ) : (
-            <View style={[styles.statusBadge, { backgroundColor: statusColor + '18', borderColor: statusColor + '30' }]}>
-              <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-              <Text style={[styles.statusText, { color: statusColor }]}>
-                {effectiveStatus.toUpperCase()}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Rejection Notes Box */}
-        {isRejected && rejectionNotes ? (
-          <View style={styles.rejectionBox}>
-            <Ionicons name="alert-circle-outline" size={12} color="#ef4444" />
-            <Text style={styles.rejectionText} numberOfLines={2}>
-              {rejectionNotes}
-            </Text>
-          </View>
-        ) : null}
-
-        {/* Badges Row: Condition + Location + Surveyor (Hidden for assigned tasks) */}
+      <View style={styles.cardMainRow}>
+        {/* ─── LEFT: 80x80 Photo Thumbnail (Hidden for assigned tasks) ─── */}
         {!isAssigned && (
-          <View style={styles.badgesRow}>
-            {condition ? (
-              <View
-                style={[
-                  styles.conditionBadge,
-                  { backgroundColor: conditionColor + '15', borderColor: conditionColor + '40' },
-                ]}
-              >
-                <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
-                <Text style={[styles.conditionText, { color: conditionColor }]}>{condition}</Text>
+          <View style={styles.photoWrap}>
+            {photoUrl ? (
+              <Image source={{ uri: photoUrl }} style={styles.photo} resizeMode="cover" />
+            ) : (
+              <View style={styles.photoPlaceholder}>
+                <Ionicons name="leaf-outline" size={28} color="#1a5c2a" />
               </View>
-            ) : null}
-
-            {lat != null && lng != null ? (
-              <TouchableOpacity
-                style={styles.locationLink}
-                onPress={(e) => {
-                  if (onLocationPress) {
-                    e.stopPropagation();
-                    onLocationPress();
-                  }
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="location-outline" size={11} color="#1a5c2a" />
-                <Text style={styles.locationText}>Location</Text>
-              </TouchableOpacity>
-            ) : null}
-
-            {showSurveyor && surveyor ? (
-              <View style={styles.surveyorRow}>
-                <Ionicons name="person-outline" size={10} color="#888" />
-                <Text style={styles.surveyorText} numberOfLines={1}>
-                  {surveyor}
-                </Text>
-              </View>
-            ) : null}
+            )}
           </View>
         )}
 
-        {/* Date Row */}
-        {dateStr ? (
-          <View style={[styles.dateRow, isAssigned && styles.assignedDateRow]}>
-            <Ionicons name="calendar-outline" size={isAssigned ? 12 : 10} color="#777" />
-            <Text style={[styles.dateText, isAssigned && styles.assignedDateText]}>
-              {isAssigned ? `Assigned: ${dateStr}` : dateStr}
-            </Text>
-          </View>
-        ) : null}
+        {/* ─── RIGHT: Card Content ─── */}
+        <View style={styles.cardContent}>
+          {/* Top: ID + Title + Status / Top Action */}
+          <View style={styles.cardTop}>
+            <View style={styles.titleWrap}>
+              <Text style={styles.idText} numberOfLines={1}>
+                ID: <Text style={[styles.idValue, { color: statusColor }]}>{resolvedId}</Text>
+              </Text>
+              <Text style={styles.nameText} numberOfLines={1}>
+                {title}
+              </Text>
+              {!isAssigned && auditRound != null ? (
+                <View style={styles.auditChip}>
+                  <Ionicons name="clipboard-outline" size={10} color="#1a5c2a" />
+                  <Text style={styles.auditChipText}>Audit {auditRound}</Text>
+                </View>
+              ) : null}
+            </View>
 
-        {/* Bottom Full-Width Action Button (e.g. Update Submission for rejected, or Audit) */}
-        {!isAssigned && onAction && actionLabel ? (
-          <TouchableOpacity
-            style={[
-              styles.bottomActionBtn,
-              actionVariant === 'update' || isRejected
-                ? styles.updateBtn
-                : actionVariant === 'audit'
-                ? styles.auditBtn
-                : styles.defaultActionBtn,
-            ]}
-            onPress={(e) => {
-              e.stopPropagation();
-              onAction();
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name={actionIcon || (isRejected ? 'refresh-circle-outline' : 'clipboard-outline')}
-              size={15}
-              color="#fff"
-            />
-            <Text style={styles.bottomActionText}>{actionLabel}</Text>
-          </TouchableOpacity>
-        ) : null}
+            {/* Top Right Action or Status Badge */}
+            {isAssigned ? (
+              onAction ? (
+                <TouchableOpacity
+                  style={[styles.startBtn, { backgroundColor: statusColor, shadowColor: statusColor }]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onAction();
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="play-circle-outline" size={15} color="#fff" />
+                  <Text style={styles.startBtnText}>{actionLabel || 'Start'}</Text>
+                </TouchableOpacity>
+              ) : null
+            ) : (
+              <View style={[styles.statusBadge, { backgroundColor: statusColor + '18', borderColor: statusColor + '30' }]}>
+                <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+                <Text style={[styles.statusText, { color: statusColor }]}>
+                  {effectiveStatus.toUpperCase()}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Rejection Notes Box */}
+          {isRejected && rejectionNotes ? (
+            <View style={styles.rejectionBox}>
+              <Ionicons name="alert-circle-outline" size={12} color="#ef4444" />
+              <Text style={styles.rejectionText} numberOfLines={2}>
+                {rejectionNotes}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Badges Row: Condition + Location + Surveyor (Hidden for assigned tasks) */}
+          {!isAssigned && (
+            <View style={styles.badgesRow}>
+              {condition ? (
+                <View
+                  style={[
+                    styles.conditionBadge,
+                    { backgroundColor: conditionColor + '15', borderColor: conditionColor + '40' },
+                  ]}
+                >
+                  <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
+                  <Text style={[styles.conditionText, { color: conditionColor }]}>{condition}</Text>
+                </View>
+              ) : null}
+
+              {lat != null && lng != null ? (
+                <TouchableOpacity
+                  style={styles.locationLink}
+                  onPress={(e) => {
+                    if (onLocationPress) {
+                      e.stopPropagation();
+                      onLocationPress();
+                    }
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="location-outline" size={11} color="#1a5c2a" />
+                  <Text style={styles.locationText}>Location</Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {showSurveyor && surveyor ? (
+                <View style={styles.surveyorRow}>
+                  <Ionicons name="person-outline" size={10} color="#888" />
+                  <Text style={styles.surveyorText} numberOfLines={1}>
+                    {surveyor}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          )}
+
+          {/* Date Row */}
+          {dateStr ? (
+            <View style={[styles.dateRow, isAssigned && styles.assignedDateRow]}>
+              <Ionicons name="calendar-outline" size={isAssigned ? 12 : 10} color="#777" />
+              <Text style={[styles.dateText, isAssigned && styles.assignedDateText]}>
+                {isAssigned ? `Assigned: ${dateStr}` : dateStr}
+              </Text>
+            </View>
+          ) : null}
+        </View>
       </View>
+
+      {/* ─── BOTTOM FULL-WIDTH ACTION BUTTON (Footer CTA) ─── */}
+      {!isAssigned && onAction && actionLabel ? (
+        <TouchableOpacity
+          style={styles.actionBtnTouch}
+          onPress={(e) => {
+            e.stopPropagation();
+            onAction();
+          }}
+          activeOpacity={0.82}
+        >
+          {isRejected || actionVariant === 'update' ? (
+            <LinearGradient
+              colors={['#f87171', '#ef4444', '#dc2626']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.updateGradientBtn}
+            >
+              <View style={styles.actionIconBadge}>
+                <Ionicons name="create" size={13} color="#dc2626" />
+              </View>
+              <Text style={styles.updateBtnText}>{actionLabel}</Text>
+              <Ionicons name="arrow-forward" size={14} color="#fff" />
+            </LinearGradient>
+          ) : actionVariant === 'audit' ? (
+            <LinearGradient
+              colors={['#2e7d32', '#1a5c2a']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.auditGradientBtn}
+            >
+              <View style={[styles.actionIconBadge, { backgroundColor: '#E8F5E9' }]}>
+                <Ionicons name="clipboard" size={13} color="#1a5c2a" />
+              </View>
+              <Text style={styles.updateBtnText}>{actionLabel}</Text>
+              <Ionicons name="arrow-forward" size={14} color="#fff" />
+            </LinearGradient>
+          ) : (
+            <View style={styles.defaultActionBtn}>
+              <Ionicons name={actionIcon || 'chevron-forward-circle-outline'} size={15} color="#fff" />
+              <Text style={styles.updateBtnText}>{actionLabel}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      ) : null}
     </CardContainer>
   );
 }
@@ -267,12 +289,15 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 10,
     elevation: 3,
-    shadowColor: '#1a5c2a',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.07,
     shadowRadius: 6,
     borderLeftWidth: 3.5,
     borderLeftColor: '#1a5c2a',
+    flexDirection: 'column',
+  },
+  cardMainRow: {
     flexDirection: 'row',
   },
   photoWrap: {
@@ -463,36 +488,55 @@ const styles = StyleSheet.create({
     color: '#666',
     fontWeight: '600',
   },
-  bottomActionBtn: {
+  actionBtnTouch: {
+    marginTop: 10,
+    borderRadius: 14,
+    elevation: 3,
+    shadowColor: '#dc2626',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.28,
+    shadowRadius: 6,
+  },
+  updateGradientBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    borderRadius: 10,
-    paddingVertical: 8,
-    marginTop: 8,
-    elevation: 2,
+    gap: 8,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
   },
-  updateBtn: {
-    backgroundColor: '#ef4444',
-    shadowColor: '#ef4444',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+  auditGradientBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
   },
-  auditBtn: {
-    backgroundColor: '#1a5c2a',
-    shadowColor: '#1a5c2a',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+  actionIconBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  updateBtnText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 13,
+    letterSpacing: 0.3,
   },
   defaultActionBtn: {
     backgroundColor: '#1a5c2a',
-  },
-  bottomActionText: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
   },
 });

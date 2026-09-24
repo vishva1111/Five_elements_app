@@ -935,3 +935,49 @@
 {"_e":"metro:bundling:progress","_t":1790168027289,"id":"2","progress":0.999,"total":1512,"current":1512}
 {"_e":"metro:bundling:done","_t":1790168027362,"id":"2","total":1512,"ms":1388.9905}
 {"_e":"metro:client_log","_t":1790168051490,"level":"warn","data":["[TreeApp] Database is missing the tree_monitoring_records table. Run supabase/migrations/001_add_tree_columns.sql once in the Supabase SQL Editor → New query. Until then, tree IDs are stored on this device only and monitoring rounds cannot be saved."]}
+{"_e":"metro:bundling:failed","_t":1790168590614,"id":null,"message":"SyntaxError: D:\\5eliment\\app\\treeapp\\src\\components\\TreeCard.tsx: Unexpected token (283:2)\n\n  281 |     </CardContainer>\n  282 |   );\n> 283 |   );\n      |   ^\n  284 | }\n  285 |\n  286 | const styles = StyleSheet.create({","importStack":null,"filename":"src\\components\\TreeCard.tsx","targetModuleName":null,"originModulePath":null}
+{"_e":"metro:bundling:failed","_t":1790168590823,"id":null,"message":"SyntaxError: D:\\5eliment\\app\\treeapp\\src\\components\\TreeCard.tsx: Unexpected token (283:2)\n\n  281 |     </CardContainer>\n  282 |   );\n> 283 |   );\n      |   ^\n  284 | }\n  285 |\n  286 | const styles = StyleSheet.create({","importStack":null,"filename":"src\\components\\TreeCard.tsx","targetModuleName":null,"originModulePath":null}
+{"_e":"metro:client_log","_t":1790168709641,"level":"warn","data":["[TreeApp] Database is missing the tree_monitoring_records table. Run supabase/migrations/001_add_tree_columns.sql once in the Supabase SQL Editor → New query. Until then, tree IDs are stored on this device only and monitoring rounds cannot be saved."]}
+{"_e":"root:init","_t":1790229912513,"format":"v0-jsonl","version":"57.0.26"}
+{"_e":"env:mode","_t":1790229912531,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1790229912551,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_MAPBOX_TOKEN":"","EXPO_PUBLIC_SUPABASE_ANON_KEY":"your_supabase_anon_key_here","EXPO_PUBLIC_SUPABASE_URL":"https://iauhmhkmreojmfahvxxh.supabase.co"}}
+{"_e":"devserver:start","_t":1790229921485,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1790229928693,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1790229932448,"plugins":[]}
+{"_e":"metro:instantiate","_t":1790229950759,"atlas":false,"workers":10,"host":"::","port":8081}
+{"_e":"root:init","_t":1790230398387,"format":"v0-jsonl","version":"57.0.26"}
+{"_e":"env:mode","_t":1790230398389,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1790230398395,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_MAPBOX_TOKEN":"","EXPO_PUBLIC_SUPABASE_ANON_KEY":"your_supabase_anon_key_here","EXPO_PUBLIC_SUPABASE_URL":"https://iauhmhkmreojmfahvxxh.supabase.co"}}
+{"_e":"devserver:start","_t":1790230399131,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1790230399740,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1790230400353,"plugins":[]}
+{"_e":"metro:instantiate","_t":1790230419736,"atlas":false,"workers":10,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1790230442602,"id":"3","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1790230442603,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1790230442618,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1790230442780,"id":"3","progress":0.04000000000000001,"total":4,"current":2}
+{"_e":"metro:bundling:progress","_t":1790230442897,"id":"3","progress":0.04000000000000001,"total":134,"current":11}
+{"_e":"metro:bundling:progress","_t":1790230443012,"id":"3","progress":0.04000000000000001,"total":270,"current":20}
+{"_e":"metro:bundling:progress","_t":1790230443112,"id":"3","progress":0.04000000000000001,"total":357,"current":55}
+{"_e":"metro:bundling:progress","_t":1790230443212,"id":"3","progress":0.05301428287532675,"total":443,"current":102}
+{"_e":"metro:bundling:progress","_t":1790230443340,"id":"3","progress":0.07587220768044749,"total":501,"current":138}
+{"_e":"metro:bundling:progress","_t":1790230443440,"id":"3","progress":0.10037121152791917,"total":565,"current":179}
+{"_e":"metro:bundling:progress","_t":1790230443540,"id":"3","progress":0.14783341728411814,"total":619,"current":238}
+{"_e":"metro:bundling:progress","_t":1790230443640,"id":"3","progress":0.17483157210765707,"total":684,"current":286}
+{"_e":"metro:bundling:progress","_t":1790230443740,"id":"3","progress":0.22694637345679008,"total":720,"current":343}
+{"_e":"metro:bundling:progress","_t":1790230443860,"id":"3","progress":0.27944808608495375,"total":751,"current":397}
+{"_e":"metro:bundling:progress","_t":1790230443966,"id":"3","progress":0.3696170630099193,"total":829,"current":504}
+{"_e":"metro:bundling:progress","_t":1790230444066,"id":"3","progress":0.3946075570956622,"total":944,"current":593}
+{"_e":"metro:bundling:progress","_t":1790230444166,"id":"3","progress":0.4643871401950601,"total":1014,"current":691}
+{"_e":"metro:bundling:progress","_t":1790230444268,"id":"3","progress":0.5201299985287076,"total":1033,"current":745}
+{"_e":"metro:bundling:progress","_t":1790230444368,"id":"3","progress":0.6238074417009603,"total":1080,"current":853}
+{"_e":"metro:bundling:progress","_t":1790230444468,"id":"3","progress":0.7422718973277469,"total":1134,"current":977}
+{"_e":"metro:bundling:progress","_t":1790230444569,"id":"3","progress":0.7531813051400181,"total":1173,"current":1018}
+{"_e":"metro:bundling:progress","_t":1790230444669,"id":"3","progress":0.8608143799177012,"total":1205,"current":1118}
+{"_e":"metro:bundling:progress","_t":1790230444774,"id":"3","progress":0.8608143799177012,"total":1333,"current":1168}
+{"_e":"metro:bundling:progress","_t":1790230444882,"id":"3","progress":0.8895610993219812,"total":1390,"current":1311}
+{"_e":"metro:bundling:progress","_t":1790230444982,"id":"3","progress":0.9164800832129837,"total":1453,"current":1391}
+{"_e":"metro:bundling:progress","_t":1790230445087,"id":"3","progress":0.9349231613035884,"total":1481,"current":1432}
+{"_e":"metro:bundling:progress","_t":1790230445204,"id":"3","progress":0.999,"total":1512,"current":1512}
+{"_e":"metro:bundling:done","_t":1790230445338,"id":"3","total":1512,"ms":2735.4613}
+{"_e":"metro:client_log","_t":1790230504090,"level":"warn","data":["[TreeApp] Database is missing the tree_monitoring_records table. Run supabase/migrations/001_add_tree_columns.sql once in the Supabase SQL Editor → New query. Until then, tree IDs are stored on this device only and monitoring rounds cannot be saved."]}
