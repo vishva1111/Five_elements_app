@@ -320,6 +320,66 @@ window.panToUserLocation = function(zoom) {
 
 ${hasUserFix ? `window.updateUserLocation(${userLat}, ${userLng}, ${userAccuracy ?? 0}, false);` : ''}
 
+// ─── Real-Time Live Direction Route Line & Distance Pill (Leaflet) ───
+var directionLine = null;
+var directionPill = null;
+
+window.updateDirectionLine = function(uLat, uLng, tLat, tLng, metersText) {
+  if (!uLat || !uLng || !tLat || !tLng) {
+    if (directionLine) { map.removeLayer(directionLine); directionLine = null; }
+    if (directionPill) { map.removeLayer(directionPill); directionPill = null; }
+    return;
+  }
+  var latLngs = [[uLat, uLng], [tLat, tLng]];
+  if (!directionLine) {
+    directionLine = L.polyline(latLngs, {
+      color: '#0284c7',
+      weight: 4,
+      dashArray: '8, 8',
+      opacity: 0.95,
+      lineCap: 'round',
+      lineJoin: 'round',
+      className: 'direction-route-line'
+    }).addTo(map);
+  } else {
+    directionLine.setLatLngs(latLngs);
+  }
+
+  var midLat = (uLat + tLat) / 2;
+  var midLng = (uLng + tLng) / 2;
+  var pillHtml = '<div class="route-distance-badge"><span>🚶 ' + (metersText || '') + '</span></div>';
+  if (!directionPill) {
+    directionPill = L.marker([midLat, midLng], {
+      icon: L.divIcon({
+        className: 'direction-pill-icon',
+        html: pillHtml,
+        iconSize: [110, 28],
+        iconAnchor: [55, 14]
+      }),
+      interactive: false,
+      zIndexOffset: 1500
+    }).addTo(map);
+  } else {
+    directionPill.setLatLng([midLat, midLng]);
+    directionPill.setIcon(L.divIcon({
+      className: 'direction-pill-icon',
+      html: pillHtml,
+      iconSize: [110, 28],
+      iconAnchor: [55, 14]
+    }));
+  }
+};
+
+window.fitRouteBounds = function(uLat, uLng, tLat, tLng) {
+  if (!uLat || !uLng || !tLat || !tLng) return;
+  try {
+    var b = L.latLngBounds([[uLat, uLng], [tLat, tLng]]);
+    if (b.isValid()) {
+      map.fitBounds(b.pad(0.32), { maxZoom: 19, animate: true });
+    }
+  } catch(e) {}
+};
+
 // ─── Nearest-tree highlight (driven from React Native) ──────────────────────
 window._treeMs = {};
 window.highlightNearestTree = function(id) {
@@ -371,7 +431,12 @@ window.zoomToBoundary = function() {
   }
 };
 ${
-  hasFocus
+  hasFocus && hasUserFix && targetLat && targetLng
+    ? `setTimeout(function(){
+         window.updateDirectionLine(${userLat}, ${userLng}, ${targetLat}, ${targetLng}, '');
+         window.fitRouteBounds(${userLat}, ${userLng}, ${targetLat}, ${targetLng});
+       }, 350);`
+    : hasFocus
     ? `setTimeout(function(){ map.setView([${centerLat}, ${centerLng}], 19); }, 200);`
     : hasBoundary
       ? `setTimeout(function(){ window.zoomToBoundary(); }, 250);`
@@ -444,6 +509,7 @@ html,body,#map{margin:0;padding:0;width:100%;height:100%;background:#0b1320;}
 @keyframes gpsPulse{0%{transform:scale(0.9);opacity:0.7;}70%{transform:scale(2.2);opacity:0;}100%{transform:scale(2.2);opacity:0;}}
 @keyframes nearRing{0%{box-shadow:0 0 0 0 rgba(240,145,37,0.85),0 3px 12px rgba(0,0,0,0.5);}70%{box-shadow:0 0 0 18px rgba(240,145,37,0),0 3px 12px rgba(0,0,0,0.5);}100%{box-shadow:0 0 0 0 rgba(240,145,37,0),0 3px 12px rgba(0,0,0,0.5);}}
 .near-hl{border-color:#F09125 !important;box-shadow:0 0 16px 5px rgba(240,145,37,0.75),0 3px 12px rgba(0,0,0,0.5) !important;animation:nearRing 1.4s infinite !important;filter:saturate(1.4) brightness(1.15);}
+.route-distance-badge{background:rgba(15,23,42,0.92);color:#38bdf8;border:1.5px solid #0284c7;padding:4px 10px;border-radius:14px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:11px;font-weight:800;letter-spacing:0.4px;box-shadow:0 4px 14px rgba(0,0,0,0.5);display:inline-flex;align-items:center;gap:4px;white-space:nowrap;pointer-events:none;}
 </style>
 </head>
 <body>
@@ -464,6 +530,95 @@ map.addControl(new mapboxgl.NavigationControl({showCompass:false}),'bottom-right
 
 // ─── Real-Time Live User Location Marker & Accuracy Circle ───
 var userMarker=null, userPopup=null, pendingUserFix=null, mapLoaded=false;
+
+// ─── Real-Time Live Direction Route Line & Distance Pill (Mapbox) ───
+var pendingDirectionLine = null;
+var directionPillMarker = null;
+
+function applyDirectionLine() {
+  if (!mapLoaded) return;
+  var d = pendingDirectionLine;
+  if (!d || !d.uLat || !d.uLng || !d.tLat || !d.tLng) {
+    if (map.getSource('direction-line-src')) {
+      map.getSource('direction-line-src').setData({ type: 'FeatureCollection', features: [] });
+    }
+    if (directionPillMarker) {
+      directionPillMarker.remove();
+      directionPillMarker = null;
+    }
+    return;
+  }
+
+  var geojson = {
+    type: 'Feature',
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [d.uLng, d.uLat],
+        [d.tLng, d.tLat]
+      ]
+    },
+    properties: {}
+  };
+
+  var src = map.getSource('direction-line-src');
+  if (!src) {
+    map.addSource('direction-line-src', { type: 'geojson', data: geojson });
+    map.addLayer({
+      id: 'direction-line-glow',
+      type: 'line',
+      source: 'direction-line-src',
+      paint: {
+        'line-color': '#38bdf8',
+        'line-width': 8,
+        'line-opacity': 0.35,
+        'line-blur': 3
+      }
+    });
+    map.addLayer({
+      id: 'direction-line',
+      type: 'line',
+      source: 'direction-line-src',
+      paint: {
+        'line-color': '#0284c7',
+        'line-width': 4,
+        'line-dasharray': [2, 2],
+        'line-opacity': 0.95
+      }
+    });
+  } else {
+    src.setData(geojson);
+  }
+
+  var midLat = (d.uLat + d.tLat) / 2;
+  var midLng = (d.uLng + d.tLng) / 2;
+  var pillText = '<span>🚶 ' + (d.metersText || '') + '</span>';
+  if (!directionPillMarker) {
+    var el = document.createElement('div');
+    el.className = 'route-distance-badge';
+    el.innerHTML = pillText;
+    directionPillMarker = new mapboxgl.Marker({ element: el, anchor: 'center' })
+      .setLngLat([midLng, midLat])
+      .addTo(map);
+  } else {
+    directionPillMarker.setLngLat([midLng, midLat]);
+    var el = directionPillMarker.getElement();
+    if (el) el.innerHTML = pillText;
+  }
+}
+
+window.updateDirectionLine = function(uLat, uLng, tLat, tLng, metersText) {
+  pendingDirectionLine = { uLat: uLat, uLng: uLng, tLat: tLat, tLng: tLng, metersText: metersText };
+  if (mapLoaded) applyDirectionLine();
+};
+
+window.fitRouteBounds = function(uLat, uLng, tLat, tLng) {
+  if (!mapLoaded || !uLat || !uLng || !tLat || !tLng) return;
+  try {
+    var bounds = new mapboxgl.LngLatBounds([uLng, uLat], [tLng, tLat]);
+    map.fitBounds(bounds, { padding: 90, maxZoom: 19, duration: 800 });
+  } catch(e) {}
+};
 
 // ─── Nearest-tree highlight (driven from React Native) ──────────────────────
 var treeMarkers={};
@@ -570,6 +725,7 @@ var treesGeoJSON={
 map.on('load',function(){
   mapLoaded=true;
   if(pendingUserFix) applyUserFix();
+  if(pendingDirectionLine) applyDirectionLine();
 
   // Add tree markers
   treesGeoJSON.features.forEach(function(f){
@@ -713,7 +869,12 @@ map.on('load',function(){
   };
 
   ${
-    hasFocus
+    hasFocus && hasUserFix && targetLat && targetLng
+      ? `
+    window.updateDirectionLine(${userLat}, ${userLng}, ${targetLat}, ${targetLng}, '');
+    setTimeout(function(){ window.fitRouteBounds(${userLat}, ${userLng}, ${targetLat}, ${targetLng}); }, 450);
+    `
+      : hasFocus
       ? `setTimeout(function(){ map.flyTo({ center: [${centerLng}, ${centerLat}], zoom: 19, essential: true }); }, 200);`
       : hasBoundary
         ? `setTimeout(function(){ window.zoomToBoundary(); }, 200);`
@@ -759,7 +920,6 @@ export default function TreeMapScreen() {
   const [selectedTree, setSelectedTree] = useState<TreeRecord | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [detailSheetH, setDetailSheetH] = useState(0);
-  const [isolateFocusedTree, setIsolateFocusedTree] = useState<boolean>(Boolean(focusTreeId));
   const [geofenceAlerts, setGeofenceAlerts] = useState<GeofenceAlert[]>([]);
   const [showAlerts, setShowAlerts] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'enter' | 'exit' } | null>(null);
@@ -928,6 +1088,123 @@ export default function TreeMapScreen() {
     },
     []
   );
+
+  // ─── Real-Time Walking Directions & Distance Line to Tree ─────────────────
+  const targetTree = useMemo(() => {
+    if (selectedTree) return selectedTree;
+    if (focusTreeId) {
+      return allTrees.find((t) => t.id === focusTreeId) || null;
+    }
+    return null;
+  }, [selectedTree, focusTreeId, allTrees]);
+
+  const targetCoords = useMemo(() => {
+    const lat = targetTree?.latitude ?? focusLat;
+    const lng = targetTree?.longitude ?? focusLng;
+    if (lat != null && lng != null && !isNaN(Number(lat)) && !isNaN(Number(lng))) {
+      return { latitude: Number(lat), longitude: Number(lng) };
+    }
+    return null;
+  }, [targetTree, focusLat, focusLng]);
+
+  const directionMetrics = useMemo(() => {
+    if (!userCoords || !targetCoords) return null;
+    const dist = haversineDistance(
+      userCoords.latitude,
+      userCoords.longitude,
+      targetCoords.latitude,
+      targetCoords.longitude
+    );
+    const bearing = calculateBearing(
+      userCoords.latitude,
+      userCoords.longitude,
+      targetCoords.latitude,
+      targetCoords.longitude
+    );
+    const compass = getCompassDirection(bearing);
+    const distText = formatDistanceMeters(dist);
+    return {
+      distance: dist,
+      bearing,
+      compass,
+      distText,
+      isNearFence: dist <= 15,
+      isUnderTree: dist <= 3,
+    };
+  }, [userCoords, targetCoords]);
+
+  const pushDirectionToMap = useCallback(
+    (uLat?: number | null, uLng?: number | null, tLat?: number | null, tLng?: number | null, distText?: string) => {
+      if (!uLat || !uLng || !tLat || !tLng) {
+        webViewRef.current?.injectJavaScript(`
+          if (window.updateDirectionLine) {
+            window.updateDirectionLine(null, null, null, null, '');
+          }
+          true;
+        `);
+        return;
+      }
+      webViewRef.current?.injectJavaScript(`
+        if (window.updateDirectionLine) {
+          window.updateDirectionLine(${uLat}, ${uLng}, ${tLat}, ${tLng}, '${(distText || '').replace(/'/g, "\\'")}');
+        }
+        true;
+      `);
+    },
+    []
+  );
+
+  const handleFitRoute = useCallback(() => {
+    if (!userCoords || !targetCoords) return;
+    webViewRef.current?.injectJavaScript(`
+      if (window.fitRouteBounds) {
+        window.fitRouteBounds(${userCoords.latitude}, ${userCoords.longitude}, ${targetCoords.latitude}, ${targetCoords.longitude});
+      }
+      true;
+    `);
+    try {
+      Vibration.vibrate(30);
+    } catch {}
+  }, [userCoords, targetCoords]);
+
+  const handleOpenExternalDirections = useCallback(() => {
+    if (!targetCoords) return;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${targetCoords.latitude},${targetCoords.longitude}&travelmode=walking`;
+    Linking.openURL(url).catch(() => {});
+  }, [targetCoords]);
+
+  // Synchronize direction line whenever user GPS or target tree coordinates update
+  useEffect(() => {
+    if (userCoords && targetCoords) {
+      const dist = haversineDistance(
+        userCoords.latitude,
+        userCoords.longitude,
+        targetCoords.latitude,
+        targetCoords.longitude
+      );
+      pushDirectionToMap(
+        userCoords.latitude,
+        userCoords.longitude,
+        targetCoords.latitude,
+        targetCoords.longitude,
+        formatDistanceMeters(dist)
+      );
+    } else {
+      pushDirectionToMap(null, null, null, null, '');
+    }
+  }, [userCoords, targetCoords, pushDirectionToMap]);
+
+  // When opening a specific tree from details, auto-frame route bounds once GPS fix arrives
+  const hasAutoFittedRouteRef = useRef(false);
+  useEffect(() => {
+    if (focusTreeId && userCoords && targetCoords && !hasAutoFittedRouteRef.current) {
+      hasAutoFittedRouteRef.current = true;
+      const t = setTimeout(() => {
+        handleFitRoute();
+      }, 700);
+      return () => clearTimeout(t);
+    }
+  }, [focusTreeId, userCoords, targetCoords, handleFitRoute]);
 
   // ─── Continuous proximity vibration ────────────────────────────────────────
   // Buzzes repeatedly while the user stands within 3 m of the nearest tree and
@@ -1491,6 +1768,24 @@ export default function TreeMapScreen() {
           }
           // Map just (re)loaded — re-apply the nearest-tree highlight
           pushNearestTreeToMap(nearTreeRef.current?.id ?? null, true);
+          if (targetCoords && userCoordsRef.current) {
+            const dist = haversineDistance(
+              userCoordsRef.current.latitude,
+              userCoordsRef.current.longitude,
+              targetCoords.latitude,
+              targetCoords.longitude
+            );
+            pushDirectionToMap(
+              userCoordsRef.current.latitude,
+              userCoordsRef.current.longitude,
+              targetCoords.latitude,
+              targetCoords.longitude,
+              formatDistanceMeters(dist)
+            );
+            if (focusTreeId) {
+              setTimeout(handleFitRoute, 500);
+            }
+          }
           if (!focusTreeId && hasActiveBoundary) {
             setTimeout(handleZoomToBoundary, 350);
           }
@@ -1503,7 +1798,7 @@ export default function TreeMapScreen() {
         }
       } catch {}
     },
-    [allTrees, focusTreeId, hasActiveBoundary, handleZoomToBoundary, pushLocationToMap, pushNearestTreeToMap]
+    [allTrees, focusTreeId, hasActiveBoundary, handleZoomToBoundary, pushLocationToMap, pushNearestTreeToMap, targetCoords, pushDirectionToMap, handleFitRoute]
   );
 
   // Auto-zoom to boundary when project geofence is loaded
@@ -1549,12 +1844,12 @@ export default function TreeMapScreen() {
   }, [allTrees, projectGeofence]);
 
   const treesToRender = useMemo(() => {
-    if (isolateFocusedTree && focusTreeId) {
+    if (focusTreeId) {
       const match = allTrees.filter((t) => t.id === focusTreeId);
       if (match.length > 0) return match;
     }
     return allTrees;
-  }, [allTrees, isolateFocusedTree, focusTreeId]);
+  }, [allTrees, focusTreeId]);
 
   const html = useMemo(
     () =>
@@ -1618,72 +1913,96 @@ export default function TreeMapScreen() {
             {projectName || (focusTreeId ? 'Viewing Tree' : 'All Trees')}
           </Text>
         </View>
-        <TouchableOpacity onPress={loadData} style={styles.refreshBtn}>
-          <Ionicons name="refresh" size={22} color="#fff" />
-        </TouchableOpacity>
-      </LinearGradient>
-
-      {/* Geofence Status Sub-Banner (Removed Land Locked bar as requested) */}
-      {!projectGeofence?.locked && (
-        <View style={styles.geofenceStatusBar}>
-          <TouchableOpacity
-            style={styles.geofenceChipPending}
-            onPress={startBoundaryWalkMode}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="warning" size={14} color="#b45309" />
-            <Text style={styles.geofenceChipTextPending}>
-              Land Geofencing Required · Tap to Walk & Lock
-            </Text>
-            <Ionicons name="chevron-forward" size={14} color="#b45309" />
-          </TouchableOpacity>
-
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           {isAdmin && pendingRequestsCount > 0 && (
             <TouchableOpacity
               style={styles.adminReqBadge}
               onPress={() => setShowAdminRequestsModal(true)}
             >
-              <Text style={styles.adminReqBadgeText}>Requests ({pendingRequestsCount})</Text>
+              <Text style={styles.adminReqBadgeText}>Req ({pendingRequestsCount})</Text>
             </TouchableOpacity>
           )}
-        </View>
-      )}
-
-      {projectGeofence?.locked && isAdmin && pendingRequestsCount > 0 && (
-        <View style={styles.geofenceStatusBar}>
-          <TouchableOpacity
-            style={styles.adminReqBadge}
-            onPress={() => setShowAdminRequestsModal(true)}
-          >
-            <Text style={styles.adminReqBadgeText}>Requests ({pendingRequestsCount})</Text>
+          <TouchableOpacity onPress={loadData} style={styles.refreshBtn}>
+            <Ionicons name="refresh" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
-      )}
+      </LinearGradient>
 
-      {/* Specific Tree vs All Trees Filter Bar */}
-      {focusTreeId && (
-        <View style={styles.focusFilterBar}>
-          <TouchableOpacity
-            style={[styles.focusFilterChip, isolateFocusedTree && styles.focusFilterChipActive]}
-            onPress={() => setIsolateFocusedTree(true)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="scan" size={13} color={isolateFocusedTree ? '#fff' : '#15803d'} />
-            <Text style={[styles.focusFilterChipText, isolateFocusedTree && styles.focusFilterChipTextActive]}>
-              This Tree Only
-            </Text>
-          </TouchableOpacity>
+      {/* ─── LIVE WALKING DIRECTIONS & DISTANCE BANNER (when a specific tree is selected / opened) ─── */}
+      {targetCoords && !geofenceWalkMode && (
+        <View style={styles.directionNavBanner}>
+          <View style={styles.directionNavLeft}>
+            <View style={styles.directionCompassWrap}>
+              <Ionicons
+                name="navigate"
+                size={18}
+                color="#0284c7"
+                style={{
+                  transform: [{ rotate: `${directionMetrics?.bearing ?? 0}deg` }],
+                }}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={styles.directionNavTitleRow}>
+                <Text style={styles.directionNavMetersText}>
+                  {directionMetrics ? directionMetrics.distText : 'Acquiring GPS...'}
+                </Text>
+                {directionMetrics && (
+                  <View
+                    style={[
+                      styles.directionNavStatusBadge,
+                      directionMetrics.isNearFence && styles.directionNavStatusBadgeInZone,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.directionStatusDot,
+                        directionMetrics.isNearFence && styles.directionStatusDotInZone,
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.directionNavStatusBadgeText,
+                        directionMetrics.isNearFence && styles.directionNavStatusBadgeTextInZone,
+                      ]}
+                    >
+                      {directionMetrics.isUnderTree
+                        ? 'Under Tree (0-3m)'
+                        : directionMetrics.isNearFence
+                        ? 'In Tree Fence (≤15m)'
+                        : `${directionMetrics.compass} (${directionMetrics.bearing}°)`}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.directionNavSub} numberOfLines={1}>
+                {targetTree
+                  ? `${targetTree.species || 'Target Tree'} · ${displayTreeId(targetTree)}`
+                  : 'Target Tree GPS Coordinates'}
+              </Text>
+            </View>
+          </View>
 
-          <TouchableOpacity
-            style={[styles.focusFilterChip, !isolateFocusedTree && styles.focusFilterChipActive]}
-            onPress={() => setIsolateFocusedTree(false)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="grid-outline" size={13} color={!isolateFocusedTree ? '#fff' : '#15803d'} />
-            <Text style={[styles.focusFilterChipText, !isolateFocusedTree && styles.focusFilterChipTextActive]}>
-              All Trees ({allTrees.length})
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.directionNavActions}>
+            <TouchableOpacity
+              style={styles.directionFitBtn}
+              onPress={handleFitRoute}
+              activeOpacity={0.75}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="scan-outline" size={14} color="#0284c7" />
+              <Text style={styles.directionFitBtnText}>Fit Route</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.directionExternalBtn}
+              onPress={handleOpenExternalDirections}
+              activeOpacity={0.75}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="navigate-circle" size={20} color="#16a34a" />
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -2402,6 +2721,40 @@ export default function TreeMapScreen() {
                   </TouchableOpacity>
                 </View>
 
+                {/* Live Distance & Walking Route Strip */}
+                {directionMetrics && (
+                  <View style={styles.sheetDistanceBar}>
+                    <View style={styles.sheetDistanceLeft}>
+                      <View style={styles.sheetCompassMini}>
+                        <Ionicons
+                          name="navigate"
+                          size={13}
+                          color="#0284c7"
+                          style={{ transform: [{ rotate: `${directionMetrics.bearing}deg` }] }}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.sheetDistanceMeters}>
+                          {directionMetrics.distText} from your live location
+                        </Text>
+                        <Text style={styles.sheetDistanceSub} numberOfLines={1}>
+                          {directionMetrics.isNearFence
+                            ? '✅ Inside 15m tree fence'
+                            : `Direct line bearing: ${directionMetrics.compass} (${directionMetrics.bearing}°)`}
+                        </Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      onPress={handleFitRoute}
+                      style={styles.sheetFitBtn}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons name="scan-outline" size={13} color="#0284c7" />
+                      <Text style={styles.sheetFitBtnText}>Fit on Map</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
                 <View style={styles.detailGrid}>
                   <View style={styles.detailCell}>
                     <View style={styles.detailCellHeader}>
@@ -2582,6 +2935,175 @@ const styles = StyleSheet.create({
   map: { flex: 1 },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f0f4f1' },
   loadingText: { marginTop: 12, fontSize: 14, color: '#666' },
+
+  // ─── Live Walking Directions Banner & HUD Styles ───
+  directionNavBanner: {
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#0284c7',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 6,
+    zIndex: 10,
+  },
+  directionNavLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  directionCompassWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(2, 132, 199, 0.18)',
+    borderWidth: 1.5,
+    borderColor: '#0284c7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  directionNavTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  directionNavMetersText: {
+    color: '#38bdf8',
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  directionNavStatusBadge: {
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+  },
+  directionNavStatusBadgeInZone: {
+    backgroundColor: 'rgba(22, 163, 74, 0.2)',
+    borderColor: 'rgba(22, 163, 74, 0.5)',
+  },
+  directionStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#38bdf8',
+  },
+  directionStatusDotInZone: {
+    backgroundColor: '#22c55e',
+  },
+  directionNavStatusBadgeText: {
+    color: '#bae6fd',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  directionNavStatusBadgeTextInZone: {
+    color: '#86efac',
+  },
+  directionNavSub: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  directionNavActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 8,
+  },
+  directionFitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(2, 132, 199, 0.18)',
+    borderWidth: 1,
+    borderColor: '#0284c7',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  directionFitBtnText: {
+    color: '#38bdf8',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  directionExternalBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(22, 163, 74, 0.18)',
+    borderWidth: 1,
+    borderColor: '#16a34a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetDistanceBar: {
+    backgroundColor: 'rgba(240, 249, 255, 0.95)',
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginTop: 4,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sheetDistanceLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  sheetCompassMini: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#e0f2fe',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetDistanceMeters: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0369a1',
+  },
+  sheetDistanceSub: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  sheetFitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#e0f2fe',
+    borderWidth: 1,
+    borderColor: '#7dd3fc',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  sheetFitBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0284c7',
+  },
 
   // Geofence status sub-banner
   geofenceStatusBar: {
