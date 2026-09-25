@@ -28,21 +28,43 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Task, Project, ProjectGeofence, TreeRecord } from '../../types';
 import { fetchProjectGeofence, sqMetersToHectares } from '../../services/projectGeofenceService';
 
-// ─── Status classification helpers ──────────────────────────────────────────
-const isHealthyTree = (t: TreeRecord) => {
+// ─── Status classification helpers (mutually exclusive priority) ────────────
+export type TreeCategory = 'healthy' | 'sick' | 'dead';
+
+export const classifyTree = (t: TreeRecord): TreeCategory => {
   const hs = (t.health_status || '').toLowerCase().trim();
   const tc = (t.tree_condition || '').toLowerCase().trim();
-  return hs === 'healthy' || tc === 'healthy';
+
+  // 1. Dead always takes highest precedence
+  if (hs === 'dead' || tc === 'dead') {
+    return 'dead';
+  }
+  // 2. Sick / Stressed / Diseased
+  if (hs === 'sick' || tc === 'stressed' || tc === 'diseased') {
+    return 'sick';
+  }
+  // 3. Healthy (or default)
+  return 'healthy';
 };
-const isSickTree = (t: TreeRecord) => {
-  const hs = (t.health_status || '').toLowerCase().trim();
-  const tc = (t.tree_condition || '').toLowerCase().trim();
-  return hs === 'sick' || tc === 'stressed' || tc === 'diseased';
-};
-const isDeadTree = (t: TreeRecord) => {
-  const hs = (t.health_status || '').toLowerCase().trim();
-  const tc = (t.tree_condition || '').toLowerCase().trim();
-  return hs === 'dead' || tc === 'dead';
+
+export const computeTreeStats = (trees: TreeRecord[]) => {
+  let healthy = 0;
+  let sick = 0;
+  let dead = 0;
+
+  for (let i = 0; i < trees.length; i++) {
+    const cat = classifyTree(trees[i]);
+    if (cat === 'dead') dead++;
+    else if (cat === 'sick') sick++;
+    else healthy++;
+  }
+
+  return {
+    total: trees.length,
+    healthy,
+    sick,
+    dead,
+  };
 };
 
 export default function HomeScreen() {
@@ -64,49 +86,88 @@ export default function HomeScreen() {
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [projectGeofence, setProjectGeofence] = useState<ProjectGeofence | null>(null);
   const [showGeofencePromptModal, setShowGeofencePromptModal] = useState(false);
+  const [projectStatsMap, setProjectStatsMap] = useState<
+    Record<string, { total: number; healthy: number; sick: number; dead: number }>
+  >({});
+  const projectStatsMapRef = useRef(projectStatsMap);
+  projectStatsMapRef.current = projectStatsMap;
   const promptedProjectsRef = useRef<Set<string>>(new Set());
   const loadSeqRef = useRef(0);
 
   const firstName = (user?.full_name?.trim()?.split(' ')[0] || '').replace(/[.!]$/, '');
   const greetingName = firstName || 'there';
 
+  const buildStatsMap = useCallback((allTrees: TreeRecord[]) => {
+    const map: Record<string, { total: number; healthy: number; sick: number; dead: number }> = {};
+    map['__all__'] = computeTreeStats(allTrees);
+    allTrees.forEach((t) => {
+      const pid = t.project_id || 'unassigned';
+      if (!map[pid]) {
+        map[pid] = { total: 0, healthy: 0, sick: 0, dead: 0 };
+      }
+      map[pid].total++;
+      const cat = classifyTree(t);
+      map[pid][cat]++;
+    });
+    return map;
+  }, []);
+
+  const preCacheAllProjects = useCallback(async () => {
+    try {
+      const { data: all } = await fetchAllTrees();
+      if (all && all.length > 0) {
+        const map = buildStatsMap(all);
+        setProjectStatsMap(map);
+        projectStatsMapRef.current = map;
+        AsyncStorage.setItem('@treeapp_all_project_stats_map', JSON.stringify(map)).catch(() => {});
+
+        const key = activeProjectId || '__all__';
+        if (map[key]) {
+          setStats(map[key]);
+        }
+      }
+    } catch {}
+  }, [activeProjectId, buildStatsMap]);
+
   // ─── Instant local cache for immediate display (<10ms) ─────────────────────
   useEffect(() => {
     let cancelled = false;
-    const cacheKey = `@treeapp_stats_${activeProjectId || 'all'}`;
 
-    // 1. Check in-memory tree store first
+    // 1. Read persistent all-projects stats map from AsyncStorage (0ms startup)
+    AsyncStorage.getItem('@treeapp_all_project_stats_map').then((raw) => {
+      if (!cancelled && raw) {
+        try {
+          const map = JSON.parse(raw);
+          if (map && typeof map === 'object') {
+            setProjectStatsMap(map);
+            projectStatsMapRef.current = map;
+            const key = activeProjectId || '__all__';
+            if (map[key]) {
+              setStats(map[key]);
+            }
+          }
+        } catch {}
+      }
+    });
+
+    // 2. Also check in-memory tree store
     const memoryTrees = useTreeStore.getState().trees;
     if (memoryTrees && memoryTrees.length > 0) {
       const match = activeProjectId
         ? memoryTrees.filter((t) => t.project_id === activeProjectId)
         : memoryTrees;
       if (match.length > 0) {
-        setStats({
-          total: match.length,
-          healthy: match.filter(isHealthyTree).length,
-          sick: match.filter(isSickTree).length,
-          dead: match.filter(isDeadTree).length,
-        });
+        setStats(computeTreeStats(match));
       }
     }
 
-    // 2. Check persistent AsyncStorage
-    AsyncStorage.getItem(cacheKey).then((raw) => {
-      if (!cancelled && raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed.total === 'number') {
-            setStats(parsed);
-          }
-        } catch {}
-      }
-    });
+    // 3. Pre-cache all project tree counts from server
+    preCacheAllProjects();
 
     return () => {
       cancelled = true;
     };
-  }, [activeProjectId]);
+  }, []);
 
   // Fetch all projects on mount & ensure an active project is selected
   useEffect(() => {
@@ -153,17 +214,15 @@ export default function HomeScreen() {
       if (seq !== loadSeqRef.current) return;
 
       setTrees(visibleTrees);
-      const computedStats = {
-        total: visibleTrees.length,
-        healthy: visibleTrees.filter(isHealthyTree).length,
-        sick: visibleTrees.filter(isSickTree).length,
-        dead: visibleTrees.filter(isDeadTree).length,
-      };
+      const computedStats = computeTreeStats(visibleTrees);
       setStats(computedStats);
 
-      // Cache stats in persistent storage for instant next-time rendering
-      const cacheKey = `@treeapp_stats_${activeProjectId || 'all'}`;
-      AsyncStorage.setItem(cacheKey, JSON.stringify(computedStats)).catch(() => {});
+      // Keep projectStatsMap updated
+      const key = activeProjectId || '__all__';
+      const updatedMap = { ...projectStatsMapRef.current, [key]: computedStats };
+      setProjectStatsMap(updatedMap);
+      projectStatsMapRef.current = updatedMap;
+      AsyncStorage.setItem('@treeapp_all_project_stats_map', JSON.stringify(updatedMap)).catch(() => {});
     } catch (e) {
       console.warn('[HomeScreen] Error loading trees:', e);
     }
@@ -250,8 +309,24 @@ export default function HomeScreen() {
     }, [loadTrees, loadTasks, loadGeofence, refreshCredits])
   );
 
+  const handleSelectProject = (projectId: string | null) => {
+    const key = projectId || '__all__';
+    const targetStats = projectStatsMapRef.current[key];
+    if (targetStats) {
+      setStats(targetStats); // 0ms instant display!
+    }
+    setActiveProjectId(projectId);
+    refreshCredits();
+    setProjectDropdownOpen(false);
+  };
+
   // Instantly reload when the active project changes
   useEffect(() => {
+    const key = activeProjectId || '__all__';
+    const targetStats = projectStatsMapRef.current[key];
+    if (targetStats) {
+      setStats(targetStats); // 0ms instant UI update!
+    }
     loadTrees();
     loadTasks();
     loadGeofence();
@@ -259,7 +334,7 @@ export default function HomeScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadTrees(), loadTasks(), loadGeofence()]);
+    await Promise.all([loadTrees(), loadTasks(), loadGeofence(), preCacheAllProjects()]);
     setRefreshing(false);
   };
 
@@ -503,14 +578,11 @@ export default function HomeScreen() {
             renderItem={({ item }) => {
               const isAll = item.id === '__all__';
               const isActive = isAll ? !activeProjectId : item.id === activeProjectId;
+              const pStats = projectStatsMap[item.id];
               return (
                 <TouchableOpacity
                   style={[styles.modalOption, isActive && styles.modalOptionActive]}
-                  onPress={() => {
-                    setActiveProjectId(isAll ? null : item.id);
-                    refreshCredits();
-                    setProjectDropdownOpen(false);
-                  }}
+                  onPress={() => handleSelectProject(isAll ? null : item.id)}
                   activeOpacity={0.7}
                 >
                   <View style={[styles.modalOptionIcon, isActive && styles.modalOptionIconActive]}>
@@ -521,9 +593,18 @@ export default function HomeScreen() {
                     />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.modalOptionName, isActive && styles.modalOptionNameActive]}>
-                      {item.name}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 8 }}>
+                      <Text style={[styles.modalOptionName, isActive && styles.modalOptionNameActive]}>
+                        {item.name}
+                      </Text>
+                      {pStats !== undefined && (
+                        <View style={[styles.projectCountBadge, isActive && styles.projectCountBadgeActive]}>
+                          <Text style={[styles.projectCountBadgeText, isActive && styles.projectCountBadgeTextActive]}>
+                            {pStats.total} {pStats.total === 1 ? 'tree' : 'trees'}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                     {'description' in item && item.description ? (
                       <Text style={[styles.modalOptionDesc, isActive && styles.modalOptionDescActive]}>
                         {item.description}
@@ -753,6 +834,23 @@ const styles = StyleSheet.create({
   modalOptionNameActive: { color: '#fff' },
   modalOptionDesc: { fontSize: 12, color: '#888', marginTop: 2 },
   modalOptionDescActive: { color: '#cde8d3' },
+  projectCountBadge: {
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  projectCountBadgeActive: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  projectCountBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1a5c2a',
+  },
+  projectCountBadgeTextActive: {
+    color: '#fff',
+  },
   projectSelectorWrapper: { marginTop: 14 },
   treeStatsRow: {
     flexDirection: 'row',

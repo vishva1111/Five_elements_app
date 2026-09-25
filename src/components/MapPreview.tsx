@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Coordinates } from '../types';
 import {
@@ -77,6 +77,7 @@ L.marker([${lat},${lng}]).addTo(map);
 
 export default function MapPreview({
   coords,
+  onPress,
   height = 180,
 }: Props) {
   const lat = Number(coords.latitude) || 0;
@@ -91,7 +92,7 @@ export default function MapPreview({
     [lat, lng, token]
   );
 
-  return (
+  const previewBody = (
     <View style={[styles.container, { height }]}>
       <WebView
         source={{ html }}
@@ -106,6 +107,16 @@ export default function MapPreview({
       </View>
     </View>
   );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity activeOpacity={0.88} onPress={onPress}>
+        {previewBody}
+      </TouchableOpacity>
+    );
+  }
+
+  return previewBody;
 }
 
 const styles = StyleSheet.create({

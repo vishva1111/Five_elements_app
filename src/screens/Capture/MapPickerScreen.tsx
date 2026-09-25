@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -206,25 +207,57 @@ export default function MapPickerScreen() {
     setProgress('Fetching GPS location…');
 
     try {
+      if (Platform.OS === 'android') {
+        try {
+          const providerStatus = await Location.getProviderStatusAsync();
+          if (!providerStatus.locationServicesEnabled) {
+            await Location.enableNetworkProviderAsync();
+          }
+        } catch {}
+      }
+
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         throw new Error('Location permission denied');
       }
 
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.BestForNavigation,
-      });
+      // Fast-path: check last known position first
+      let locationCoords: { latitude: number; longitude: number; accuracy?: number | null } | null = null;
+      try {
+        const lastKnown = await Location.getLastKnownPositionAsync({});
+        if (lastKnown?.coords) {
+          locationCoords = lastKnown.coords;
+        }
+      } catch {}
+
+      if (!locationCoords) {
+        try {
+          const loc = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          locationCoords = loc.coords;
+        } catch {
+          const low = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Low,
+          });
+          locationCoords = low.coords;
+        }
+      }
 
       if (!mountedRef.current) return;
 
+      if (!locationCoords) {
+        throw new Error('Unable to obtain GPS location');
+      }
+
       const result: Coordinates = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        accuracy: location.coords.accuracy ?? undefined,
+        latitude: locationCoords.latitude,
+        longitude: locationCoords.longitude,
+        accuracy: locationCoords.accuracy ?? undefined,
       };
 
       setCoords(result);
-      setResultAccuracy(location.coords.accuracy ?? null);
+      setResultAccuracy(locationCoords.accuracy ?? null);
       setResultSamples(0);
       setCapturing(false);
       setProgress('');

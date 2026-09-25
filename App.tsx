@@ -74,6 +74,7 @@ function HistoryNavigator() {
       <HistoryStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS', headerShown: false }} />
       <HistoryStack.Screen name="UpdateTree" component={UpdateTreeScreen} options={{ title: 'AUDIT TREE', headerShown: false }} />
       <HistoryStack.Screen name="EditTree" component={EditTreeScreen} options={{ title: 'EDIT TREE', headerShown: false }} />
+      <HistoryStack.Screen name="Map" component={TreeMapScreen} options={{ title: 'MAP', headerShown: false }} />
     </HistoryStack.Navigator>
   );
 }
@@ -84,9 +85,17 @@ function UpdateLookupNavigator() {
       <UpdateLookupStack.Screen name="UpdateLookup" component={UpdateLookupScreen} />
       <UpdateLookupStack.Screen name="UpdateTree" component={UpdateTreeScreen} />
       <UpdateLookupStack.Screen name="EditTree" component={EditTreeScreen} />
+      <UpdateLookupStack.Screen name="Map" component={TreeMapScreen} />
     </UpdateLookupStack.Navigator>
   );
 }
+
+const HIDE_TAB_BAR_SCREENS = new Set([
+  'TreeDetail',
+  'Map',
+  'UpdateTree',
+  'EditTree',
+]);
 
 function MainTabs() {
   const insets = useSafeAreaInsets();
@@ -94,7 +103,11 @@ function MainTabs() {
     <Tab.Navigator
       screenOptions={({ route }) => {
         const focusedName = getFocusedRouteNameFromRoute(route);
-        const hideTabBar = focusedName === 'UpdateTree' || focusedName === 'EditTree';
+        const routeIndex = (route as any).state?.index;
+        const hideTabBar = Boolean(
+          (focusedName && HIDE_TAB_BAR_SCREENS.has(focusedName)) ||
+          (typeof routeIndex === 'number' && routeIndex > 0)
+        );
         return {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';

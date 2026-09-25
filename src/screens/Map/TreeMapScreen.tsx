@@ -11,7 +11,9 @@ import {
   TextInput,
   ScrollView,
   Platform,
+  Vibration,
 } from 'react-native';
+import { haversineDistance } from '../../services/geofenceService';
 import { WebView } from 'react-native-webview';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -19,7 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTreeStore } from '../../store/treeStore';
-import { fetchTreesByProject, fetchAllProjects, lockTree } from '../../services/treeService';
+import { fetchTreesByProject, fetchAllProjects, lockTree, fetchTreeById } from '../../services/treeService';
 import { useAuthStore } from '../../store/authStore';
 import { useGeofencing } from '../../hooks/useGeofencing';
 import {
@@ -54,7 +56,7 @@ import {
 } from '../../services/projectGeofenceService';
 
 type Nav = NativeStackNavigationProp<any>;
-type Route = RouteProp<{ Map: { focusTreeId?: string; startGeofenceWalk?: boolean } }, 'Map'>;
+type Route = RouteProp<{ Map: { focusTreeId?: string; focusLat?: number; focusLng?: number; startGeofenceWalk?: boolean } }, 'Map'>;
 
 // ─── Condition color map ─────────────────────────────────────────────────────
 const CONDITION_COLORS: Record<string, string> = {
@@ -72,7 +74,9 @@ function buildMapHtml(
   focusTreeId?: string,
   boundaryCoords?: GeofenceCoordinate[],
   isBoundaryLocked?: boolean,
-  walkCorners?: GeofenceCoordinate[]
+  walkCorners?: GeofenceCoordinate[],
+  focusLat?: number,
+  focusLng?: number
 ): string {
   const token = getMapboxToken();
   const focusTree = focusTreeId ? trees.find((t) => t.id === focusTreeId) : null;
@@ -87,10 +91,14 @@ function buildMapHtml(
   const bMinLng = bLngs.length > 0 ? Math.min(...bLngs) : userLng;
   const bMaxLng = bLngs.length > 0 ? Math.max(...bLngs) : userLng;
 
-  // Center calculation — defaults to land fencing area if available
-  let centerLat = focusTree?.latitude ?? (hasBoundary ? (bMinLat + bMaxLat) / 2 : userLat);
-  let centerLng = focusTree?.longitude ?? (hasBoundary ? (bMinLng + bMaxLng) / 2 : userLng);
-  const centerZoom = focusTree ? 18 : hasBoundary ? 16 : 14;
+  // Center calculation — priorities: target tree coords > land fencing boundary > live user location
+  const targetLat = focusTree?.latitude ?? focusLat;
+  const targetLng = focusTree?.longitude ?? focusLng;
+  const hasFocus = Boolean(targetLat && targetLng);
+
+  let centerLat = targetLat ?? (hasBoundary ? (bMinLat + bMaxLat) / 2 : userLat);
+  let centerLng = targetLng ?? (hasBoundary ? (bMinLng + bMaxLng) / 2 : userLng);
+  const centerZoom = hasFocus ? 19 : hasBoundary ? 16 : 14;
 
   if (!token) {
     // ─── Leaflet fallback ─────────────────────────────────────────────────────
@@ -103,19 +111,24 @@ function buildMapHtml(
         const condition = (t.tree_condition || 'N/A').replace(/'/g, "\\'");
         const date = t.survey_date || t.submitted_at?.split('T')[0] || '';
         const popup = `${t.locked ? '🔒 ' : ''}<b>${species}</b><br/>ID: ${treeId}<br/>Condition: ${condition}<br/>Date: ${date}`;
-        const isFocused = focusTreeId && t.id === focusTreeId;
-        const size = isFocused ? 36 : 28;
+        const isFocused = Boolean(
+          (focusTreeId && t.id === focusTreeId) ||
+          (targetLat && targetLng && Math.abs(t.latitude - targetLat) < 0.00005 && Math.abs(t.longitude - targetLng) < 0.00005)
+        );
+        const size = isFocused ? 42 : 28;
 
-        return `L.marker([${t.latitude}, ${t.longitude}], {
+        return `var m = L.marker([${t.latitude}, ${t.longitude}], {
           icon: L.divIcon({
             className: 'tree-marker',
-            html: '<div style="background:${color};width:${size}px;height:${size}px;border-radius:50%;border:3px solid ${isFocused ? '#F09125' : '#fff'};box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:${isFocused ? 20 : 16}px;${isFocused ? 'animation:pulse 1.5s infinite;' : ''}">${t.locked ? '🔒' : '🌳'}</div>',
+            html: '<div style="background:${color};width:${size}px;height:${size}px;border-radius:50%;border:${isFocused ? '3.5px solid #F09125' : '2.5px solid #fff'};box-shadow:0 3px 12px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-size:${isFocused ? 22 : 16}px;">${t.locked ? '🔒' : '🌳'}</div>',
             iconSize: [${size}, ${size}],
             iconAnchor: [${size / 2}, ${size / 2}],
           })
         }).addTo(map).bindPopup(\`${popup}\`).on('click',function(){
           window.ReactNativeWebView.postMessage(JSON.stringify({type:'markerTap',treeId:'${t.id}'}));
-        });`;
+        });
+        ${isFocused ? 'setTimeout(function(){ m.openPopup(); map.setView([' + t.latitude + ',' + t.longitude + '], 19); }, 250);' : ''}
+        `;
       })
       .join('\n');
 
@@ -183,13 +196,14 @@ html,body,#map{margin:0;padding:0;width:100%;height:100%;background:#0b1320;}
 .tree-marker,.corner-marker{background:transparent !important;border:none !important;}
 .leaflet-popup-content-wrapper{border-radius:12px !important;box-shadow:0 8px 24px rgba(0,0,0,0.3) !important;background:#ffffff !important;}
 .leaflet-popup-content{margin:10px 14px !important;font-size:13px;line-height:1.5;}
-@keyframes pulse{0%{transform:scale(1)}50%{transform:scale(1.15)}100%{transform:scale(1)}}
 @keyframes surveyorPulse{0%{transform:scale(0.85);opacity:0.9;}50%{transform:scale(1.6);opacity:0.2;}100%{transform:scale(2.0);opacity:0;}}
+@keyframes gpsPulse{0%{transform:scale(0.9);opacity:0.7;}70%{transform:scale(2.2);opacity:0;}100%{transform:scale(2.2);opacity:0;}}
 </style>
 </head>
 <body>
 <div id="map"></div>
 <script>
+function post(msg){try{if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify(msg));}}catch(e){}}
 var map=L.map('map',{zoomControl:false,attributionControl:false,maxZoom:22})
   .setView([${centerLat},${centerLng}],${centerZoom});
 L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{
@@ -198,16 +212,82 @@ L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{
   attribution:'© Google Satellite'
 }).addTo(map);
 L.control.zoom({position:'bottomright'}).addTo(map);
-L.marker([${userLat},${userLng}],{
-  icon:L.divIcon({
-    className:'user-marker',
-    html:'<div style="width:16px;height:16px;background:#4285f4;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.3);"></div>',
-    iconSize:[16,16],
-    iconAnchor:[8,8],
-  })
-}).addTo(map).bindPopup('📍 Your location');
+
+// ─── Real-Time Live User Location Marker & Accuracy Circle ───
+var userMarker = null;
+var userAccuracyCircle = null;
+
+window.updateUserLocation = function(lat, lng, accuracy, panToUser) {
+  if (!lat || !lng) return;
+  var latLng = [lat, lng];
+
+  if (!userMarker) {
+    userMarker = L.marker(latLng, {
+      icon: L.divIcon({
+        className: 'user-marker',
+        html: '<div style="position:relative;width:24px;height:24px;display:flex;align-items:center;justify-content:center;">' +
+              '<div style="position:absolute;width:24px;height:24px;border-radius:50%;background:#3b82f6;opacity:0.4;animation:gpsPulse 2s infinite;"></div>' +
+              '<div style="width:14px;height:14px;background:#2563eb;border:2.5px solid #ffffff;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.5);position:relative;z-index:2;"></div>' +
+              '</div>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      }),
+      zIndexOffset: 1000
+    }).addTo(map).bindPopup('<b>📍 Your Live Location</b><br/>Lat: ' + lat.toFixed(6) + '<br/>Lng: ' + lng.toFixed(6) + (accuracy ? '<br/>Accuracy: ±' + Math.round(accuracy) + 'm' : ''));
+  } else {
+    userMarker.setLatLng(latLng);
+    userMarker.setPopupContent('<b>📍 Your Live Location</b><br/>Lat: ' + lat.toFixed(6) + '<br/>Lng: ' + lng.toFixed(6) + (accuracy ? '<br/>Accuracy: ±' + Math.round(accuracy) + 'm' : ''));
+  }
+
+  if (accuracy && accuracy > 0) {
+    if (!userAccuracyCircle) {
+      userAccuracyCircle = L.circle(latLng, {
+        radius: accuracy,
+        color: '#2563eb',
+        weight: 1.5,
+        opacity: 0.6,
+        fillColor: '#3b82f6',
+        fillOpacity: 0.12
+      }).addTo(map);
+    } else {
+      userAccuracyCircle.setLatLng(latLng);
+      userAccuracyCircle.setRadius(accuracy);
+    }
+  }
+
+  if (panToUser) {
+    map.setView(latLng, Math.max(map.getZoom(), 18), { animate: true });
+    if (userMarker) userMarker.openPopup();
+  }
+};
+
+window.panToUserLocation = function(zoom) {
+  if (userMarker) {
+    var pos = userMarker.getLatLng();
+    map.setView(pos, zoom || 19, { animate: true });
+    userMarker.openPopup();
+  }
+};
+
+${userLat && userLng && Math.abs(userLat - 20.5937) > 0.001 ? `window.updateUserLocation(${userLat}, ${userLng}, 10, false);` : ''}
+
 ${markersJs}
 ${boundaryJs}
+${
+  hasFocus && !trees.some((t) => (focusTreeId && t.id === focusTreeId) || (Math.abs(t.latitude - (targetLat as number)) < 0.00005 && Math.abs(t.longitude - (targetLng as number)) < 0.00005))
+    ? `
+    var focusMarker = L.marker([${targetLat}, ${targetLng}], {
+      icon: L.divIcon({
+        className: 'tree-marker',
+        html: '<div style="background:#16a34a;width:42px;height:42px;border-radius:50%;border:3.5px solid #F09125;box-shadow:0 3px 12px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-size:22px;">🌳</div>',
+        iconSize: [42, 42],
+        iconAnchor: [21, 21],
+      })
+    }).addTo(map).bindPopup('<b>Target Tree</b><br/>Lat: ${(targetLat as number)?.toFixed(6)}<br/>Lng: ${(targetLng as number)?.toFixed(6)}');
+    setTimeout(function(){ focusMarker.openPopup(); map.setView([${targetLat}, ${targetLng}], 19); }, 250);
+    `
+    : ''
+}
 window.zoomToBoundary = function() {
   ${
     hasBoundary
@@ -221,8 +301,8 @@ window.zoomToBoundary = function() {
   }
 };
 ${
-  focusTree
-    ? ''
+  hasFocus
+    ? `setTimeout(function(){ map.setView([${centerLat}, ${centerLng}], 19); }, 200);`
     : hasBoundary
       ? `setTimeout(function(){ window.zoomToBoundary(); }, 250);`
       : boundsPoints.length > 0
@@ -275,7 +355,7 @@ post({type:'ready',hasBoundary:${hasBoundary}});
   }
 
   const fitBoundsJs =
-    focusTree || allPoints.length === 0
+    hasFocus || allPoints.length === 0
       ? ''
       : `map.fitBounds([[${allPoints.map((p) => `${p[0]},${p[1]}`).join('],[')}]],{padding:70});`;
 
@@ -289,7 +369,6 @@ post({type:'ready',hasBoundary:${hasBoundary}});
 <style>
 html,body,#map{margin:0;padding:0;width:100%;height:100%;background:#0b1320;}
 .mapboxgl-ctrl-bottom-left,.mapboxgl-ctrl-bottom-right{display:none !important;}
-@keyframes pulse{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(1.15);opacity:0.85;}}
 @keyframes surveyorPulse{0%{transform:scale(0.85);opacity:0.9;}50%{transform:scale(1.6);opacity:0.2;}100%{transform:scale(2.0);opacity:0;}}
 </style>
 </head>
@@ -320,7 +399,7 @@ map.on('load',function(){
     var p=f.properties;
     var c=f.geometry.coordinates;
     var el=document.createElement('div');
-    el.style.cssText='width:'+p.size+'px;height:'+p.size+'px;background:'+p.color+';border-radius:50%;border:3px solid '+(p.focused?'#F09125':'#fff')+';box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:'+(p.focused?22:18)+'px;cursor:pointer;'+(p.focused?'animation:pulse 1.5s infinite;':'');
+    el.style.cssText='width:'+p.size+'px;height:'+p.size+'px;background:'+p.color+';border-radius:50%;border:3px solid '+(p.focused?'#F09125':'#fff')+';box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:'+(p.focused?22:18)+'px;cursor:pointer;';
     el.innerHTML=p.locked?'🔒':'🌳';
     var popup=new mapboxgl.Popup({offset:15,closeButton:true}).setHTML(
       '<div style="font:13px/1.5 -apple-system,sans-serif;min-width:150px;">'+
@@ -348,10 +427,11 @@ map.on('load',function(){
     .addTo(map);
 
   ${
-    focusTree
+    hasFocus
       ? `new mapboxgl.Marker({color:'#F09125'})
-      .setLngLat([${focusTree.longitude},${focusTree.latitude}])
-      .addTo(map);`
+      .setLngLat([${targetLng},${targetLat}])
+      .addTo(map);
+      setTimeout(function(){ map.flyTo({ center: [${centerLng}, ${centerLat}], zoom: 19, essential: true }); }, 200);`
       : ''
   }
 
@@ -461,8 +541,8 @@ map.on('load',function(){
   };
 
   ${
-    focusTree
-      ? ''
+    hasFocus
+      ? `setTimeout(function(){ map.flyTo({ center: [${centerLng}, ${centerLat}], zoom: 19, essential: true }); }, 200);`
       : hasBoundary
         ? `setTimeout(function(){ window.zoomToBoundary(); }, 200);`
         : fitBoundsJs
@@ -480,6 +560,8 @@ export default function TreeMapScreen() {
   const route = useRoute<Route>();
   const insets = useSafeAreaInsets();
   const focusTreeId = route.params?.focusTreeId;
+  const focusLat = route.params?.focusLat;
+  const focusLng = route.params?.focusLng;
   const initialStartWalk = route.params?.startGeofenceWalk;
 
   const trees = useTreeStore((s) => s.trees);
@@ -490,9 +572,13 @@ export default function TreeMapScreen() {
   const [allTrees, setAllTrees] = useState<TreeRecord[]>([]);
   const [projectName, setProjectName] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  const [userCoords, setUserCoords] = useState({ latitude: 20.5937, longitude: 78.9629 });
+  const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const userCoordsRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const gpsAccuracyRef = useRef<number | null>(null);
+  const vibratedTreeIdRef = useRef<string | null>(null);
   const [selectedTree, setSelectedTree] = useState<TreeRecord | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [isolateFocusedTree, setIsolateFocusedTree] = useState<boolean>(Boolean(focusTreeId));
   const [geofenceAlerts, setGeofenceAlerts] = useState<GeofenceAlert[]>([]);
   const [showAlerts, setShowAlerts] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'enter' | 'exit' } | null>(null);
@@ -551,8 +637,28 @@ export default function TreeMapScreen() {
 
       // Load project trees
       const { data: treeList } = await fetchTreesByProject(activeProjectId);
-      setAllTrees(treeList ?? []);
-      setTrees(treeList ?? []);
+      let combined = treeList ?? [];
+
+      // If a specific tree was targeted, ensure it's included in allTrees and selected
+      if (focusTreeId) {
+        const found = combined.find((t: TreeRecord) => t.id === focusTreeId);
+        if (found) {
+          setSelectedTree(found);
+          setShowDetails(true);
+        } else {
+          try {
+            const { data: singleTree } = await fetchTreeById(focusTreeId);
+            if (singleTree) {
+              combined = [singleTree, ...combined];
+              setSelectedTree(singleTree);
+              setShowDetails(true);
+            }
+          } catch {}
+        }
+      }
+
+      setAllTrees(combined);
+      setTrees(combined);
 
       // Load project land boundary geofence
       const { data: geofence } = await fetchProjectGeofence(activeProjectId);
@@ -564,13 +670,24 @@ export default function TreeMapScreen() {
         setChangeRequests(reqs ?? []);
       }
     } else {
-      setAllTrees([]);
-      setTrees([]);
+      if (focusTreeId) {
+        try {
+          const { data: singleTree } = await fetchTreeById(focusTreeId);
+          if (singleTree) {
+            setAllTrees([singleTree]);
+            setSelectedTree(singleTree);
+            setShowDetails(true);
+          }
+        } catch {}
+      } else {
+        setAllTrees([]);
+        setTrees([]);
+      }
       setProjectGeofence(null);
     }
 
     setLoading(false);
-  }, [activeProjectId, isAdmin, setTrees]);
+  }, [activeProjectId, isAdmin, setTrees, focusTreeId]);
 
   useEffect(() => {
     loadData();
@@ -583,19 +700,163 @@ export default function TreeMapScreen() {
     }
   }, [initialStartWalk]);
 
-  // Request location & live user coordinates
+  // ─── Real-Time Live Location Tracking & Leaflet Sync ───────────────────────
+  const pushLocationToMap = useCallback(
+    (lat: number, lng: number, accuracy?: number | null, panToUser?: boolean) => {
+      if (!lat || !lng) return;
+      const js = `
+        if (window.updateUserLocation) {
+          window.updateUserLocation(${lat}, ${lng}, ${accuracy ?? 0}, ${panToUser ? 'true' : 'false'});
+        }
+        true;
+      `;
+      webViewRef.current?.injectJavaScript(js);
+    },
+    []
+  );
+
+  const handleLocationUpdate = useCallback(
+    (loc: Location.LocationObject) => {
+      if (!loc?.coords) return;
+      const { latitude, longitude, accuracy } = loc.coords;
+
+      userCoordsRef.current = { latitude, longitude };
+      gpsAccuracyRef.current = accuracy ?? null;
+
+      setUserCoords({ latitude, longitude });
+      setGpsAccuracy(accuracy ?? null);
+
+      pushLocationToMap(latitude, longitude, accuracy ?? null, false);
+
+      // Check distance to targeted/selected tree for proximity vibration
+      const targetTree = focusTreeId
+        ? allTrees.find((t) => t.id === focusTreeId)
+        : selectedTree?.latitude && selectedTree?.longitude
+        ? selectedTree
+        : null;
+
+      if (targetTree?.latitude && targetTree?.longitude) {
+        const dist = haversineDistance(
+          latitude,
+          longitude,
+          Number(targetTree.latitude),
+          Number(targetTree.longitude)
+        );
+        // If within 8 meters, vibrate phone (tactile notification)
+        if (dist <= 8 && vibratedTreeIdRef.current !== targetTree.id) {
+          vibratedTreeIdRef.current = targetTree.id;
+          try {
+            Vibration.vibrate([0, 250, 100, 250]);
+          } catch {}
+        } else if (dist > 15 && vibratedTreeIdRef.current === targetTree.id) {
+          // Reset when user steps away
+          vibratedTreeIdRef.current = null;
+        }
+      }
+    },
+    [allTrees, focusTreeId, selectedTree, pushLocationToMap]
+  );
+
+  // Request location & continuous live user coordinates
   useEffect(() => {
+    let watcher: Location.LocationSubscription | null = null;
+    let isMounted = true;
+
     (async () => {
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-          setUserCoords({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-          setGpsAccuracy(loc.coords.accuracy ?? null);
+        if (Platform.OS === 'android') {
+          try {
+            const hasServices = await Location.hasServicesEnabledAsync();
+            if (!hasServices) {
+              await Location.enableNetworkProviderAsync();
+            }
+          } catch (e) {
+            console.warn('[TreeMapScreen] enableNetworkProviderAsync error:', e);
+          }
         }
-      } catch {}
+
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          console.warn('[TreeMapScreen] Location permission denied');
+          return;
+        }
+
+        // 1. Fast fix from last known position (0-10ms)
+        try {
+          const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 60000 });
+          if (lastKnown && isMounted) {
+            handleLocationUpdate(lastKnown);
+          }
+        } catch {}
+
+        // 2. High-Accuracy one-shot fix
+        Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        })
+          .then((loc) => {
+            if (loc && isMounted) {
+              handleLocationUpdate(loc);
+            }
+          })
+          .catch(async () => {
+            try {
+              const balanced = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.Balanced,
+              });
+              if (balanced && isMounted) {
+                handleLocationUpdate(balanced);
+              }
+            } catch {}
+          });
+
+        // 3. Continuous real-time watcher with High Accuracy (updates every 1m or 1s)
+        watcher = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.High,
+            distanceInterval: 1, // update every 1 meter
+            timeInterval: 1000,  // or every 1 second
+          },
+          (loc) => {
+            if (isMounted) {
+              handleLocationUpdate(loc);
+            }
+          }
+        );
+      } catch (err) {
+        console.warn('[TreeMapScreen] Location error:', err);
+      }
     })();
-  }, []);
+
+    return () => {
+      isMounted = false;
+      if (watcher) {
+        watcher.remove();
+      }
+    };
+  }, [handleLocationUpdate]);
+
+  const handleCenterOnMyLocation = useCallback(async () => {
+    if (userCoordsRef.current) {
+      pushLocationToMap(
+        userCoordsRef.current.latitude,
+        userCoordsRef.current.longitude,
+        gpsAccuracyRef.current,
+        true
+      );
+      try { Vibration.vibrate(40); } catch {}
+    } else {
+      try {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        if (loc?.coords) {
+          handleLocationUpdate(loc);
+          pushLocationToMap(loc.coords.latitude, loc.coords.longitude, loc.coords.accuracy, true);
+          try { Vibration.vibrate(40); } catch {}
+        }
+      } catch {
+        Alert.alert('GPS Acquiring', 'Searching for GPS location... Please ensure Location/GPS is turned on.');
+      }
+    }
+  }, [pushLocationToMap, handleLocationUpdate]);
 
   // ─── Boundary Walk Mode Handlers ──────────────────────────────────────────
   const startBoundaryWalkMode = async () => {
@@ -608,16 +869,15 @@ export default function TreeMapScreen() {
     setWalkCorners([]);
     setGeofenceWalkMode(true);
 
-    // Start watching position at high accuracy as user walks
+    // Start watching position at highest accuracy as user walks
     const sub = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.Highest,
         distanceInterval: 1, // update every 1 meter
-        timeInterval: 2000,
+        timeInterval: 1000,
       },
       (loc) => {
-        setUserCoords({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-        setGpsAccuracy(loc.coords.accuracy ?? null);
+        handleLocationUpdate(loc);
       }
     );
     setLocationWatcher(sub);
@@ -635,19 +895,40 @@ export default function TreeMapScreen() {
   // Record corner point at current physical location
   const handleRecordCorner = async () => {
     try {
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+      let locCoords: { latitude: number; longitude: number; accuracy?: number | null } | null = null;
+      try {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (loc?.coords) {
+          locCoords = loc.coords;
+        }
+      } catch {
+        try {
+          const lastKnown = await Location.getLastKnownPositionAsync({});
+          if (lastKnown?.coords) {
+            locCoords = lastKnown.coords;
+          }
+        } catch {}
+        if (!locCoords && userCoords) {
+          locCoords = { ...userCoords, accuracy: gpsAccuracy };
+        }
+      }
+
+      if (!locCoords) {
+        throw new Error('No GPS coordinate available');
+      }
+
       const corner: GeofenceCoordinate = {
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-        accuracy: loc.coords.accuracy ?? undefined,
+        latitude: locCoords.latitude,
+        longitude: locCoords.longitude,
+        accuracy: locCoords.accuracy ?? undefined,
         timestamp: Date.now(),
         corner_index: walkCorners.length + 1,
       };
 
       const updated = [...walkCorners, corner];
       setWalkCorners(updated);
-      setUserCoords({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-      setGpsAccuracy(loc.coords.accuracy ?? null);
+      setUserCoords({ latitude: locCoords.latitude, longitude: locCoords.longitude });
+      setGpsAccuracy(locCoords.accuracy ?? null);
 
       if (updated.length >= 2) {
         setTimeout(handleZoomToBoundary, 350);
@@ -655,7 +936,7 @@ export default function TreeMapScreen() {
 
       Alert.alert(
         `Corner #${updated.length} Saved`,
-        `Lat: ${corner.latitude.toFixed(5)}, Lng: ${corner.longitude.toFixed(5)}\nGPS Accuracy: ±${(loc.coords.accuracy || 0).toFixed(1)}m\n\nWalk to the next corner point along the land boundary.`
+        `Lat: ${corner.latitude.toFixed(5)}, Lng: ${corner.longitude.toFixed(5)}\nGPS Accuracy: ±${(locCoords.accuracy || 0).toFixed(1)}m\n\nWalk to the next corner point along the land boundary.`
       );
     } catch {
       Alert.alert('Location Error', 'Could not record current GPS position. Ensure GPS is enabled.');
@@ -858,6 +1139,9 @@ export default function TreeMapScreen() {
       try {
         const data = JSON.parse(event.nativeEvent.data);
         if (data.type === 'ready') {
+          if (userCoordsRef.current) {
+            pushLocationToMap(userCoordsRef.current.latitude, userCoordsRef.current.longitude, gpsAccuracyRef.current, false);
+          }
           if (!focusTreeId && hasActiveBoundary) {
             setTimeout(handleZoomToBoundary, 350);
           }
@@ -870,7 +1154,7 @@ export default function TreeMapScreen() {
         }
       } catch {}
     },
-    [allTrees, focusTreeId, hasActiveBoundary, handleZoomToBoundary]
+    [allTrees, focusTreeId, hasActiveBoundary, handleZoomToBoundary, pushLocationToMap]
   );
 
   // Auto-zoom to boundary when project geofence is loaded
@@ -915,18 +1199,28 @@ export default function TreeMapScreen() {
     ).length;
   }, [allTrees, projectGeofence]);
 
+  const treesToRender = useMemo(() => {
+    if (isolateFocusedTree && focusTreeId) {
+      const match = allTrees.filter((t) => t.id === focusTreeId);
+      if (match.length > 0) return match;
+    }
+    return allTrees;
+  }, [allTrees, isolateFocusedTree, focusTreeId]);
+
   const html = useMemo(
     () =>
       buildMapHtml(
-        allTrees,
-        userCoords.latitude,
-        userCoords.longitude,
+        treesToRender,
+        userCoordsRef.current?.latitude ?? (allTrees[0]?.latitude || 20.5937),
+        userCoordsRef.current?.longitude ?? (allTrees[0]?.longitude || 78.9629),
         focusTreeId,
         projectGeofence?.coordinates,
         projectGeofence?.locked,
-        geofenceWalkMode ? walkCorners : undefined
+        geofenceWalkMode ? walkCorners : undefined,
+        focusLat,
+        focusLng
       ),
-    [allTrees, userCoords, focusTreeId, projectGeofence, geofenceWalkMode, walkCorners]
+    [treesToRender, focusTreeId, projectGeofence, geofenceWalkMode, walkCorners, focusLat, focusLng]
   );
 
   const pendingRequestsCount = useMemo(
@@ -952,34 +1246,9 @@ export default function TreeMapScreen() {
         </TouchableOpacity>
       </LinearGradient>
 
-      {/* Geofence Status Sub-Banner */}
-      <View style={styles.geofenceStatusBar}>
-        {projectGeofence?.locked ? (
-          <View style={styles.geofenceChipRow}>
-            <TouchableOpacity
-              style={styles.geofenceChipLocked}
-              onPress={handleZoomToBoundary}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="lock-closed" size={14} color="#15803d" />
-              <Text style={styles.geofenceChipTextLocked} numberOfLines={1}>
-                Land Locked · {projectGeofence.area_hectares || sqMetersToHectares(projectGeofence.area_sq_m)} ha ({projectGeofence.coordinates.length} corners)
-              </Text>
-              <View style={styles.zoomTag}>
-                <Ionicons name="scan" size={11} color="#15803d" />
-                <Text style={styles.zoomTagText}>Zoom</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.infoBtn}
-              onPress={() => setShowGeofenceModal(true)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="information-circle-outline" size={22} color="#15803d" />
-            </TouchableOpacity>
-          </View>
-        ) : (
+      {/* Geofence Status Sub-Banner (Removed Land Locked bar as requested) */}
+      {!projectGeofence?.locked && (
+        <View style={styles.geofenceStatusBar}>
           <TouchableOpacity
             style={styles.geofenceChipPending}
             onPress={startBoundaryWalkMode}
@@ -991,17 +1260,55 @@ export default function TreeMapScreen() {
             </Text>
             <Ionicons name="chevron-forward" size={14} color="#b45309" />
           </TouchableOpacity>
-        )}
 
-        {isAdmin && pendingRequestsCount > 0 && (
+          {isAdmin && pendingRequestsCount > 0 && (
+            <TouchableOpacity
+              style={styles.adminReqBadge}
+              onPress={() => setShowAdminRequestsModal(true)}
+            >
+              <Text style={styles.adminReqBadgeText}>Requests ({pendingRequestsCount})</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {projectGeofence?.locked && isAdmin && pendingRequestsCount > 0 && (
+        <View style={styles.geofenceStatusBar}>
           <TouchableOpacity
             style={styles.adminReqBadge}
             onPress={() => setShowAdminRequestsModal(true)}
           >
             <Text style={styles.adminReqBadgeText}>Requests ({pendingRequestsCount})</Text>
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      )}
+
+      {/* Specific Tree vs All Trees Filter Bar */}
+      {focusTreeId && (
+        <View style={styles.focusFilterBar}>
+          <TouchableOpacity
+            style={[styles.focusFilterChip, isolateFocusedTree && styles.focusFilterChipActive]}
+            onPress={() => setIsolateFocusedTree(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="scan" size={13} color={isolateFocusedTree ? '#fff' : '#15803d'} />
+            <Text style={[styles.focusFilterChipText, isolateFocusedTree && styles.focusFilterChipTextActive]}>
+              This Tree Only
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.focusFilterChip, !isolateFocusedTree && styles.focusFilterChipActive]}
+            onPress={() => setIsolateFocusedTree(false)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="grid-outline" size={13} color={!isolateFocusedTree ? '#fff' : '#15803d'} />
+            <Text style={[styles.focusFilterChipText, !isolateFocusedTree && styles.focusFilterChipTextActive]}>
+              All Trees ({allTrees.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Map WebView */}
       {loading ? (
@@ -1408,124 +1715,153 @@ export default function TreeMapScreen() {
         </View>
       </Modal>
 
-      {/* ─── TREE DETAILS MODAL ─── */}
-      <Modal visible={showDetails} transparent animationType="slide">
-        <View style={styles.modalBackdrop}>
-          <TouchableOpacity style={styles.modalBackdropTouch} activeOpacity={1} onPress={() => setShowDetails(false)} />
-          <View style={styles.detailSheet}>
-            {selectedTree && (() => {
-              let cleanNotes = selectedTree.notes || '';
-              let meta: Record<string, any> = {};
-              const metaMatch = (selectedTree.notes || '').match(/##META##({.*})/s);
-              if (metaMatch) {
-                try { meta = JSON.parse(metaMatch[1]); } catch {}
-                cleanNotes = selectedTree.notes!.replace(/##META##{.*}/s, '').trim();
-              }
-              const dbh = selectedTree.dbh_cm || meta.dbh_cm;
-              const height = selectedTree.height_m || meta.height_m;
-              const condition = selectedTree.tree_condition || meta.tree_condition;
-              const date = selectedTree.survey_date || meta.survey_date || selectedTree.submitted_at?.split('T')[0] || '';
-              const condColor = CONDITION_COLORS[condition || 'Healthy'] || '#16a34a';
+      {/* ─── TREE DETAILS FLOATING CARD (Non-modal: map is 100% interactive & clear) ─── */}
+      {selectedTree && showDetails && (
+        <View style={[styles.floatingDetailSheet, { bottom: insets.bottom + 12 }]}>
+          {(() => {
+            let cleanNotes = selectedTree.notes || '';
+            let meta: Record<string, any> = {};
+            const metaMatch = (selectedTree.notes || '').match(/##META##({.*})/s);
+            if (metaMatch) {
+              try { meta = JSON.parse(metaMatch[1]); } catch {}
+              cleanNotes = selectedTree.notes!.replace(/##META##{.*}/s, '').trim();
+            }
+            const dbh = selectedTree.dbh_cm || meta.dbh_cm;
+            const height = selectedTree.height_m || meta.height_m;
+            const condition = selectedTree.tree_condition || meta.tree_condition;
+            const date = selectedTree.survey_date || meta.survey_date || selectedTree.submitted_at?.split('T')[0] || '';
+            const condColor = CONDITION_COLORS[condition || 'Healthy'] || '#16a34a';
 
-              return (
-                <>
-                  <View style={styles.detailHeader}>
-                    <View style={styles.detailHeaderLeft}>
-                      <Text style={styles.detailSpecies}>
-                        {selectedTree.locked ? '🔒 ' : '🌳 '}
-                        {selectedTree.species || 'Unknown Species'}
-                      </Text>
-                      <Text style={styles.detailId}>
-                        {displayTreeId(selectedTree)}
-                      </Text>
-                    </View>
-                    <TouchableOpacity onPress={() => setShowDetails(false)}>
-                      <Ionicons name="close" size={24} color="#333" />
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.detailGrid}>
-                    <View style={styles.detailCell}>
-                      <Text style={styles.detailLabel}>Condition</Text>
-                      {condition ? (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: condColor }} />
-                          <Text style={[styles.detailValue, { color: condColor }]}>{condition}</Text>
-                        </View>
-                      ) : (
-                        <Text style={[styles.detailValue, { color: '#ccc' }]}>Not set</Text>
-                      )}
-                    </View>
-                    <View style={styles.detailCell}>
-                      <Text style={styles.detailLabel}>DBH</Text>
-                      <Text style={[styles.detailValue, !dbh && { color: '#ccc' }]}>
-                        {dbh ? `${dbh} cm` : 'Not recorded'}
-                      </Text>
-                    </View>
-                    <View style={styles.detailCell}>
-                      <Text style={styles.detailLabel}>Height</Text>
-                      <Text style={[styles.detailValue, !height && { color: '#ccc' }]}>
-                        {height ? `${height} m` : 'Not recorded'}
-                      </Text>
-                    </View>
-                    <View style={styles.detailCell}>
-                      <Text style={styles.detailLabel}>Date</Text>
-                      <Text style={[styles.detailValue, !date && { color: '#ccc' }]}>
-                        {date || 'Not recorded'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {cleanNotes ? (
-                    <View style={styles.detailNotes}>
-                      <Text style={styles.detailNotesLabel}>Notes</Text>
-                      <Text style={styles.detailNotesText}>{cleanNotes}</Text>
-                    </View>
-                  ) : null}
-
-                  <View style={styles.detailCoords}>
-                    <Ionicons name="location" size={14} color="#1a5c2a" />
-                    <Text style={styles.detailCoordsText}>
-                      {selectedTree.latitude?.toFixed(5)}, {selectedTree.longitude?.toFixed(5)}
+            return (
+              <>
+                <View style={styles.detailHeader}>
+                  <View style={styles.detailHeaderLeft}>
+                    <Text style={styles.detailSpecies}>
+                      {selectedTree.locked ? '🔒 ' : '🌳 '}
+                      {selectedTree.species || 'Unknown Species'}
+                    </Text>
+                    <Text style={styles.detailId}>
+                      {displayTreeId(selectedTree)}
                     </Text>
                   </View>
+                  <TouchableOpacity
+                    onPress={() => setShowDetails(false)}
+                    style={styles.closeCardBtn}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="close" size={20} color="#475569" />
+                  </TouchableOpacity>
+                </View>
 
-                  <View style={styles.detailActions}>
-                    <TouchableOpacity
-                      style={styles.detailActionBtn}
-                      onPress={() => {
-                        setShowDetails(false);
+                <View style={styles.detailGrid}>
+                  <View style={styles.detailCell}>
+                    <Text style={styles.detailLabel}>Condition</Text>
+                    {condition ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: condColor }} />
+                        <Text style={[styles.detailValue, { color: condColor }]}>{condition}</Text>
+                      </View>
+                    ) : (
+                      <Text style={[styles.detailValue, { color: '#ccc' }]}>Not set</Text>
+                    )}
+                  </View>
+                  <View style={styles.detailCell}>
+                    <Text style={styles.detailLabel}>DBH</Text>
+                    <Text style={[styles.detailValue, !dbh && { color: '#ccc' }]}>
+                      {dbh ? `${dbh} cm` : 'Not recorded'}
+                    </Text>
+                  </View>
+                  <View style={styles.detailCell}>
+                    <Text style={styles.detailLabel}>Height</Text>
+                    <Text style={[styles.detailValue, !height && { color: '#ccc' }]}>
+                      {height ? `${height} m` : 'Not recorded'}
+                    </Text>
+                  </View>
+                  <View style={styles.detailCell}>
+                    <Text style={styles.detailLabel}>Date</Text>
+                    <Text style={[styles.detailValue, !date && { color: '#ccc' }]}>
+                      {date || 'Not recorded'}
+                    </Text>
+                  </View>
+                </View>
+
+                {cleanNotes ? (
+                  <View style={styles.detailNotes}>
+                    <Text style={styles.detailNotesLabel}>Notes</Text>
+                    <Text style={styles.detailNotesText} numberOfLines={2}>{cleanNotes}</Text>
+                  </View>
+                ) : null}
+
+                <View style={styles.detailFooterContainer}>
+                  <View style={styles.detailMetaRow}>
+                    <View style={styles.detailCoords}>
+                      <Ionicons name="location" size={13} color="#1a5c2a" />
+                      <Text style={styles.detailCoordsText}>
+                        {selectedTree.latitude?.toFixed(5)}, {selectedTree.longitude?.toFixed(5)}
+                      </Text>
+                    </View>
+
+                    {!selectedTree.locked ? (
+                      <TouchableOpacity
+                        style={styles.detailActionLock}
+                        onPress={() => handleLockTree(selectedTree)}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="lock-closed-outline" size={13} color="#ea580c" />
+                        <Text style={styles.detailActionLockText}>Lock Tree</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={styles.lockedPill}>
+                        <Ionicons name="lock-closed" size={12} color="#64748b" />
+                        <Text style={styles.lockedPillText}>Locked</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.detailActionPrimaryFull}
+                    onPress={() => {
+                      try {
+                        navigation.navigate('TreeDetail', { treeId: selectedTree.id });
+                      } catch {
                         navigation.navigate('History', {
                           screen: 'TreeDetail',
                           params: { treeId: selectedTree.id },
                         });
-                      }}
-                    >
-                      <Ionicons name="eye" size={18} color="#1a5c2a" />
-                      <Text style={styles.detailActionText}>Full Details</Text>
-                    </TouchableOpacity>
-
-                    {!selectedTree.locked ? (
-                      <TouchableOpacity
-                        style={[styles.detailActionBtn, styles.lockActionBtn]}
-                        onPress={() => handleLockTree(selectedTree)}
-                      >
-                        <Ionicons name="lock-closed" size={18} color="#F09125" />
-                        <Text style={[styles.detailActionText, { color: '#F09125' }]}>Lock</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <View style={[styles.detailActionBtn, styles.lockedBadge]}>
-                        <Ionicons name="lock-closed" size={18} color="#999" />
-                        <Text style={[styles.detailActionText, { color: '#999' }]}>Locked</Text>
-                      </View>
-                    )}
-                  </View>
-                </>
-              );
-            })()}
-          </View>
+                      }
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="eye-outline" size={15} color="#fff" />
+                    <Text style={styles.detailActionPrimaryFullText}>Full Details</Text>
+                    <Ionicons name="arrow-forward" size={14} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              </>
+            );
+          })()}
         </View>
-      </Modal>
+      )}
+
+      {/* Floating Pill when minimized */}
+      {selectedTree && !showDetails && (
+        <TouchableOpacity
+          style={[styles.floatingDetailPill, { bottom: insets.bottom + 14 }]}
+          onPress={() => setShowDetails(true)}
+          activeOpacity={0.85}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, flex: 1 }}>
+            <Ionicons name="leaf" size={16} color="#15803d" />
+            <Text style={styles.floatingDetailPillText} numberOfLines={1}>
+              {selectedTree.species || 'Tree'} · {displayTreeId(selectedTree)}
+            </Text>
+          </View>
+          <View style={styles.pillExpandBtn}>
+            <Text style={styles.pillExpandText}>Tree Details</Text>
+            <Ionicons name="chevron-up" size={14} color="#15803d" />
+          </View>
+        </TouchableOpacity>
+      )}
 
       {/* ─── GEOFENCE ALERTS MODAL ─── */}
       <Modal visible={showAlerts} transparent animationType="slide">
@@ -1927,23 +2263,6 @@ const styles = StyleSheet.create({
   },
   detailNotesLabel: { fontSize: 10, color: '#888', fontWeight: '600', marginBottom: 4 },
   detailNotesText: { fontSize: 13, color: '#333', lineHeight: 18 },
-  detailCoords: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f0fdf4', borderRadius: 8, padding: 10, marginBottom: 16, borderWidth: 1, borderColor: '#bbf7d0' },
-  detailCoordsText: { fontSize: 12, color: '#1a5c2a', fontFamily: 'monospace', fontWeight: '600' },
-  detailActions: { flexDirection: 'row', gap: 10 },
-  detailActionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: '#1a5c2a',
-  },
-  lockActionBtn: { borderColor: '#F09125' },
-  lockedBadge: { borderColor: '#ddd', backgroundColor: '#f5f5f5' },
-  detailActionText: { fontSize: 13, fontWeight: '600', color: '#1a5c2a' },
   alertSheet: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 24,
@@ -1964,4 +2283,180 @@ const styles = StyleSheet.create({
   alertInfo: { flex: 1 },
   alertText: { fontSize: 14, fontWeight: '600', color: '#333' },
   alertTime: { fontSize: 11, color: '#888', marginTop: 2 },
+
+  // Floating Tree Details Card (non-modal)
+  floatingDetailSheet: {
+    position: 'absolute',
+    left: 14,
+    right: 14,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  floatingDetailPill: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    backgroundColor: '#ffffff',
+    borderRadius: 30,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 8,
+    borderWidth: 1.5,
+    borderColor: '#86efac',
+  },
+  floatingDetailPillText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#15803d',
+  },
+  pillExpandBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  pillExpandText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#15803d',
+  },
+  closeCardBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailFooterContainer: {
+    marginTop: 6,
+  },
+  detailMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 10,
+  },
+  detailCoords: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#f0fdf4',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    flexShrink: 1,
+  },
+  detailCoordsText: {
+    fontSize: 11,
+    color: '#1a5c2a',
+    fontFamily: 'monospace',
+    fontWeight: '600',
+  },
+  detailActionLock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#fff7ed',
+    borderWidth: 1,
+    borderColor: '#fdba74',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    flexShrink: 0,
+  },
+  detailActionLockText: {
+    color: '#ea580c',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  lockedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 8,
+    flexShrink: 0,
+  },
+  lockedPillText: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  detailActionPrimaryFull: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#1a5c2a',
+    paddingVertical: 10,
+    borderRadius: 12,
+    shadowColor: '#1a5c2a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  detailActionPrimaryFullText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+
+  // Focus filter bar
+  focusFilterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    backgroundColor: '#f0fdf4',
+    borderBottomWidth: 1,
+    borderBottomColor: '#dcfce7',
+  },
+  focusFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 16,
+    backgroundColor: '#e2e8f0',
+  },
+  focusFilterChipActive: {
+    backgroundColor: '#16a34a',
+  },
+  focusFilterChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  focusFilterChipTextActive: {
+    color: '#ffffff',
+  },
 });

@@ -146,10 +146,61 @@ export default function TreeDetailScreen() {
     }, [loadTreeData])
   );
 
-  const openInMaps = () => {
+  const openInSatelliteMaps = () => {
+    if (!tree?.latitude || !tree?.longitude) {
+      Alert.alert('No GPS Coordinates', 'This tree does not have valid coordinates recorded.');
+      return;
+    }
+    const lat = Number(tree.latitude);
+    const lng = Number(tree.longitude);
+    // Universal Google Maps URL forcing satellite view with t=k & basemap=satellite
+    const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}&basemap=satellite`;
+    const fallbackUrl = `https://maps.google.com/?q=${lat},${lng}&t=k&z=19`;
+    Linking.openURL(googleMapsUrl).catch(() => {
+      Linking.openURL(fallbackUrl).catch(() => {});
+    });
+  };
+
+  const handleViewOnInteractiveMap = () => {
     if (!tree) return;
-    const url = `https://www.openstreetmap.org/?mlat=${tree.latitude}&mlon=${tree.longitude}&zoom=17`;
-    Linking.openURL(url);
+    const navParams = {
+      focusTreeId: tree.id,
+      focusLat: Number(tree.latitude) || undefined,
+      focusLng: Number(tree.longitude) || undefined,
+    };
+
+    // 1. Direct navigate on current navigator (works for HistoryStack, RootStack, or child)
+    try {
+      (navigation as any).navigate('Map', navParams);
+      return;
+    } catch (e1) {
+      console.warn('[TreeDetailScreen] direct navigate to Map failed:', e1);
+    }
+
+    // 2. Parent navigator
+    try {
+      const p = navigation.getParent();
+      if (p) {
+        (p as any).navigate('Map', navParams);
+        return;
+      }
+    } catch (e2) {
+      console.warn('[TreeDetailScreen] parent navigate to Map failed:', e2);
+    }
+
+    // 3. Grandparent navigator
+    try {
+      const gp = navigation.getParent()?.getParent();
+      if (gp) {
+        (gp as any).navigate('Map', navParams);
+        return;
+      }
+    } catch (e3) {
+      console.warn('[TreeDetailScreen] grandparent navigate to Map failed:', e3);
+    }
+
+    // 4. Fallback: open Google Maps in satellite view
+    openInSatelliteMaps();
   };
 
   if (loading) {
@@ -771,19 +822,24 @@ export default function TreeDetailScreen() {
           <MapPreview
             coords={{ latitude: Number(tree.latitude) || 0, longitude: Number(tree.longitude) || 0 }}
             height={150}
+            onPress={handleViewOnInteractiveMap}
           />
 
           <View style={styles.locationActionsRow}>
             <TouchableOpacity
               style={styles.mapActionPrimary}
-              onPress={() => navigation.getParent()?.getParent()?.navigate('Map', { focusTreeId: tree.id })}
+              onPress={handleViewOnInteractiveMap}
               activeOpacity={0.8}
             >
               <Ionicons name="map" size={14} color="#fff" />
               <Text style={styles.mapActionPrimaryText}>View on Interactive Map</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.mapActionSecondary} onPress={openInMaps} activeOpacity={0.8}>
+            <TouchableOpacity
+              style={styles.mapActionSecondary}
+              onPress={openInSatelliteMaps}
+              activeOpacity={0.8}
+            >
               <Ionicons name="open-outline" size={14} color="#15803d" />
             </TouchableOpacity>
           </View>

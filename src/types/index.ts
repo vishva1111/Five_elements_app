@@ -136,6 +136,8 @@ export interface Task {
   // Auto-scheduled next-audit task (migration 002)
   tree_record_id?: string | null;
   audit_round?: number | null;
+  task_type?: 'audit' | 'capture' | string | null;
+  title?: string;
 }
 
 // ─── Task Store Types ──────────────────────────────────────────────────────────
@@ -172,6 +174,7 @@ export type HistoryStackParamList = {
   TreeDetail: { treeId: string };
   UpdateTree: { treeId: string; treeIdDisplay: string; currentRound: number };
   EditTree: { treeId: string; taskId?: string | null; rejectionNotes?: string | null };
+  Map: { focusTreeId?: string; focusLat?: number; focusLng?: number; startGeofenceWalk?: boolean } | undefined;
 };
 
 // Audit category on History (filter by monitoring round 1..4)

@@ -161,17 +161,18 @@ export default function TreeCard({
   const rawDate = task?.created_at || tree?.submitted_at || tree?.survey_date;
   const dateStr = formatDateCustom(rawDate);
 
-  const CardContainer = isAssigned ? View : TouchableOpacity;
-  const containerProps = isAssigned ? {} : { onPress, activeOpacity: 0.82 };
+  const isAudit = task?.task_type === 'audit' || !!task?.audit_round || actionVariant === 'audit';
+  const CardContainer = isAssigned && !onPress ? View : TouchableOpacity;
+  const containerProps = isAssigned && !onPress ? {} : { onPress, activeOpacity: 0.82 };
 
   return (
     <CardContainer
-      style={[styles.card, { borderLeftColor: statusColor }]}
+      style={[styles.card, { borderLeftColor: isAudit ? '#ea580c' : statusColor }]}
       {...containerProps}
     >
       <View style={styles.cardMainRow}>
-        {/* ─── LEFT: Photo Thumbnail (Hidden for assigned tasks) ─── */}
-        {!isAssigned && (
+        {/* ─── LEFT: Photo Thumbnail (Hidden for assigned tasks unless audit task) ─── */}
+        {(!isAssigned || isAudit) && (
           <View style={styles.photoWrap}>
             {photoUrl ? (
               <Image source={{ uri: photoUrl }} style={styles.photo} resizeMode="cover" />
@@ -188,20 +189,30 @@ export default function TreeCard({
           {/* Row 1: ID (left) + Status Badge (right) */}
           <View style={styles.cardHeaderRow}>
             <Text style={styles.idText} numberOfLines={1}>
-              ID: <Text style={[styles.idValue, { color: statusColor }]}>{resolvedId}</Text>
+              ID: <Text style={[styles.idValue, { color: isAudit ? '#ea580c' : statusColor }]}>{resolvedId}</Text>
             </Text>
 
             {isAssigned ? (
               onAction ? (
                 <TouchableOpacity
-                  style={[styles.startBtn, { backgroundColor: statusColor, shadowColor: statusColor }]}
+                  style={[
+                    styles.startBtn,
+                    {
+                      backgroundColor: actionVariant === 'audit' ? '#ea580c' : statusColor,
+                      shadowColor: actionVariant === 'audit' ? '#ea580c' : statusColor,
+                    },
+                  ]}
                   onPress={(e) => {
                     e.stopPropagation();
                     onAction();
                   }}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="play-circle-outline" size={14} color="#fff" />
+                  <Ionicons
+                    name={actionIcon || (actionVariant === 'audit' ? 'clipboard-outline' : 'play-circle-outline')}
+                    size={14}
+                    color="#fff"
+                  />
                   <Text style={styles.startBtnText}>{actionLabel || 'Start'}</Text>
                 </TouchableOpacity>
               ) : null
@@ -245,7 +256,7 @@ export default function TreeCard({
           ) : null}
 
           {/* Row 3: Badges Row (Condition + Location) */}
-          {!isAssigned && (
+          {(!isAssigned || isAudit) && (
             <View style={styles.badgesRow}>
               {condition ? (
                 <View style={styles.conditionBadge}>
@@ -282,7 +293,7 @@ export default function TreeCard({
           )}
 
           {/* Row 4: Audit Progress (4 Dots + Overdue/Due Status) */}
-          {!isAssigned && effectiveStatus === 'approved' && computedAuditStatus ? (() => {
+          {((!isAssigned && effectiveStatus === 'approved') || (isAssigned && isAudit)) && computedAuditStatus ? (() => {
             const isCompleted = computedAuditStatus.allCompleted;
             const isOverdue = computedAuditStatus.isOverdue || effectiveDueLabel?.toLowerCase().includes('overdue');
             const isTaskDay = !isCompleted && !isOverdue && (computedAuditStatus.isDue || effectiveDueLabel === 'Audit Now' || effectiveDueLabel?.toLowerCase().includes('due today'));
