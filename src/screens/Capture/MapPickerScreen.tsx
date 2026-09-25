@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -61,14 +61,16 @@ window.moveTo=function(lat,lng){
   map.setView([lat,lng],18);
   marker.setLatLng([lat,lng]);
 };
-window.addEventListener('message',function(e){
+function handleMoveEvent(d){
   try{
-    var d=JSON.parse(e.data);
-    if(d.action==='move'&&d.lat!==undefined&&d.lng!==undefined){
+    if(d&&d.action==='move'&&d.lat!==undefined&&d.lng!==undefined){
       window.moveTo(d.lat,d.lng);
     }
   }catch(err){}
-});
+}
+window.addEventListener('message',function(e){handleMoveEvent(e.data);});
+document.addEventListener('message',function(e){handleMoveEvent(e.data);});
+try{window.ReactNativeWebView.postMessage(JSON.stringify({type:'ready'}));}catch(e){}
 </script>
 </body>
 </html>`;
@@ -115,14 +117,15 @@ window.moveTo=function(lat,lng){
   map.jumpTo({center:[lng,lat],zoom:18});
   marker.setLngLat([lng,lat]);
 };
-window.addEventListener('message',function(e){
+function handleMoveEvent(d){
   try{
-    var d=JSON.parse(e.data);
-    if(d.action==='move'&&d.lat!==undefined&&d.lng!==undefined){
+    if(d&&d.action==='move'&&d.lat!==undefined&&d.lng!==undefined){
       window.moveTo(d.lat,d.lng);
     }
   }catch(err){}
-});
+}
+window.addEventListener('message',function(e){handleMoveEvent(e.data);});
+document.addEventListener('message',function(e){handleMoveEvent(e.data);});
 map.on('load',function(){post({type:'ready'});});
 </script>
 </body>
@@ -143,6 +146,16 @@ export default function MapPickerScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const webViewRef = useRef<WebView>(null);
   const mountedRef = useRef(true);
+
+  // Android dispatches RN→web `postMessage` on `document` while iOS uses
+  // `window`, so drive the map with injectJavaScript (works on both).
+  const pendingMoveRef = useRef<{ lat: number; lng: number } | null>(null);
+  const moveMapTo = useCallback((lat: number, lng: number) => {
+    pendingMoveRef.current = { lat, lng };
+    webViewRef.current?.injectJavaScript(
+      `if(window.moveTo){window.moveTo(${lat},${lng});} true;`
+    );
+  }, []);
 
   // ── Auto-start GNSS capture on mount ───────────────────────────────────
   useEffect(() => {
@@ -178,9 +191,7 @@ export default function MapPickerScreen() {
       setCapturing(false);
       setProgress('');
 
-      webViewRef.current?.postMessage(
-        JSON.stringify({ action: 'move', lat: point.latitude, lng: point.longitude })
-      );
+      moveMapTo(point.latitude, point.longitude);
     } catch (err: any) {
       if (!mountedRef.current) return;
       const msg = err?.message ?? 'GNSS capture failed';
@@ -188,7 +199,7 @@ export default function MapPickerScreen() {
       setCapturing(false);
       setProgress('');
     }
-  }, []);
+  }, [moveMapTo]);
 
   const handleRetake = useCallback(() => {
     setCoords(null);
@@ -262,27 +273,30 @@ export default function MapPickerScreen() {
       setCapturing(false);
       setProgress('');
 
-      webViewRef.current?.postMessage(
-        JSON.stringify({ action: 'move', lat: result.latitude, lng: result.longitude })
-      );
+      moveMapTo(result.latitude, result.longitude);
     } catch (err: any) {
       if (!mountedRef.current) return;
       setGnssError(err?.message ?? 'GPS fetch failed');
       setCapturing(false);
       setProgress('');
     }
-  }, []);
+  }, [moveMapTo]);
 
   const handleWebViewMessage = useCallback((event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === 'ready') {
+        const pending = pendingMoveRef.current;
+        if (pending) moveMapTo(pending.lat, pending.lng);
+        return;
+      }
       if (data.lat !== undefined && data.lng !== undefined) {
         setCoords({ latitude: data.lat, longitude: data.lng, accuracy: resultAccuracy ?? undefined });
         setResultAccuracy(null);
         setResultSamples(0);
       }
     } catch {}
-  }, [resultAccuracy]);
+  }, [resultAccuracy, moveMapTo]);
 
   const handleConfirm = () => {
     if (!coords) {
@@ -292,7 +306,12 @@ export default function MapPickerScreen() {
     navigation.navigate('TreeForm', { photoUris, coords });
   };
 
-  const mapCoords = coords ?? DEFAULT_COORDS;
+  // The HTML is built once: every later move is pushed into the page with
+  // injectJavaScript, so the WebView never reloads (a reload drops the marker).
+  const mapSource = useMemo(
+    () => ({ html: buildMapHtml(DEFAULT_COORDS.latitude, DEFAULT_COORDS.longitude) }),
+    []
+  );
 
   return (
     <View style={styles.container}>
@@ -306,7 +325,7 @@ export default function MapPickerScreen() {
 
       <WebView
         ref={webViewRef}
-        source={{ html: buildMapHtml(mapCoords.latitude, mapCoords.longitude) }}
+        source={mapSource}
         style={styles.map}
         onMessage={handleWebViewMessage}
         javaScriptEnabled={true}

@@ -66,6 +66,20 @@ const CONDITION_COLORS: Record<string, string> = {
   Dead: '#4b5563',
 };
 
+// ─── Tree proximity vibration (meters) ───────────────────────────────────────
+const PROXIMITY_VIBRATE_M = 3; // keep buzzing while within 3 m of a tree
+const PROXIMITY_RESET_M = 6; // stop only after moving 6 m away
+const PROXIMITY_VIBRATE_INTERVAL_MS = 2000; // repeat the buzz every 2 s
+const VIBRATE_PATTERN = [0, 180, 90, 180];
+const NEAR_TREE_HIGHLIGHT_M = 10; // show/map-highlight the closest tree within 10 m
+
+type NearTreeInfo = { id: string; label: string; distance: number; vibrating: boolean };
+
+// ─── GPS accuracy guard ──────────────────────────────────────────────────────
+const GPS_ACCURACY_MAX_M = 50; // ignore fixes worse than this while a good one exists
+const GPS_ACCURACY_GOOD_M = 25; // fixes at or better than this reset the guard window
+const GPS_GOOD_FIX_WINDOW_MS = 10000; // how long a good fix suppresses noisy jumps
+
 // ─── Build map HTML with tree markers & land boundary ───────────────────────
 function buildMapHtml(
   trees: TreeRecord[],
@@ -76,7 +90,9 @@ function buildMapHtml(
   isBoundaryLocked?: boolean,
   walkCorners?: GeofenceCoordinate[],
   focusLat?: number,
-  focusLng?: number
+  focusLng?: number,
+  userAccuracy?: number,
+  hasUserFix?: boolean
 ): string {
   const token = getMapboxToken();
   const focusTree = focusTreeId ? trees.find((t) => t.id === focusTreeId) : null;
@@ -127,6 +143,7 @@ function buildMapHtml(
         }).addTo(map).bindPopup(\`${popup}\`).on('click',function(){
           window.ReactNativeWebView.postMessage(JSON.stringify({type:'markerTap',treeId:'${t.id}'}));
         });
+        window._treeMs['${t.id}']=m;
         ${isFocused ? 'setTimeout(function(){ m.openPopup(); map.setView([' + t.latitude + ',' + t.longitude + '], 19); }, 250);' : ''}
         `;
       })
@@ -198,6 +215,8 @@ html,body,#map{margin:0;padding:0;width:100%;height:100%;background:#0b1320;}
 .leaflet-popup-content{margin:10px 14px !important;font-size:13px;line-height:1.5;}
 @keyframes surveyorPulse{0%{transform:scale(0.85);opacity:0.9;}50%{transform:scale(1.6);opacity:0.2;}100%{transform:scale(2.0);opacity:0;}}
 @keyframes gpsPulse{0%{transform:scale(0.9);opacity:0.7;}70%{transform:scale(2.2);opacity:0;}100%{transform:scale(2.2);opacity:0;}}
+@keyframes nearRing{0%{box-shadow:0 0 0 0 rgba(240,145,37,0.85),0 3px 12px rgba(0,0,0,0.5);}70%{box-shadow:0 0 0 18px rgba(240,145,37,0),0 3px 12px rgba(0,0,0,0.5);}100%{box-shadow:0 0 0 0 rgba(240,145,37,0),0 3px 12px rgba(0,0,0,0.5);}}
+.near-hl{border-color:#F09125 !important;box-shadow:0 0 16px 5px rgba(240,145,37,0.75),0 3px 12px rgba(0,0,0,0.5) !important;animation:nearRing 1.4s infinite !important;filter:saturate(1.4) brightness(1.15);}
 </style>
 </head>
 <body>
@@ -269,7 +288,28 @@ window.panToUserLocation = function(zoom) {
   }
 };
 
-${userLat && userLng && Math.abs(userLat - 20.5937) > 0.001 ? `window.updateUserLocation(${userLat}, ${userLng}, 10, false);` : ''}
+${hasUserFix ? `window.updateUserLocation(${userLat}, ${userLng}, ${userAccuracy ?? 0}, false);` : ''}
+
+// ─── Nearest-tree highlight (driven from React Native) ──────────────────────
+window._treeMs = {};
+window.highlightNearestTree = function(id) {
+  if (window._nearHlId === id) return;
+  window._nearHlId = id;
+  Object.keys(window._treeMs).forEach(function(k) {
+    var m = window._treeMs[k];
+    var el = m && m.getElement && m.getElement();
+    if (!el) return;
+    var d = el.firstElementChild || el;
+    if (id && k === id) {
+      d.classList.add('near-hl');
+      if (m.setZIndexOffset) m.setZIndexOffset(2000);
+      if (m.openPopup) { try { m.openPopup(); } catch (e) {} }
+    } else {
+      d.classList.remove('near-hl');
+      if (m.setZIndexOffset) m.setZIndexOffset(0);
+    }
+  });
+};
 
 ${markersJs}
 ${boundaryJs}
@@ -310,6 +350,7 @@ ${
            if(bounds.isValid()){map.fitBounds(bounds.pad(0.2));}`
         : ''
 }
+window._nearHlId=undefined;
 post({type:'ready',hasBoundary:${hasBoundary}});
 </script>
 </body>
@@ -370,6 +411,9 @@ post({type:'ready',hasBoundary:${hasBoundary}});
 html,body,#map{margin:0;padding:0;width:100%;height:100%;background:#0b1320;}
 .mapboxgl-ctrl-bottom-left,.mapboxgl-ctrl-bottom-right{display:none !important;}
 @keyframes surveyorPulse{0%{transform:scale(0.85);opacity:0.9;}50%{transform:scale(1.6);opacity:0.2;}100%{transform:scale(2.0);opacity:0;}}
+@keyframes gpsPulse{0%{transform:scale(0.9);opacity:0.7;}70%{transform:scale(2.2);opacity:0;}100%{transform:scale(2.2);opacity:0;}}
+@keyframes nearRing{0%{box-shadow:0 0 0 0 rgba(240,145,37,0.85),0 3px 12px rgba(0,0,0,0.5);}70%{box-shadow:0 0 0 18px rgba(240,145,37,0),0 3px 12px rgba(0,0,0,0.5);}100%{box-shadow:0 0 0 0 rgba(240,145,37,0),0 3px 12px rgba(0,0,0,0.5);}}
+.near-hl{border-color:#F09125 !important;box-shadow:0 0 16px 5px rgba(240,145,37,0.75),0 3px 12px rgba(0,0,0,0.5) !important;animation:nearRing 1.4s infinite !important;filter:saturate(1.4) brightness(1.15);}
 </style>
 </head>
 <body>
@@ -388,12 +432,115 @@ var map=new mapboxgl.Map({
 });
 map.addControl(new mapboxgl.NavigationControl({showCompass:false}),'bottom-right');
 
+// ─── Real-Time Live User Location Marker & Accuracy Circle ───
+var userMarker=null, userPopup=null, pendingUserFix=null, mapLoaded=false;
+
+// ─── Nearest-tree highlight (driven from React Native) ──────────────────────
+var treeMarkers={};
+window.highlightNearestTree=function(id){
+  if(window._nearHlId===id) return;
+  window._nearHlId=id;
+  Object.keys(treeMarkers).forEach(function(k){
+    var mk=treeMarkers[k];
+    var el=mk.getElement();
+    if(!el) return;
+    if(id&&k===id){
+      el.classList.add('near-hl');
+      el.style.zIndex='9';
+      var p=mk.getPopup();
+      if(p && !p.isOpen()){ try{ mk.togglePopup(); }catch(e){} }
+    } else {
+      el.classList.remove('near-hl');
+      el.style.zIndex='';
+    }
+  });
+};
+
+function makeUserDot(){
+  var el=document.createElement('div');
+  el.style.cssText='position:relative;width:24px;height:24px;display:flex;align-items:center;justify-content:center;';
+  el.innerHTML='<div style="position:absolute;width:24px;height:24px;border-radius:50%;background:#3b82f6;opacity:0.45;animation:gpsPulse 2s infinite;"></div>'+
+    '<div style="width:14px;height:14px;background:#2563eb;border:2.5px solid #ffffff;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.5);position:relative;z-index:2;"></div>';
+  return el;
+}
+
+function accuracyRing(lat,lng,acc){
+  var ring=[];
+  var mLat=1/111320;
+  var mLng=1/(111320*Math.cos(lat*Math.PI/180));
+  for(var i=0;i<=64;i++){
+    var a=(i/64)*Math.PI*2;
+    ring.push([lng+Math.cos(a)*acc*mLng, lat+Math.sin(a)*acc*mLat]);
+  }
+  ring.push(ring[0]);
+  return ring;
+}
+
+function userPopupHtml(lat,lng,acc){
+  return '<b>📍 Your Live Location</b><br/>Lat: '+lat.toFixed(6)+'<br/>Lng: '+lng.toFixed(6)+(acc?'<br/>Accuracy: ±'+Math.round(acc)+'m':'');
+}
+
+function applyUserFix(){
+  var f=pendingUserFix;
+  if(!f || !mapLoaded) return;
+  pendingUserFix=null;
+  var ll=[f.lng,f.lat];
+  var html=userPopupHtml(f.lat,f.lng,f.acc);
+
+  if(!userMarker){
+    userPopup=new mapboxgl.Popup({offset:20}).setHTML(html);
+    userMarker=new mapboxgl.Marker({element:makeUserDot(),anchor:'center'})
+      .setLngLat(ll)
+      .setPopup(userPopup)
+      .addTo(map);
+  } else {
+    userMarker.setLngLat(ll);
+    if(userPopup) userPopup.setHTML(html);
+  }
+
+  if(f.acc>0){
+    var accData={type:'Feature',geometry:{type:'Polygon',coordinates:[accuracyRing(f.lat,f.lng,f.acc)]},properties:{}};
+    var accSource=map.getSource('user-accuracy');
+    if(!accSource){
+      map.addSource('user-accuracy',{type:'geojson',data:accData});
+      map.addLayer({id:'user-accuracy-fill',type:'fill',source:'user-accuracy',paint:{'fill-color':'#3b82f6','fill-opacity':0.14}});
+      map.addLayer({id:'user-accuracy-line',type:'line',source:'user-accuracy',paint:{'line-color':'#2563eb','line-width':1.5,'line-opacity':0.6}});
+    } else {
+      accSource.setData(accData);
+    }
+  }
+
+  if(f.pan){
+    map.flyTo({center:ll,zoom:Math.max(map.getZoom(),18),essential:true});
+    if(userPopup && !userPopup.isOpen()) userMarker.togglePopup();
+  }
+}
+
+window.updateUserLocation=function(lat,lng,accuracy,panToUser){
+  if(!lat || !lng) return;
+  pendingUserFix={lat:lat,lng:lng,acc:accuracy||0,pan:!!panToUser};
+  if(mapLoaded) applyUserFix();
+};
+
+window.panToUserLocation=function(zoom){
+  if(userMarker){
+    var c=userMarker.getLngLat();
+    map.flyTo({center:[c.lng,c.lat],zoom:zoom||19,essential:true});
+    if(userPopup && !userPopup.isOpen()) userMarker.togglePopup();
+  }
+};
+
+${hasUserFix ? `window.updateUserLocation(${userLat}, ${userLng}, ${userAccuracy ?? 0}, false);` : ''}
+
 var treesGeoJSON={
   "type":"FeatureCollection",
   "features":[${treeFeatures}]
 };
 
 map.on('load',function(){
+  mapLoaded=true;
+  if(pendingUserFix) applyUserFix();
+
   // Add tree markers
   treesGeoJSON.features.forEach(function(f){
     var p=f.properties;
@@ -409,22 +556,17 @@ map.on('load',function(){
       'Date: '+p.date+
       (p.locked?'<br/>🔒 Locked':'')+'</div>'
     );
-    new mapboxgl.Marker({element:el})
+    var mk=new mapboxgl.Marker({element:el})
       .setLngLat(c)
       .setPopup(popup)
       .addTo(map);
+    treeMarkers[p.id]=mk;
     el.addEventListener('click',function(){
       post({type:'markerTap',treeId:p.id});
     });
   });
 
-  // User location marker
-  var userEl=document.createElement('div');
-  userEl.style.cssText='width:20px;height:20px;background:#4285f4;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
-  new mapboxgl.Marker({element:userEl})
-    .setLngLat([${userLng},${userLat}])
-    .setPopup(new mapboxgl.Popup({offset:25}).setText('Your location'))
-    .addTo(map);
+  // Live user location marker is created by window.updateUserLocation()
 
   ${
     hasFocus
@@ -548,7 +690,8 @@ map.on('load',function(){
         : fitBoundsJs
   }
 
-  post({type:'ready',hasBoundary:${hasBoundary},count:${trees.filter((t) => t.latitude && t.longitude).length}});
+  window._nearHlId=undefined;
+post({type:'ready',hasBoundary:${hasBoundary},count:${trees.filter((t) => t.latitude && t.longitude).length}});
 });
 </script>
 </body>
@@ -575,9 +718,17 @@ export default function TreeMapScreen() {
   const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const userCoordsRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const gpsAccuracyRef = useRef<number | null>(null);
-  const vibratedTreeIdRef = useRef<string | null>(null);
+  const lastGoodFixAtRef = useRef(0);
+  const proximityTreeIdRef = useRef<string | null>(null);
+  const proximityTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [vibrateEnabled, setVibrateEnabled] = useState(true);
+  const vibrateEnabledRef = useRef(true);
+  const [nearTree, setNearTree] = useState<NearTreeInfo | null>(null);
+  const nearTreeRef = useRef<NearTreeInfo | null>(null);
+  const highlightedTreeIdRef = useRef<string | null>(null);
   const [selectedTree, setSelectedTree] = useState<TreeRecord | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [detailSheetH, setDetailSheetH] = useState(0);
   const [isolateFocusedTree, setIsolateFocusedTree] = useState<boolean>(Boolean(focusTreeId));
   const [geofenceAlerts, setGeofenceAlerts] = useState<GeofenceAlert[]>([]);
   const [showAlerts, setShowAlerts] = useState(false);
@@ -585,6 +736,11 @@ export default function TreeMapScreen() {
   const toastAnim = useRef(new Animated.Value(0)).current;
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const webViewRef = useRef<WebView>(null);
+
+  // Reset the measured tree-details height whenever the card closes.
+  useEffect(() => {
+    if (!showDetails) setDetailSheetH(0);
+  }, [showDetails]);
 
   // ─── Land Area Geofence State ─────────────────────────────────────────────
   const [projectGeofence, setProjectGeofence] = useState<ProjectGeofence | null>(null);
@@ -715,10 +871,98 @@ export default function TreeMapScreen() {
     []
   );
 
+  // ─── Continuous proximity vibration ────────────────────────────────────────
+  // Buzzes repeatedly while the user stands within 3 m of the nearest tree and
+  // stops only when they walk 6 m away (or the screen unmounts).
+  const buzz = useCallback(() => {
+    try {
+      Vibration.vibrate(VIBRATE_PATTERN);
+    } catch {}
+  }, []);
+
+  const stopProximityVibration = useCallback(() => {
+    if (proximityTimerRef.current) {
+      clearInterval(proximityTimerRef.current);
+      proximityTimerRef.current = null;
+    }
+    proximityTreeIdRef.current = null;
+  }, []);
+
+  const startProximityVibration = useCallback(
+    (treeId: string) => {
+      if (!vibrateEnabledRef.current) return; // user pressed "Stop Vibrate"
+      if (proximityTreeIdRef.current === treeId && proximityTimerRef.current) return;
+      stopProximityVibration();
+      proximityTreeIdRef.current = treeId;
+      buzz();
+      proximityTimerRef.current = setInterval(buzz, PROXIMITY_VIBRATE_INTERVAL_MS);
+    },
+    [buzz, stopProximityVibration]
+  );
+
+  const rearmProximityVibration = useCallback(() => {
+    // Called when the user hits Resume — buzz again immediately instead of
+    // waiting for the next GPS tick, so "Resume" visibly works.
+    const u = userCoordsRef.current;
+    if (!u) return;
+    let best: TreeRecord | null = null;
+    let bestDist = Infinity;
+    for (const t of allTrees) {
+      if (!t?.latitude || !t?.longitude) continue;
+      const d = haversineDistance(u.latitude, u.longitude, Number(t.latitude), Number(t.longitude));
+      if (d < bestDist) {
+        bestDist = d;
+        best = t;
+      }
+    }
+    if (best && bestDist <= PROXIMITY_VIBRATE_M) startProximityVibration(best.id);
+  }, [allTrees, startProximityVibration]);
+
+  const toggleProximityVibration = useCallback(() => {
+    const next = !vibrateEnabledRef.current;
+    vibrateEnabledRef.current = next;
+    setVibrateEnabled(next);
+    if (next) {
+      rearmProximityVibration();
+      try {
+        Vibration.vibrate([0, 90, 60, 90]); // confirm ON
+      } catch {}
+    } else {
+      stopProximityVibration();
+      try {
+        Vibration.vibrate(60); // confirm OFF
+      } catch {}
+    }
+  }, [stopProximityVibration, rearmProximityVibration]);
+
+  // Highlight the tree the phone is buzzing for, on the WebView map itself.
+  const pushNearestTreeToMap = useCallback((id: string | null, force = false) => {
+    if (!force && highlightedTreeIdRef.current === id) return;
+    highlightedTreeIdRef.current = id;
+    const arg = id ? `'${id.replace(/'/g, "\\'")}'` : 'null';
+    webViewRef.current?.injectJavaScript(
+      `if (window.highlightNearestTree) { window.highlightNearestTree(${arg}); } true;`
+    );
+  }, []);
+
   const handleLocationUpdate = useCallback(
     (loc: Location.LocationObject) => {
       if (!loc?.coords) return;
       const { latitude, longitude, accuracy } = loc.coords;
+
+      // Drop noisy low-accuracy jumps while a decent fix exists nearby in time,
+      // so the dot and the 3 m vibration window stay stable.
+      const now = Date.now();
+      if (
+        accuracy != null &&
+        accuracy > GPS_ACCURACY_MAX_M &&
+        now - lastGoodFixAtRef.current < GPS_GOOD_FIX_WINDOW_MS
+      ) {
+        return;
+      }
+      if (accuracy == null || accuracy <= GPS_ACCURACY_GOOD_M) {
+        lastGoodFixAtRef.current = now;
+      }
 
       userCoordsRef.current = { latitude, longitude };
       gpsAccuracyRef.current = accuracy ?? null;
@@ -728,34 +972,65 @@ export default function TreeMapScreen() {
 
       pushLocationToMap(latitude, longitude, accuracy ?? null, false);
 
-      // Check distance to targeted/selected tree for proximity vibration
-      const targetTree = focusTreeId
-        ? allTrees.find((t) => t.id === focusTreeId)
-        : selectedTree?.latitude && selectedTree?.longitude
-        ? selectedTree
-        : null;
-
-      if (targetTree?.latitude && targetTree?.longitude) {
-        const dist = haversineDistance(
+      // ─── Proximity vibration ────────────────────────────────────────────
+      // Nearest tree wins — no need to tap a marker on the map first.
+      let nearestTree: TreeRecord | null = null;
+      let nearestDist = Infinity;
+      for (const t of allTrees) {
+        if (!t?.latitude || !t?.longitude) continue;
+        const d = haversineDistance(
           latitude,
           longitude,
-          Number(targetTree.latitude),
-          Number(targetTree.longitude)
+          Number(t.latitude),
+          Number(t.longitude)
         );
-        // If within 8 meters, vibrate phone (tactile notification)
-        if (dist <= 8 && vibratedTreeIdRef.current !== targetTree.id) {
-          vibratedTreeIdRef.current = targetTree.id;
-          try {
-            Vibration.vibrate([0, 250, 100, 250]);
-          } catch {}
-        } else if (dist > 15 && vibratedTreeIdRef.current === targetTree.id) {
-          // Reset when user steps away
-          vibratedTreeIdRef.current = null;
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearestTree = t;
         }
       }
+
+      if (nearestTree && nearestDist <= PROXIMITY_VIBRATE_M) {
+        startProximityVibration(nearestTree.id);
+      } else if (!nearestTree || nearestDist > PROXIMITY_RESET_M) {
+        stopProximityVibration();
+      }
+
+      // ─── Nearest tree: map highlight + on-screen card ────────────────────
+      if (nearestTree && nearestDist <= NEAR_TREE_HIGHLIGHT_M) {
+        const vibrating = nearestDist <= PROXIMITY_VIBRATE_M;
+        const prev = nearTreeRef.current;
+        if (
+          !prev ||
+          prev.id !== nearestTree.id ||
+          prev.vibrating !== vibrating ||
+          Math.abs(prev.distance - nearestDist) >= 0.5
+        ) {
+          const next: NearTreeInfo = {
+            id: nearestTree.id,
+            label: `${nearestTree.species || 'Unknown'} · ${resolveTreeId(nearestTree)}`,
+            distance: nearestDist,
+            vibrating,
+          };
+          nearTreeRef.current = next;
+          setNearTree(next);
+        }
+        pushNearestTreeToMap(nearestTree.id);
+      } else if (nearTreeRef.current) {
+        nearTreeRef.current = null;
+        setNearTree(null);
+        pushNearestTreeToMap(null);
+      }
     },
-    [allTrees, focusTreeId, selectedTree, pushLocationToMap]
+    [allTrees, pushLocationToMap, startProximityVibration, stopProximityVibration, pushNearestTreeToMap]
   );
+
+  // Always call the latest handler without restarting the GPS watcher whenever
+  // the trees/selection state changes (a restart drops live map updates).
+  const handleLocationUpdateRef = useRef(handleLocationUpdate);
+  useEffect(() => {
+    handleLocationUpdateRef.current = handleLocationUpdate;
+  }, [handleLocationUpdate]);
 
   // Request location & continuous live user coordinates
   useEffect(() => {
@@ -764,62 +1039,72 @@ export default function TreeMapScreen() {
 
     (async () => {
       try {
-        if (Platform.OS === 'android') {
-          try {
-            const hasServices = await Location.hasServicesEnabledAsync();
-            if (!hasServices) {
-              await Location.enableNetworkProviderAsync();
-            }
-          } catch (e) {
-            console.warn('[TreeMapScreen] enableNetworkProviderAsync error:', e);
-          }
-        }
-
+        // 0. Permission first (enableNetworkProviderAsync needs it on Android)
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
           console.warn('[TreeMapScreen] Location permission denied');
           return;
         }
 
-        // 1. Fast fix from last known position (0-10ms)
+        if (Platform.OS === 'android') {
+          // Turn on the network location provider so the first fix lands in
+          // well under a second instead of waiting for a GPS cold start.
+          try {
+            await Location.enableNetworkProviderAsync();
+          } catch (e) {
+            console.warn('[TreeMapScreen] enableNetworkProviderAsync error:', e);
+          }
+        }
+
+        // 1. Instant paint from a recent cached fix (0-10 ms)
         try {
-          const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 60000 });
+          const lastKnown = await Location.getLastKnownPositionAsync({
+            maxAge: 300000, // fresh enough for up to 5 minutes
+            requiredAccuracy: 150, // skip hopelessly stale/uncertain caches
+          });
           if (lastKnown && isMounted) {
-            handleLocationUpdate(lastKnown);
+            handleLocationUpdateRef.current(lastKnown);
           }
         } catch {}
 
-        // 2. High-Accuracy one-shot fix
+        // 2. Highest-quality one-shot fix (navigation grade = GPS + sensors)
         Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
+          accuracy: Location.Accuracy.BestForNavigation,
+          mayShowUserSettingsDialog: true,
         })
           .then((loc) => {
             if (loc && isMounted) {
-              handleLocationUpdate(loc);
+              handleLocationUpdateRef.current(loc);
             }
           })
           .catch(async () => {
             try {
               const balanced = await Location.getCurrentPositionAsync({
                 accuracy: Location.Accuracy.Balanced,
+                mayShowUserSettingsDialog: true,
               });
               if (balanced && isMounted) {
-                handleLocationUpdate(balanced);
+                handleLocationUpdateRef.current(balanced);
               }
             } catch {}
           });
 
-        // 3. Continuous real-time watcher with High Accuracy (updates every 1m or 1s)
+        // 3. Continuous live stream: navigation-grade accuracy, twice a second,
+        //    and the moment the user moves a single metre.
         watcher = await Location.watchPositionAsync(
           {
-            accuracy: Location.Accuracy.High,
+            accuracy: Location.Accuracy.BestForNavigation,
             distanceInterval: 1, // update every 1 meter
-            timeInterval: 1000,  // or every 1 second
+            timeInterval: 500, // or every 0.5 seconds
+            mayShowUserSettingsDialog: false, // one-shot above already prompted
           },
           (loc) => {
             if (isMounted) {
-              handleLocationUpdate(loc);
+              handleLocationUpdateRef.current(loc);
             }
+          },
+          (err) => {
+            console.warn('[TreeMapScreen] watch error:', err);
           }
         );
       } catch (err) {
@@ -832,8 +1117,9 @@ export default function TreeMapScreen() {
       if (watcher) {
         watcher.remove();
       }
+      stopProximityVibration();
     };
-  }, [handleLocationUpdate]);
+  }, [stopProximityVibration]);
 
   const handleCenterOnMyLocation = useCallback(async () => {
     if (userCoordsRef.current) {
@@ -846,7 +1132,10 @@ export default function TreeMapScreen() {
       try { Vibration.vibrate(40); } catch {}
     } else {
       try {
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.BestForNavigation,
+          mayShowUserSettingsDialog: true,
+        });
         if (loc?.coords) {
           handleLocationUpdate(loc);
           pushLocationToMap(loc.coords.latitude, loc.coords.longitude, loc.coords.accuracy, true);
@@ -1142,6 +1431,8 @@ export default function TreeMapScreen() {
           if (userCoordsRef.current) {
             pushLocationToMap(userCoordsRef.current.latitude, userCoordsRef.current.longitude, gpsAccuracyRef.current, false);
           }
+          // Map just (re)loaded — re-apply the nearest-tree highlight
+          pushNearestTreeToMap(nearTreeRef.current?.id ?? null, true);
           if (!focusTreeId && hasActiveBoundary) {
             setTimeout(handleZoomToBoundary, 350);
           }
@@ -1154,7 +1445,7 @@ export default function TreeMapScreen() {
         }
       } catch {}
     },
-    [allTrees, focusTreeId, hasActiveBoundary, handleZoomToBoundary, pushLocationToMap]
+    [allTrees, focusTreeId, hasActiveBoundary, handleZoomToBoundary, pushLocationToMap, pushNearestTreeToMap]
   );
 
   // Auto-zoom to boundary when project geofence is loaded
@@ -1218,15 +1509,26 @@ export default function TreeMapScreen() {
         projectGeofence?.locked,
         geofenceWalkMode ? walkCorners : undefined,
         focusLat,
-        focusLng
+        focusLng,
+        gpsAccuracyRef.current ?? undefined,
+        userCoordsRef.current != null
       ),
     [treesToRender, focusTreeId, projectGeofence, geofenceWalkMode, walkCorners, focusLat, focusLng]
   );
+
+  // Stable source object: recreating it every render can reset the WebView and
+  // wipe the injected live-location updates.
+  const mapSource = useMemo(() => ({ html }), [html]);
 
   const pendingRequestsCount = useMemo(
     () => changeRequests.filter((r) => r.status === 'pending').length,
     [changeRequests]
   );
+
+  // The tree-details sheet shares the bottom edge with the floating controls;
+  // lift the controls by the measured sheet height so they never cover it.
+  const detailLift = showDetails && detailSheetH > 0 ? detailSheetH + 16 : 0;
+  const hudBaseBottom = hasActiveBoundary && !focusTreeId ? insets.bottom + 122 : insets.bottom + 68;
 
   return (
     <View style={styles.container}>
@@ -1319,11 +1621,154 @@ export default function TreeMapScreen() {
       ) : (
         <WebView
           ref={webViewRef}
-          source={{ html }}
+          source={mapSource}
           style={styles.map}
           onMessage={handleWebViewMessage}
           javaScriptEnabled={true}
         />
+      )}
+
+      {/* ─── Explorer HUD: nearest-tree radar + live GPS + locate FAB ─── */}
+      {!geofenceWalkMode && (
+        <View pointerEvents="box-none" style={[styles.hudCluster, { bottom: hudBaseBottom + detailLift }]}>
+          {/* Nearest tree + vibration control */}
+          {nearTree || !vibrateEnabled ? (
+            <View style={styles.nearTreeCard}>
+              <LinearGradient
+                colors={
+                  nearTree && nearTree.vibrating && vibrateEnabled
+                    ? ['#fb923c', '#ea580c']
+                    : nearTree
+                      ? ['#4ade80', '#16a34a']
+                      : ['#94a3b8', '#64748b']
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.nearRadar}
+              >
+                <Ionicons name={nearTree ? 'pulse' : 'leaf'} size={17} color="#fff" />
+              </LinearGradient>
+
+              <View style={styles.nearTreeInfo}>
+                <Text style={styles.nearTreeTitle} numberOfLines={1}>
+                  {nearTree ? nearTree.label : 'No tree nearby'}
+                </Text>
+
+                <View style={styles.nearDistRow}>
+                  <Text
+                    style={[
+                      styles.nearDist,
+                      nearTree?.vibrating && vibrateEnabled && styles.nearDistActive,
+                    ]}
+                  >
+                    {nearTree
+                      ? nearTree.distance < 100
+                        ? `${nearTree.distance.toFixed(1)} m`
+                        : `${(nearTree.distance / 1000).toFixed(2)} km`
+                      : 'Scanning'}
+                  </Text>
+                  <View
+                    style={[
+                      styles.nearStatePill,
+                      nearTree?.vibrating && vibrateEnabled && styles.nearStatePillActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.nearStatePillText,
+                        nearTree?.vibrating && vibrateEnabled && styles.nearStatePillTextActive,
+                      ]}
+                    >
+                      {nearTree
+                        ? nearTree.vibrating && vibrateEnabled
+                          ? 'VIBRATING'
+                          : 'NEARBY'
+                        : 'SEARCHING'}
+                    </Text>
+                  </View>
+                </View>
+
+                {nearTree ? (
+                  <View style={styles.nearBarTrack}>
+                    <View
+                      style={[
+                        styles.nearBarFill,
+                        {
+                          width: `${Math.min(
+                            100,
+                            Math.max(8, (1 - nearTree.distance / NEAR_TREE_HIGHLIGHT_M) * 100)
+                          )}%`,
+                          backgroundColor:
+                            nearTree.vibrating && vibrateEnabled ? '#F09125' : '#22c55e',
+                        },
+                      ]}
+                    />
+                  </View>
+                ) : null}
+              </View>
+
+              <TouchableOpacity
+                style={[styles.nearVibeBtn, !vibrateEnabled && styles.nearVibeBtnResume]}
+                onPress={toggleProximityVibration}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name={vibrateEnabled ? 'stop-circle' : 'play-circle'}
+                  size={16}
+                  color={vibrateEnabled ? '#fff' : '#15803d'}
+                />
+                <Text style={[styles.nearVibeBtnText, !vibrateEnabled && styles.nearVibeBtnTextResume]}>
+                  {vibrateEnabled ? 'Stop' : 'Resume'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {/* Live GPS accuracy pill */}
+          {userCoords && (
+            <View style={styles.gpsBadge}>
+              <View style={styles.gpsBadgeDotWrap}>
+                <View
+                  style={[
+                    styles.gpsBadgeDot,
+                    {
+                      backgroundColor:
+                        gpsAccuracy && gpsAccuracy <= 5
+                          ? '#22c55e'
+                          : gpsAccuracy && gpsAccuracy <= 20
+                            ? '#f59e0b'
+                            : '#ef4444',
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={styles.gpsBadgeText}>
+                ±{gpsAccuracy ? Math.round(gpsAccuracy) : '--'}m
+              </Text>
+              <View style={styles.gpsLiveTag}>
+                <Text style={styles.gpsLiveTagText}>LIVE</Text>
+              </View>
+            </View>
+          )}
+
+          {/* Locate me FAB */}
+          <TouchableOpacity
+            style={styles.myLocationFab}
+            onPress={handleCenterOnMyLocation}
+            activeOpacity={0.85}
+          >
+            <View style={styles.fabHalo}>
+              <LinearGradient
+                colors={['#38bdf8', '#2563eb', '#1d4ed8']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.fabInner}
+              >
+                <Ionicons name="locate" size={22} color="#fff" />
+              </LinearGradient>
+            </View>
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* Floating Auto-Zoom Land Fence Button */}
@@ -1331,19 +1776,26 @@ export default function TreeMapScreen() {
         <TouchableOpacity
           style={[
             styles.autoZoomFab,
-            { bottom: geofenceWalkMode ? insets.bottom + 270 : insets.bottom + 68 },
+            {
+              bottom:
+                (geofenceWalkMode ? insets.bottom + 270 : insets.bottom + 68) +
+                (geofenceWalkMode ? 0 : detailLift),
+            },
           ]}
           onPress={handleZoomToBoundary}
           activeOpacity={0.85}
         >
           <LinearGradient
-            colors={['#1a5c2a', '#2e7d43']}
+            colors={['#34d399', '#059669', '#047857']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.autoZoomFabGradient}
           >
-            <Ionicons name="scan" size={16} color="#fff" />
+            <View style={styles.autoZoomIconWrap}>
+              <Ionicons name="scan" size={14} color="#fff" />
+            </View>
             <Text style={styles.autoZoomFabText}>Auto-Zoom Land Fence</Text>
+            <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.85)" />
           </LinearGradient>
         </TouchableOpacity>
       )}
@@ -1717,7 +2169,10 @@ export default function TreeMapScreen() {
 
       {/* ─── TREE DETAILS FLOATING CARD (Non-modal: map is 100% interactive & clear) ─── */}
       {selectedTree && showDetails && (
-        <View style={[styles.floatingDetailSheet, { bottom: insets.bottom + 12 }]}>
+        <View
+          style={[styles.floatingDetailSheet, { bottom: insets.bottom + 12 }]}
+          onLayout={(e) => setDetailSheetH(e.nativeEvent.layout.height)}
+        >
           {(() => {
             let cleanNotes = selectedTree.notes || '';
             let meta: Record<string, any> = {};
@@ -1977,24 +2432,234 @@ const styles = StyleSheet.create({
     right: 14,
     zIndex: 90,
     elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    borderRadius: 24,
   },
   autoZoomFabGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 13,
+    gap: 7,
+    paddingHorizontal: 12,
     paddingVertical: 9,
-    borderRadius: 22,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  autoZoomIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   autoZoomFabText: {
     color: '#fff',
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+
+  // ─── Explorer HUD: right-hand floating stack (radar card + GPS + FAB) ───
+  hudCluster: {
+    position: 'absolute',
+    right: 14,
+    zIndex: 95,
+    elevation: 8,
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+
+  // Nearest-tree radar card
+  nearTreeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    maxWidth: 280,
+    backgroundColor: 'rgba(11,19,32,0.94)',
+    padding: 9,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 9,
+  },
+  nearRadar: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  nearTreeInfo: {
+    flexShrink: 1,
+    width: 118,
+  },
+  nearTreeTitle: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  nearDistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  nearDist: {
+    color: '#e2e8f0',
+    fontSize: 14,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+    flexShrink: 1,
+  },
+  nearDistActive: {
+    color: '#FDBA74',
+  },
+  nearStatePill: {
+    flexShrink: 0,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 7,
+    backgroundColor: 'rgba(148,163,184,0.25)',
+  },
+  nearStatePillActive: {
+    backgroundColor: 'rgba(240,145,37,0.28)',
+  },
+  nearStatePillText: {
+    color: '#94a3b8',
+    fontSize: 8.5,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+  },
+  nearStatePillTextActive: {
+    color: '#FDBA74',
+  },
+  nearBarTrack: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    marginTop: 5,
+    overflow: 'hidden',
+  },
+  nearBarFill: {
+    height: 4,
+    borderRadius: 2,
+  },
+  nearVibeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    backgroundColor: '#dc2626',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  nearVibeBtnResume: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#16a34a',
+  },
+  nearVibeBtnText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '900',
     letterSpacing: 0.2,
+  },
+  nearVibeBtnTextResume: {
+    color: '#15803d',
+  },
+
+  // Live GPS pill
+  gpsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(11,19,32,0.92)',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+  },
+  gpsBadgeDotWrap: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  gpsBadgeDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  gpsBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+    fontFamily: 'monospace',
+  },
+  gpsLiveTag: {
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+    backgroundColor: 'rgba(34,197,94,0.22)',
+    borderWidth: 1,
+    borderColor: 'rgba(74,222,128,0.5)',
+  },
+  gpsLiveTagText: {
+    color: '#4ade80',
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+
+  // Locate-me FAB
+  myLocationFab: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#2563eb',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.55,
+    shadowRadius: 10,
+    elevation: 9,
+  },
+  fabHalo: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    padding: 3,
+    backgroundColor: 'rgba(37,99,235,0.28)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(147,197,253,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fabInner: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#ffffff',
   },
   geofenceChipPending: {
     flexDirection: 'row',
@@ -2289,6 +2954,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 14,
     right: 14,
+    zIndex: 200,
     backgroundColor: '#ffffff',
     borderRadius: 20,
     padding: 16,
@@ -2296,7 +2962,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.25,
     shadowRadius: 16,
-    elevation: 10,
+    elevation: 12,
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
@@ -2304,6 +2970,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
+    zIndex: 190,
     backgroundColor: '#ffffff',
     borderRadius: 30,
     paddingHorizontal: 16,
@@ -2315,7 +2982,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 10,
-    elevation: 8,
+    elevation: 11,
     borderWidth: 1.5,
     borderColor: '#86efac',
   },
