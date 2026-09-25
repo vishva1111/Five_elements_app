@@ -16,6 +16,7 @@ import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CaptureStackParamList, Project } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import { fetchAllProjects } from '../../services/treeService';
@@ -32,6 +33,7 @@ const SLOT_CONFIG = [
 ];
 
 export default function CaptureScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
   const isFocused = useIsFocused();
   const [permission, requestPermission] = useCameraPermissions();
@@ -193,7 +195,7 @@ export default function CaptureScreen() {
       {/* ─── 1. TOP GREEN CONTAINER ─── */}
       <LinearGradient
         colors={['#0f331d', '#155227', '#1a5c2a']}
-        style={styles.topGreenContainer}
+        style={[styles.topGreenContainer, { paddingTop: Math.max(insets.top, 16) + 8 }]}
       >
         <TouchableOpacity
           style={styles.backBtn}
@@ -249,7 +251,7 @@ export default function CaptureScreen() {
       {/* ─── 3. DOWNSIDE GREEN CONTAINER (Controls & 3 Photo Boxes) ─── */}
       <LinearGradient
         colors={['#1a5c2a', '#12441f', '#0c2e15']}
-        style={styles.bottomGreenContainer}
+        style={[styles.bottomGreenContainer, { paddingBottom: Math.max(insets.bottom, 16) + 16 }]}
       >
         {/* Active Target Pill */}
         <View style={styles.activeTagRow}>

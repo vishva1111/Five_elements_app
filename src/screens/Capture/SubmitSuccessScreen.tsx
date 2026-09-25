@@ -1,62 +1,75 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
 
 export default function SubmitSuccessScreen() {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const remainingCredits = user?.credits ?? 0;
 
   return (
     <View style={styles.container}>
-      <View style={styles.card}>
-        <View style={styles.iconCircle}>
-          <Ionicons name="checkmark-circle" size={80} color="#22c55e" />
-        </View>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContainer,
+          {
+            paddingTop: Math.max(insets.top, 16) + 16,
+            paddingBottom: Math.max(insets.bottom, 16) + 24,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.card}>
+          <View style={styles.iconCircle}>
+            <Ionicons name="checkmark-circle" size={80} color="#22c55e" />
+          </View>
 
-        <Text style={styles.title}>Tree Submitted! 🌳</Text>
-        <Text style={styles.subtitle}>
-          Your tree record has been saved and synced with the admin panel in real-time.
-        </Text>
+          <Text style={styles.title}>Tree Submitted! 🌳</Text>
+          <Text style={styles.subtitle}>
+            Your tree record has been saved and synced with the admin panel in real-time.
+          </Text>
 
-        {/* Updated credit balance — shown immediately after the 1-credit deduction */}
-        <View style={styles.creditCard}>
-          <View style={styles.creditRow}>
-            <View style={styles.creditIconWrap}>
-              <Ionicons name="wallet-outline" size={22} color="#1a5c2a" />
-            </View>
-            <View style={styles.creditInfo}>
-              <Text style={styles.creditLabel}>🌳 −1 credit used for this tree</Text>
-              <Text style={styles.creditValue}>
-                Remaining Credits: <Text style={styles.creditNumber}>{remainingCredits}</Text>
-              </Text>
+          {/* Updated credit balance — shown immediately after the 1-credit deduction */}
+          <View style={styles.creditCard}>
+            <View style={styles.creditRow}>
+              <View style={styles.creditIconWrap}>
+                <Ionicons name="wallet-outline" size={22} color="#1a5c2a" />
+              </View>
+              <View style={styles.creditInfo}>
+                <Text style={styles.creditLabel}>🌳 −1 credit used for this tree</Text>
+                <Text style={styles.creditValue}>
+                  Remaining Credits: <Text style={styles.creditNumber}>{remainingCredits}</Text>
+                </Text>
+              </View>
             </View>
           </View>
+
+          <View style={styles.infoBox}>
+            <Text style={styles.infoItem}>✅ Photo uploaded to cloud</Text>
+            <Text style={styles.infoItem}>📍 GPS location saved</Text>
+            <Text style={styles.infoItem}>🔄 Synced with admin dashboard</Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.captureMoreBtn}
+            onPress={() => navigation.navigate('CaptureCamera')}
+          >
+            <Ionicons name="camera" size={20} color="#fff" />
+            <Text style={styles.captureMoreText}>Capture Another Tree</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.homeBtn}
+            onPress={() => navigation.navigate('Home')}
+          >
+            <Text style={styles.homeBtnText}>Go to Dashboard</Text>
+          </TouchableOpacity>
         </View>
-
-        <View style={styles.infoBox}>
-          <Text style={styles.infoItem}>✅ Photo uploaded to cloud</Text>
-          <Text style={styles.infoItem}>📍 GPS location saved</Text>
-          <Text style={styles.infoItem}>🔄 Synced with admin dashboard</Text>
-        </View>
-
-        <TouchableOpacity
-          style={styles.captureMoreBtn}
-          onPress={() => navigation.navigate('CaptureCamera')}
-        >
-          <Ionicons name="camera" size={20} color="#fff" />
-          <Text style={styles.captureMoreText}>Capture Another Tree</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.homeBtn}
-          onPress={() => navigation.navigate('Home')}
-        >
-          <Text style={styles.homeBtnText}>Go to Dashboard</Text>
-        </TouchableOpacity>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -65,9 +78,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f0f4f1',
+  },
+  scrollContainer: {
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 28,
+    paddingHorizontal: 24,
   },
   card: {
     backgroundColor: '#fff',

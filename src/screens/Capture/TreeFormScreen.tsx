@@ -29,6 +29,7 @@ import {
   MultiStemOption,
   LandType,
 } from '../../types';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { insertTreeRecord, syncUserCredits, computeCreditsForProject, fetchAllProjects, generateProjectTreeId } from '../../services/treeService';
@@ -43,6 +44,7 @@ type Nav = NativeStackNavigationProp<CaptureStackParamList, 'TreeForm'>;
 type Route = RouteProp<CaptureStackParamList, 'TreeForm'>;
 
 export default function TreeFormScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
   const { photoUris, coords } = route.params;
@@ -318,7 +320,10 @@ export default function TreeFormScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {/* Header with credits on the right */}
-      <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={styles.header}>
+      <LinearGradient
+        colors={['#123f24', '#1a5c2a', '#2e7d43']}
+        style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 8 }]}
+      >
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -353,6 +358,7 @@ export default function TreeFormScreen() {
       <ScrollView
         ref={scrollRef}
         style={styles.scrollContent}
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 36 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         onScroll={(e: any) => {
@@ -748,7 +754,7 @@ export default function TreeFormScreen() {
       </ScrollView>
 
       {/* Save Button */}
-      <View style={styles.saveSection}>
+      <View style={[styles.saveSection, { paddingBottom: Math.max(insets.bottom, 16) + 12 }]}>
         <TouchableOpacity
           style={[styles.saveBtn, submitting && styles.saveBtnDisabled]}
           onPress={handleSubmit}

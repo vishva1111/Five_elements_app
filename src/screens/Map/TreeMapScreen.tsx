@@ -12,6 +12,7 @@ import {
   ScrollView,
   Platform,
   Vibration,
+  Linking,
 } from 'react-native';
 import { haversineDistance } from '../../services/geofenceService';
 import { WebView } from 'react-native-webview';
@@ -79,6 +80,31 @@ type NearTreeInfo = { id: string; label: string; distance: number; vibrating: bo
 const GPS_ACCURACY_MAX_M = 50; // ignore fixes worse than this while a good one exists
 const GPS_ACCURACY_GOOD_M = 25; // fixes at or better than this reset the guard window
 const GPS_GOOD_FIX_WINDOW_MS = 10000; // how long a good fix suppresses noisy jumps
+
+// ─── Compass bearing & distance calculations for walking directions ───────────
+function calculateBearing(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const toDeg = (r: number) => (r * 180) / Math.PI;
+  const phi1 = toRad(lat1);
+  const phi2 = toRad(lat2);
+  const deltaLambda = toRad(lon2 - lon1);
+  const y = Math.sin(deltaLambda) * Math.cos(phi2);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLambda);
+  const brng = toDeg(Math.atan2(y, x));
+  return Math.round((brng + 360) % 360);
+}
+
+function getCompassDirection(bearing: number): string {
+  const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  return directions[Math.round(bearing / 45) % 8];
+}
+
+function formatDistanceMeters(meters: number): string {
+  if (meters >= 1000) {
+    return `${(meters / 1000).toFixed(1)} km`;
+  }
+  return `${Math.round(meters)} m`;
+}
 
 // ─── Build map HTML with tree markers & land boundary ───────────────────────
 function buildMapHtml(
@@ -217,6 +243,10 @@ html,body,#map{margin:0;padding:0;width:100%;height:100%;background:#0b1320;}
 @keyframes gpsPulse{0%{transform:scale(0.9);opacity:0.7;}70%{transform:scale(2.2);opacity:0;}100%{transform:scale(2.2);opacity:0;}}
 @keyframes nearRing{0%{box-shadow:0 0 0 0 rgba(240,145,37,0.85),0 3px 12px rgba(0,0,0,0.5);}70%{box-shadow:0 0 0 18px rgba(240,145,37,0),0 3px 12px rgba(0,0,0,0.5);}100%{box-shadow:0 0 0 0 rgba(240,145,37,0),0 3px 12px rgba(0,0,0,0.5);}}
 .near-hl{border-color:#F09125 !important;box-shadow:0 0 16px 5px rgba(240,145,37,0.75),0 3px 12px rgba(0,0,0,0.5) !important;animation:nearRing 1.4s infinite !important;filter:saturate(1.4) brightness(1.15);}
+@keyframes dashTravel{to{stroke-dashoffset:-32;}}
+.direction-route-line path{animation:dashTravel 1.2s linear infinite;stroke:#0284c7;stroke-dasharray:8,8;filter:drop-shadow(0 2px 6px rgba(2,132,199,0.6));}
+.direction-pill-icon{background:transparent !important;border:none !important;}
+.route-distance-badge{background:rgba(15,23,42,0.92);color:#38bdf8;border:1.5px solid #0284c7;padding:4px 10px;border-radius:14px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:11px;font-weight:800;letter-spacing:0.4px;box-shadow:0 4px 14px rgba(0,0,0,0.5);display:inline-flex;align-items:center;gap:4px;white-space:nowrap;pointer-events:none;}
 </style>
 </head>
 <body>
@@ -735,7 +765,35 @@ export default function TreeMapScreen() {
   const [toast, setToast] = useState<{ message: string; type: 'enter' | 'exit' } | null>(null);
   const toastAnim = useRef(new Animated.Value(0)).current;
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const radarPulseAnim = useRef(new Animated.Value(0)).current;
   const webViewRef = useRef<WebView>(null);
+
+  // Pulse loop for radar ripple wave when within vibrating proximity
+  useEffect(() => {
+    let anim: Animated.CompositeAnimation | null = null;
+    if (nearTree?.vibrating && vibrateEnabled) {
+      anim = Animated.loop(
+        Animated.sequence([
+          Animated.timing(radarPulseAnim, {
+            toValue: 1,
+            duration: 1200,
+            useNativeDriver: true,
+          }),
+          Animated.timing(radarPulseAnim, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      anim.start();
+    } else {
+      radarPulseAnim.setValue(0);
+    }
+    return () => {
+      if (anim) anim.stop();
+    };
+  }, [nearTree?.vibrating, vibrateEnabled, radarPulseAnim]);
 
   // Reset the measured tree-details height whenever the card closes.
   useEffect(() => {
@@ -1525,10 +1583,27 @@ export default function TreeMapScreen() {
     [changeRequests]
   );
 
-  // The tree-details sheet shares the bottom edge with the floating controls;
-  // lift the controls by the measured sheet height so they never cover it.
-  const detailLift = showDetails && detailSheetH > 0 ? detailSheetH + 16 : 0;
-  const hudBaseBottom = hasActiveBoundary && !focusTreeId ? insets.bottom + 122 : insets.bottom + 68;
+  // Split nearTree label into species and id for clean high-contrast styling
+  const { nearSpecies, nearId } = useMemo(() => {
+    if (!nearTree) return { nearSpecies: 'No tree nearby', nearId: '' };
+    const parts = nearTree.label.split('·');
+    if (parts.length >= 2) {
+      return {
+        nearSpecies: parts[0].trim(),
+        nearId: parts.slice(1).join('·').trim(),
+      };
+    }
+    return { nearSpecies: nearTree.label, nearId: '' };
+  }, [nearTree]);
+
+  // Dynamic bottom offset for the HUD cluster to ensure it never overrides or
+  // overlaps the stats bar (in normal mode), minimized tree pill, or full tree details sheet
+  const hudBottom = useMemo(() => {
+    if (showDetails && detailSheetH > 0) {
+      return insets.bottom + detailSheetH + 24;
+    }
+    return insets.bottom + 72;
+  }, [showDetails, detailSheetH, insets.bottom]);
 
   return (
     <View style={styles.container}>
@@ -1628,176 +1703,293 @@ export default function TreeMapScreen() {
         />
       )}
 
-      {/* ─── Explorer HUD: nearest-tree radar + live GPS + locate FAB ─── */}
+      {/* ─── Explorer HUD: nearest-tree radar + live GPS + locate FAB + land fence ─── */}
       {!geofenceWalkMode && (
-        <View pointerEvents="box-none" style={[styles.hudCluster, { bottom: hudBaseBottom + detailLift }]}>
-          {/* Nearest tree + vibration control */}
+        <View pointerEvents="box-none" style={[styles.hudCluster, { bottom: hudBottom }]}>
+          {/* Nearest tree radar telemetry card */}
           {nearTree || !vibrateEnabled ? (
-            <View style={styles.nearTreeCard}>
-              <LinearGradient
-                colors={
-                  nearTree && nearTree.vibrating && vibrateEnabled
-                    ? ['#fb923c', '#ea580c']
-                    : nearTree
-                      ? ['#4ade80', '#16a34a']
-                      : ['#94a3b8', '#64748b']
-                }
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.nearRadar}
-              >
-                <Ionicons name={nearTree ? 'pulse' : 'leaf'} size={17} color="#fff" />
-              </LinearGradient>
+            <View
+              style={[
+                styles.nearTreeCard,
+                nearTree?.vibrating && vibrateEnabled && styles.nearTreeCardVibrating,
+              ]}
+            >
+              {/* Radar Sonar Beacon Icon with Animated Ripple Halo */}
+              <View style={styles.radarBeaconContainer}>
+                {nearTree?.vibrating && vibrateEnabled && (
+                  <Animated.View
+                    style={[
+                      styles.radarRippleHalo,
+                      {
+                        transform: [
+                          {
+                            scale: radarPulseAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [1, 1.85],
+                            }),
+                          },
+                        ],
+                        opacity: radarPulseAnim.interpolate({
+                          inputRange: [0, 0.7, 1],
+                          outputRange: [0.75, 0.25, 0],
+                        }),
+                      },
+                    ]}
+                  />
+                )}
+                <LinearGradient
+                  colors={
+                    nearTree && nearTree.vibrating && vibrateEnabled
+                      ? ['#fb923c', '#ea580c']
+                      : nearTree
+                        ? ['#34d399', '#059669']
+                        : ['#64748b', '#334155']
+                  }
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.radarBeaconCircle}
+                >
+                  <Ionicons
+                    name={
+                      nearTree && nearTree.vibrating && vibrateEnabled
+                        ? 'pulse'
+                        : nearTree
+                          ? 'leaf'
+                          : 'scan-outline'
+                    }
+                    size={17}
+                    color="#fff"
+                  />
+                </LinearGradient>
+              </View>
 
+              {/* Middle: Tree Info + Distance + 5-Segment LED Signal Meter */}
               <View style={styles.nearTreeInfo}>
-                <Text style={styles.nearTreeTitle} numberOfLines={1}>
-                  {nearTree ? nearTree.label : 'No tree nearby'}
-                </Text>
-
-                <View style={styles.nearDistRow}>
-                  <Text
-                    style={[
-                      styles.nearDist,
-                      nearTree?.vibrating && vibrateEnabled && styles.nearDistActive,
-                    ]}
-                  >
-                    {nearTree
-                      ? nearTree.distance < 100
-                        ? `${nearTree.distance.toFixed(1)} m`
-                        : `${(nearTree.distance / 1000).toFixed(2)} km`
-                      : 'Scanning'}
+                <View style={styles.nearHeaderRow}>
+                  <Text style={styles.nearSpeciesText} numberOfLines={1}>
+                    {nearSpecies}
                   </Text>
-                  <View
-                    style={[
-                      styles.nearStatePill,
-                      nearTree?.vibrating && vibrateEnabled && styles.nearStatePillActive,
-                    ]}
-                  >
+                  {nearId ? (
+                    <View style={styles.nearIdBadge}>
+                      <Text style={styles.nearIdText} numberOfLines={1}>
+                        {nearId}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                <View style={styles.nearMetricsRow}>
+                  <View style={styles.nearDistWrap}>
                     <Text
                       style={[
-                        styles.nearStatePillText,
-                        nearTree?.vibrating && vibrateEnabled && styles.nearStatePillTextActive,
+                        styles.nearDistNum,
+                        nearTree?.vibrating && vibrateEnabled && styles.nearDistNumVibrating,
+                      ]}
+                    >
+                      {nearTree
+                        ? nearTree.distance < 100
+                          ? nearTree.distance.toFixed(1)
+                          : (nearTree.distance / 1000).toFixed(1)
+                        : '--'}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.nearDistUnit,
+                        nearTree?.vibrating && vibrateEnabled && styles.nearDistUnitVibrating,
+                      ]}
+                    >
+                      {nearTree ? (nearTree.distance < 100 ? 'm' : 'km') : ''}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.nearStatusPill,
+                      nearTree?.vibrating && vibrateEnabled
+                        ? styles.nearStatusPillVibrating
+                        : nearTree
+                          ? styles.nearStatusPillNearby
+                          : styles.nearStatusPillScanning,
+                    ]}
+                  >
+                    <Ionicons
+                      name={
+                        nearTree?.vibrating && vibrateEnabled
+                          ? 'radio'
+                          : nearTree
+                            ? 'navigate'
+                            : 'scan-outline'
+                      }
+                      size={9}
+                      color={
+                        nearTree?.vibrating && vibrateEnabled
+                          ? '#fdba74'
+                          : nearTree
+                            ? '#86efac'
+                            : '#94a3b8'
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.nearStatusPillText,
+                        nearTree?.vibrating && vibrateEnabled
+                          ? styles.nearStatusPillTextVibrating
+                          : nearTree
+                            ? styles.nearStatusPillTextNearby
+                            : styles.nearStatusPillTextScanning,
                       ]}
                     >
                       {nearTree
                         ? nearTree.vibrating && vibrateEnabled
                           ? 'VIBRATING'
-                          : 'NEARBY'
-                        : 'SEARCHING'}
+                          : 'IN RANGE'
+                        : 'SCANNING'}
                     </Text>
                   </View>
                 </View>
 
+                {/* 5-Segment Proximity LED Signal Meter */}
                 {nearTree ? (
-                  <View style={styles.nearBarTrack}>
-                    <View
-                      style={[
-                        styles.nearBarFill,
-                        {
-                          width: `${Math.min(
-                            100,
-                            Math.max(8, (1 - nearTree.distance / NEAR_TREE_HIGHLIGHT_M) * 100)
-                          )}%`,
-                          backgroundColor:
-                            nearTree.vibrating && vibrateEnabled ? '#F09125' : '#22c55e',
-                        },
-                      ]}
-                    />
+                  <View style={styles.signalMeterWrap}>
+                    {[1, 2, 3, 4, 5].map((seg) => {
+                      const pct = Math.max(
+                        0,
+                        Math.min(1, (NEAR_TREE_HIGHLIGHT_M - nearTree.distance) / (NEAR_TREE_HIGHLIGHT_M - 2))
+                      );
+                      const isLit = pct >= (seg - 0.2) / 5;
+                      const isVibe = nearTree.vibrating && vibrateEnabled;
+                      return (
+                        <View
+                          key={seg}
+                          style={[
+                            styles.signalSegment,
+                            isLit && (isVibe ? styles.signalSegmentVibe : styles.signalSegmentNearby),
+                          ]}
+                        />
+                      );
+                    })}
                   </View>
                 ) : null}
               </View>
 
+              {/* Right: Tactile Haptic Silence/Resume Pill */}
               <TouchableOpacity
-                style={[styles.nearVibeBtn, !vibrateEnabled && styles.nearVibeBtnResume]}
+                style={styles.nearHapticBtn}
                 onPress={toggleProximityVibration}
                 activeOpacity={0.8}
               >
-                <Ionicons
-                  name={vibrateEnabled ? 'stop-circle' : 'play-circle'}
-                  size={16}
-                  color={vibrateEnabled ? '#fff' : '#15803d'}
-                />
-                <Text style={[styles.nearVibeBtnText, !vibrateEnabled && styles.nearVibeBtnTextResume]}>
-                  {vibrateEnabled ? 'Stop' : 'Resume'}
-                </Text>
+                <LinearGradient
+                  colors={
+                    !vibrateEnabled
+                      ? ['#059669', '#047857']
+                      : nearTree?.vibrating
+                        ? ['#dc2626', '#991b1b']
+                        : ['#475569', '#334155']
+                  }
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.nearHapticBtnGradient}
+                >
+                  <Ionicons
+                    name={
+                      !vibrateEnabled
+                        ? 'play'
+                        : nearTree?.vibrating
+                          ? 'volume-mute'
+                          : 'notifications-off'
+                    }
+                    size={13}
+                    color="#fff"
+                  />
+                  <Text style={styles.nearHapticBtnText}>
+                    {!vibrateEnabled ? 'Resume' : 'Mute'}
+                  </Text>
+                </LinearGradient>
               </TouchableOpacity>
             </View>
           ) : null}
 
-          {/* Live GPS accuracy pill */}
+          {/* Live GPS Telemetry Pill */}
           {userCoords && (
-            <View style={styles.gpsBadge}>
-              <View style={styles.gpsBadgeDotWrap}>
+            <View style={styles.gpsTelemetryPill}>
+              <View style={styles.gpsSignalRow}>
                 <View
                   style={[
-                    styles.gpsBadgeDot,
+                    styles.gpsStatusBeacon,
                     {
                       backgroundColor:
                         gpsAccuracy && gpsAccuracy <= 5
-                          ? '#22c55e'
+                          ? '#10b981'
                           : gpsAccuracy && gpsAccuracy <= 20
                             ? '#f59e0b'
                             : '#ef4444',
                     },
                   ]}
                 />
+                <Ionicons
+                  name="navigate-circle-outline"
+                  size={12}
+                  color={
+                    gpsAccuracy && gpsAccuracy <= 5
+                      ? '#34d399'
+                      : gpsAccuracy && gpsAccuracy <= 20
+                        ? '#fbbf24'
+                        : '#f87171'
+                  }
+                />
+                <Text style={styles.gpsAccuracyVal}>
+                  ±{gpsAccuracy ? Math.round(gpsAccuracy) : '--'}m
+                </Text>
               </View>
-              <Text style={styles.gpsBadgeText}>
-                ±{gpsAccuracy ? Math.round(gpsAccuracy) : '--'}m
-              </Text>
-              <View style={styles.gpsLiveTag}>
-                <Text style={styles.gpsLiveTagText}>LIVE</Text>
+              <View style={styles.gpsLiveMicroBadge}>
+                <View style={styles.gpsLiveMicroDot} />
+                <Text style={styles.gpsLiveMicroText}>LIVE</Text>
               </View>
             </View>
           )}
 
-          {/* Locate me FAB */}
-          <TouchableOpacity
-            style={styles.myLocationFab}
-            onPress={handleCenterOnMyLocation}
-            activeOpacity={0.85}
-          >
-            <View style={styles.fabHalo}>
-              <LinearGradient
-                colors={['#38bdf8', '#2563eb', '#1d4ed8']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.fabInner}
+          {/* Action Dock Row: Auto-Zoom Land Fence + Locate FAB */}
+          <View style={styles.actionDockRow}>
+            {hasActiveBoundary && !focusTreeId && (
+              <TouchableOpacity
+                style={styles.autoZoomDockBtn}
+                onPress={handleZoomToBoundary}
+                activeOpacity={0.82}
               >
-                <Ionicons name="locate" size={22} color="#fff" />
-              </LinearGradient>
-            </View>
-          </TouchableOpacity>
-        </View>
-      )}
+                <LinearGradient
+                  colors={['#059669', '#047857', '#064e3b']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.autoZoomDockGradient}
+                >
+                  <View style={styles.autoZoomIconBox}>
+                    <Ionicons name="scan-outline" size={14} color="#34d399" />
+                  </View>
+                  <Text style={styles.autoZoomDockText}>Auto-Zoom Land Fence</Text>
+                  <Ionicons name="chevron-forward" size={13} color="rgba(255,255,255,0.75)" />
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
 
-      {/* Floating Auto-Zoom Land Fence Button */}
-      {hasActiveBoundary && !focusTreeId && (
-        <TouchableOpacity
-          style={[
-            styles.autoZoomFab,
-            {
-              bottom:
-                (geofenceWalkMode ? insets.bottom + 270 : insets.bottom + 68) +
-                (geofenceWalkMode ? 0 : detailLift),
-            },
-          ]}
-          onPress={handleZoomToBoundary}
-          activeOpacity={0.85}
-        >
-          <LinearGradient
-            colors={['#34d399', '#059669', '#047857']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.autoZoomFabGradient}
-          >
-            <View style={styles.autoZoomIconWrap}>
-              <Ionicons name="scan" size={14} color="#fff" />
-            </View>
-            <Text style={styles.autoZoomFabText}>Auto-Zoom Land Fence</Text>
-            <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.85)" />
-          </LinearGradient>
-        </TouchableOpacity>
+            {/* Locate Me FAB */}
+            <TouchableOpacity
+              style={styles.myLocationFab}
+              onPress={handleCenterOnMyLocation}
+              activeOpacity={0.85}
+            >
+              <View style={styles.fabOuterRing}>
+                <LinearGradient
+                  colors={['#0d9488', '#059669', '#047857']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.fabGradientCore}
+                >
+                  <Ionicons name="locate" size={22} color="#ffffff" />
+                </LinearGradient>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
 
       {/* Geofence Alert Toast Banner */}
@@ -1925,55 +2117,57 @@ export default function TreeMapScreen() {
           )}
         </View>
       ) : (
-        /* Normal Stats bar - floating overlay */
-        <View style={[styles.statsBar, { bottom: insets.bottom + 12 }]}>
-          <View style={styles.statItem}>
-            <View style={[styles.statIconWrap, { backgroundColor: '#dcfce7' }]}>
-              <Ionicons name="leaf" size={14} color="#16a34a" />
+        /* Normal Stats bar - floating overlay (hidden when tree card is active) */
+        !selectedTree ? (
+          <View style={[styles.statsBar, { bottom: insets.bottom + 12 }]}>
+            <View style={styles.statItem}>
+              <View style={[styles.statIconWrap, { backgroundColor: '#dcfce7' }]}>
+                <Ionicons name="leaf" size={14} color="#16a34a" />
+              </View>
+              <Text style={styles.statText}>{allTrees.length}</Text>
             </View>
-            <Text style={styles.statText}>{allTrees.length}</Text>
-          </View>
 
-          <View style={styles.statDivider} />
+            <View style={styles.statDivider} />
 
-          <TouchableOpacity
-            style={styles.statItem}
-            onPress={() => {
-              if (projectGeofence?.locked) {
-                setShowGeofenceModal(true);
-              } else {
-                startBoundaryWalkMode();
-              }
-            }}
-          >
-            <View style={[styles.statIconWrap, { backgroundColor: projectGeofence?.locked ? '#dcfce7' : '#fef3c7' }]}>
-              <Ionicons
-                name={projectGeofence?.locked ? 'lock-closed' : 'walk'}
-                size={14}
-                color={projectGeofence?.locked ? '#16a34a' : '#d97706'}
-              />
-            </View>
-            <Text style={styles.statText}>
-              {projectGeofence?.locked ? `${projectGeofence.area_hectares || sqMetersToHectares(projectGeofence.area_sq_m)} ha` : 'Walk Area'}
-            </Text>
-          </TouchableOpacity>
-
-          <View style={styles.statDivider} />
-
-          <View style={styles.statItem}>
-            <View style={[styles.statIconWrap, { backgroundColor: '#dbeafe' }]}>
-              <Ionicons name="shield-checkmark" size={14} color="#4285f4" />
-            </View>
-            <Text style={styles.statText}>{treesInsideBoundary} inside</Text>
-          </View>
-
-          {geofenceAlerts.length > 0 && (
-            <TouchableOpacity style={styles.alertBadge} onPress={() => setShowAlerts(true)}>
-              <Ionicons name="notifications" size={14} color="#fff" />
-              <Text style={styles.alertBadgeText}>{geofenceAlerts.length}</Text>
+            <TouchableOpacity
+              style={styles.statItem}
+              onPress={() => {
+                if (projectGeofence?.locked) {
+                  setShowGeofenceModal(true);
+                } else {
+                  startBoundaryWalkMode();
+                }
+              }}
+            >
+              <View style={[styles.statIconWrap, { backgroundColor: projectGeofence?.locked ? '#dcfce7' : '#fef3c7' }]}>
+                <Ionicons
+                  name={projectGeofence?.locked ? 'lock-closed' : 'walk'}
+                  size={14}
+                  color={projectGeofence?.locked ? '#16a34a' : '#d97706'}
+                />
+              </View>
+              <Text style={styles.statText}>
+                {projectGeofence?.locked ? `${projectGeofence.area_hectares || sqMetersToHectares(projectGeofence.area_sq_m)} ha` : 'Walk Area'}
+              </Text>
             </TouchableOpacity>
-          )}
-        </View>
+
+            <View style={styles.statDivider} />
+
+            <View style={styles.statItem}>
+              <View style={[styles.statIconWrap, { backgroundColor: '#dbeafe' }]}>
+                <Ionicons name="shield-checkmark" size={14} color="#4285f4" />
+              </View>
+              <Text style={styles.statText}>{treesInsideBoundary} inside</Text>
+            </View>
+
+            {geofenceAlerts.length > 0 && (
+              <TouchableOpacity style={styles.alertBadge} onPress={() => setShowAlerts(true)}>
+                <Ionicons name="notifications" size={14} color="#fff" />
+                <Text style={styles.alertBadgeText}>{geofenceAlerts.length}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : null
       )}
 
       {/* ─── LAND AREA DETAILS & LOCK MODAL ─── */}
@@ -2210,31 +2404,46 @@ export default function TreeMapScreen() {
 
                 <View style={styles.detailGrid}>
                   <View style={styles.detailCell}>
-                    <Text style={styles.detailLabel}>Condition</Text>
+                    <View style={styles.detailCellHeader}>
+                      <Ionicons name="shield-checkmark-outline" size={11} color="#64748b" />
+                      <Text style={styles.detailLabel}>Condition</Text>
+                    </View>
                     {condition ? (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: condColor }} />
-                        <Text style={[styles.detailValue, { color: condColor }]}>{condition}</Text>
+                      <View style={[styles.detailCondBadge, { backgroundColor: `${condColor}18`, borderColor: `${condColor}45` }]}>
+                        <View style={[styles.detailCondDot, { backgroundColor: condColor }]} />
+                        <Text style={[styles.detailCondText, { color: condColor }]}>{condition}</Text>
                       </View>
                     ) : (
-                      <Text style={[styles.detailValue, { color: '#ccc' }]}>Not set</Text>
+                      <Text style={[styles.detailValue, { color: '#94a3b8' }]}>Not set</Text>
                     )}
                   </View>
+
                   <View style={styles.detailCell}>
-                    <Text style={styles.detailLabel}>DBH</Text>
-                    <Text style={[styles.detailValue, !dbh && { color: '#ccc' }]}>
+                    <View style={styles.detailCellHeader}>
+                      <Ionicons name="ellipse-outline" size={11} color="#64748b" />
+                      <Text style={styles.detailLabel}>DBH</Text>
+                    </View>
+                    <Text style={[styles.detailValue, !dbh && { color: '#94a3b8' }]}>
                       {dbh ? `${dbh} cm` : 'Not recorded'}
                     </Text>
                   </View>
+
                   <View style={styles.detailCell}>
-                    <Text style={styles.detailLabel}>Height</Text>
-                    <Text style={[styles.detailValue, !height && { color: '#ccc' }]}>
+                    <View style={styles.detailCellHeader}>
+                      <Ionicons name="trending-up-outline" size={11} color="#64748b" />
+                      <Text style={styles.detailLabel}>Height</Text>
+                    </View>
+                    <Text style={[styles.detailValue, !height && { color: '#94a3b8' }]}>
                       {height ? `${height} m` : 'Not recorded'}
                     </Text>
                   </View>
+
                   <View style={styles.detailCell}>
-                    <Text style={styles.detailLabel}>Date</Text>
-                    <Text style={[styles.detailValue, !date && { color: '#ccc' }]}>
+                    <View style={styles.detailCellHeader}>
+                      <Ionicons name="calendar-outline" size={11} color="#64748b" />
+                      <Text style={styles.detailLabel}>Date</Text>
+                    </View>
+                    <Text style={[styles.detailValue, !date && { color: '#94a3b8' }]}>
                       {date || 'Not recorded'}
                     </Text>
                   </View>
@@ -2427,238 +2636,332 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  autoZoomFab: {
-    position: 'absolute',
-    right: 14,
-    zIndex: 90,
-    elevation: 6,
-    shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.45,
-    shadowRadius: 8,
-    borderRadius: 24,
-  },
-  autoZoomFabGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
-  },
-  autoZoomIconWrap: {
-    width: 22,
-    height: 22,
-    borderRadius: 7,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  autoZoomFabText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-
-  // ─── Explorer HUD: right-hand floating stack (radar card + GPS + FAB) ───
+  // ─── Explorer HUD: right-hand floating spatial cluster ───
   hudCluster: {
     position: 'absolute',
     right: 14,
     zIndex: 95,
     elevation: 8,
     alignItems: 'flex-end',
-    gap: 8,
+    gap: 7,
   },
 
-  // Nearest-tree radar card
+  // Dynamic Nearest-Tree Radar Card
   nearTreeCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 9,
-    maxWidth: 280,
-    backgroundColor: 'rgba(11,19,32,0.94)',
-    padding: 9,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
+    gap: 10,
+    maxWidth: 300,
+    backgroundColor: 'rgba(8, 24, 18, 0.94)',
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1.2,
+    borderColor: 'rgba(52, 211, 153, 0.28)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.38,
     shadowRadius: 10,
     elevation: 9,
   },
-  nearRadar: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+  nearTreeCardVibrating: {
+    borderColor: 'rgba(251, 146, 60, 0.65)',
+    shadowColor: '#ea580c',
+    shadowOpacity: 0.5,
+    shadowRadius: 14,
+  },
+  radarBeaconContainer: {
+    position: 'relative',
+    width: 38,
+    height: 38,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  radarRippleHalo: {
+    position: 'absolute',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(251, 146, 60, 0.45)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(251, 146, 60, 0.7)',
+  },
+  radarBeaconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.2,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
   },
   nearTreeInfo: {
     flexShrink: 1,
-    width: 118,
+    width: 130,
   },
-  nearTreeTitle: {
-    color: '#fff',
-    fontSize: 12,
+  nearHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  nearSpeciesText: {
+    color: '#ffffff',
+    fontSize: 12.5,
     fontWeight: '800',
+    flexShrink: 1,
   },
-  nearDistRow: {
+  nearIdBadge: {
+    backgroundColor: 'rgba(52, 211, 153, 0.16)',
+    paddingHorizontal: 4.5,
+    paddingVertical: 1.5,
+    borderRadius: 5,
+    borderWidth: 0.8,
+    borderColor: 'rgba(52, 211, 153, 0.35)',
+  },
+  nearIdText: {
+    color: '#6ee7b7',
+    fontSize: 9,
+    fontWeight: '800',
+    fontFamily: 'monospace',
+  },
+  nearMetricsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginTop: 2,
   },
-  nearDist: {
+  nearDistWrap: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 1,
+  },
+  nearDistNum: {
     color: '#e2e8f0',
-    fontSize: 14,
+    fontSize: 14.5,
     fontWeight: '900',
     fontVariant: ['tabular-nums'],
-    flexShrink: 1,
   },
-  nearDistActive: {
-    color: '#FDBA74',
+  nearDistNumVibrating: {
+    color: '#fdba74',
   },
-  nearStatePill: {
-    flexShrink: 0,
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
-    borderRadius: 7,
-    backgroundColor: 'rgba(148,163,184,0.25)',
-  },
-  nearStatePillActive: {
-    backgroundColor: 'rgba(240,145,37,0.28)',
-  },
-  nearStatePillText: {
+  nearDistUnit: {
     color: '#94a3b8',
-    fontSize: 8.5,
-    fontWeight: '900',
-    letterSpacing: 0.6,
+    fontSize: 10.5,
+    fontWeight: '700',
   },
-  nearStatePillTextActive: {
-    color: '#FDBA74',
+  nearDistUnitVibrating: {
+    color: '#fb923c',
   },
-  nearBarTrack: {
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    marginTop: 5,
-    overflow: 'hidden',
-  },
-  nearBarFill: {
-    height: 4,
-    borderRadius: 2,
-  },
-  nearVibeBtn: {
+  nearStatusPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 3,
-    backgroundColor: '#dc2626',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-  },
-  nearVibeBtnResume: {
-    backgroundColor: '#dcfce7',
-    borderColor: '#16a34a',
-  },
-  nearVibeBtnText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.2,
-  },
-  nearVibeBtnTextResume: {
-    color: '#15803d',
-  },
-
-  // Live GPS pill
-  gpsBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(11,19,32,0.92)',
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-  },
-  gpsBadgeDotWrap: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  gpsBadgeDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
-  gpsBadgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '800',
-    fontFamily: 'monospace',
-  },
-  gpsLiveTag: {
     paddingHorizontal: 5,
     paddingVertical: 1.5,
     borderRadius: 6,
-    backgroundColor: 'rgba(34,197,94,0.22)',
-    borderWidth: 1,
-    borderColor: 'rgba(74,222,128,0.5)',
   },
-  gpsLiveTagText: {
-    color: '#4ade80',
+  nearStatusPillVibrating: {
+    backgroundColor: 'rgba(249, 115, 22, 0.22)',
+    borderWidth: 0.8,
+    borderColor: 'rgba(251, 146, 60, 0.45)',
+  },
+  nearStatusPillNearby: {
+    backgroundColor: 'rgba(16, 185, 129, 0.18)',
+    borderWidth: 0.8,
+    borderColor: 'rgba(52, 211, 153, 0.35)',
+  },
+  nearStatusPillScanning: {
+    backgroundColor: 'rgba(148, 163, 184, 0.18)',
+    borderWidth: 0.8,
+    borderColor: 'rgba(148, 163, 184, 0.3)',
+  },
+  nearStatusPillText: {
     fontSize: 8,
     fontWeight: '900',
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
+  },
+  nearStatusPillTextVibrating: {
+    color: '#fdba74',
+  },
+  nearStatusPillTextNearby: {
+    color: '#86efac',
+  },
+  nearStatusPillTextScanning: {
+    color: '#94a3b8',
+  },
+  signalMeterWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 4,
+  },
+  signalSegment: {
+    flex: 1,
+    height: 3.5,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+  },
+  signalSegmentNearby: {
+    backgroundColor: '#10b981',
+  },
+  signalSegmentVibe: {
+    backgroundColor: '#f97316',
+  },
+  nearHapticBtn: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  nearHapticBtnGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3.5,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  nearHapticBtnText: {
+    color: '#fff',
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
 
-  // Locate-me FAB
-  myLocationFab: {
+  // Live GPS Telemetry Capsule
+  gpsTelemetryPill: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#2563eb',
+    gap: 6,
+    backgroundColor: 'rgba(8, 24, 18, 0.92)',
+    paddingHorizontal: 9,
+    paddingVertical: 4.5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 211, 153, 0.22)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  gpsSignalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  gpsStatusBeacon: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  gpsAccuracyVal: {
+    color: '#f8fafc',
+    fontSize: 10.5,
+    fontWeight: '800',
+    fontFamily: 'monospace',
+  },
+  gpsLiveMicroBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 5,
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    borderWidth: 0.8,
+    borderColor: 'rgba(52, 211, 153, 0.45)',
+  },
+  gpsLiveMicroDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#34d399',
+  },
+  gpsLiveMicroText: {
+    color: '#6ee7b7',
+    fontSize: 7.5,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+  },
+
+  // Integrated Action Dock Row
+  actionDockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  autoZoomDockBtn: {
+    borderRadius: 22,
+    overflow: 'hidden',
+    shadowColor: '#059669',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.55,
-    shadowRadius: 10,
-    elevation: 9,
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 6,
   },
-  fabHalo: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    padding: 3,
-    backgroundColor: 'rgba(37,99,235,0.28)',
+  autoZoomDockGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  autoZoomIconBox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  autoZoomDockText: {
+    color: '#fff',
+    fontSize: 11.5,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+
+  // Locate-me Geospatial Reticle FAB
+  myLocationFab: {
+    borderRadius: 24,
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  fabOuterRing: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    padding: 2.5,
+    backgroundColor: 'rgba(16, 185, 129, 0.25)',
+    borderWidth: 1.2,
+    borderColor: 'rgba(52, 211, 153, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fabGradientCore: {
+    width: 41,
+    height: 41,
+    borderRadius: 20.5,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: 'rgba(147,197,253,0.65)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fabInner: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
     borderColor: '#ffffff',
   },
   geofenceChipPending: {
@@ -2859,6 +3162,31 @@ const styles = StyleSheet.create({
     padding: 10,
     borderWidth: 1,
     borderColor: '#E8F5E9',
+  },
+  detailCellHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 3,
+  },
+  detailCondBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  detailCondDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  detailCondText: {
+    fontSize: 12,
+    fontWeight: '800',
   },
   detailLabel: { fontSize: 10, color: '#888', fontWeight: '600', marginBottom: 2 },
   detailValue: { fontSize: 14, fontWeight: '700', color: '#1a5c2a' },

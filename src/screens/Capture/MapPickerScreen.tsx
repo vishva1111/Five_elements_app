@@ -14,6 +14,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CaptureStackParamList, Coordinates } from '../../types';
 import { recordTreeLocation, ACCURACY_THRESHOLD_M, COLLECTION_WINDOW_MS, MIN_VALID_READINGS } from '../../services/treeLocationService';
 import {
@@ -133,6 +134,7 @@ map.on('load',function(){post({type:'ready'});});
 }
 
 export default function MapPickerScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
   const { photoUris } = route.params;
@@ -315,7 +317,10 @@ export default function MapPickerScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={styles.header}>
+      <LinearGradient
+        colors={['#123f24', '#1a5c2a', '#2e7d43']}
+        style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 8 }]}
+      >
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -331,7 +336,7 @@ export default function MapPickerScreen() {
         javaScriptEnabled={true}
       />
 
-      <View style={styles.bottomPanel}>
+      <View style={[styles.bottomPanel, { paddingBottom: Math.max(insets.bottom, 16) + 16 }]}>
         {/* Live capture progress */}
         {capturing && (
           <View style={styles.progressBox}>

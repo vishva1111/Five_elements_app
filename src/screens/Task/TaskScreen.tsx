@@ -538,7 +538,7 @@ export default function TaskScreen() {
     <View style={s.container}>
       <ScrollView
         style={s.scroll}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a5c2a" />}
       >
         {/* Header with date and project location */}

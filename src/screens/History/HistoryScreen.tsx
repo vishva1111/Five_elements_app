@@ -10,6 +10,7 @@ import {
   Image,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useTaskStore } from '../../store/taskStore';
@@ -91,6 +92,7 @@ const AUDIT_COLORS: Record<string, string> = {
 };
 
 export default function HistoryScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const user = useAuthStore((s) => s.user);
   const userId = user?.id;
@@ -405,7 +407,7 @@ export default function HistoryScreen() {
         data={filtered}
         keyExtractor={(item) => `${item.type}-${item.id}`}
         renderItem={({ item }) => renderHistoryCard(item)}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 96 }]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a5c2a" />
         }
