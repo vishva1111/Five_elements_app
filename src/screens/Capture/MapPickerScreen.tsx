@@ -45,8 +45,8 @@ html,body,#map{margin:0;padding:0;width:100%;height:100%;}
 <body>
 <div id="map"></div>
 <script>
-var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([${lat},${lng}],15);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+var map=L.map('map',{zoomControl:false,attributionControl:false,maxZoom:22}).setView([${lat},${lng}],16);
+L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{maxZoom:22,maxNativeZoom:20,attribution:'© Google Satellite'}).addTo(map);
 var marker=L.marker([${lat},${lng}],{draggable:true}).addTo(map);
 marker.on('dragend',function(e){
   var p=e.target.getLatLng();

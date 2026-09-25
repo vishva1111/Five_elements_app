@@ -368,12 +368,61 @@ export interface GeofenceAlert {
   timestamp: number;
 }
 
+// ─── Land Area Geofence Types ───────────────────────────────────────────────
+
+export interface GeofenceCoordinate {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+  timestamp?: number;
+  corner_index?: number;
+}
+
+export type ProjectGeofenceStatus = 'draft' | 'pending_admin' | 'locked';
+
+export interface ProjectGeofence {
+  id: string;
+  project_id: string;
+  project_name?: string;
+  coordinates: GeofenceCoordinate[];
+  area_sq_m: number;
+  area_hectares?: number;
+  area_acres?: number;
+  perimeter_m: number;
+  status: ProjectGeofenceStatus;
+  locked: boolean;
+  locked_at?: string;
+  locked_by?: string;
+  locked_by_name?: string;
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+  notes?: string;
+}
+
+export type ChangeRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface GeofenceChangeRequest {
+  id: string;
+  project_id: string;
+  project_name?: string;
+  requested_by: string;
+  requested_by_name?: string;
+  reason: string;
+  status: ChangeRequestStatus;
+  created_at: string;
+  reviewed_at?: string;
+  reviewed_by?: string;
+  reviewed_by_name?: string;
+  review_notes?: string;
+}
+
 // ─── Map Screen Navigation ──────────────────────────────────────────────────
 
 export type MainTabParamList = {
   Home: undefined;
   Capture: undefined;
-  Map: { focusTreeId?: string } | undefined;
+  Map: { focusTreeId?: string; startGeofenceWalk?: boolean } | undefined;
   Task: undefined;
   History: undefined;
   /** Renamed to "Audit" in the tab bar — tree lookup + Audit 1–4 sub-tabs */
@@ -385,3 +434,4 @@ export type UpdateLookupStackParamList = {
   UpdateLookup: undefined;
   UpdateTree: { treeId: string; treeIdDisplay: string; currentRound: number };
 };
+

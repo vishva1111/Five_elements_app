@@ -67,8 +67,8 @@ function buildLeafletHtml(lat: number, lng: number): string {
 <body>
 <div id="map"></div>
 <script>
-var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([${lat},${lng}],17);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+var map=L.map('map',{zoomControl:false,attributionControl:false,maxZoom:22}).setView([${lat},${lng}],17);
+L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{maxZoom:22,maxNativeZoom:20,attribution:'© Google Satellite'}).addTo(map);
 L.marker([${lat},${lng}]).addTo(map);
 </script>
 </body>

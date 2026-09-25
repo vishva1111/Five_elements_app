@@ -36,6 +36,7 @@ import { Project } from '../../types';
 import { uploadTreePhoto } from '../../services/storageService';
 import { completeTask } from '../../services/taskService';
 import { useTaskStore } from '../../store/taskStore';
+import { useProjectRefreshStore } from '../../store/projectRefreshStore';
 import MapPreview from '../../components/MapPreview';
 
 type Nav = NativeStackNavigationProp<CaptureStackParamList, 'TreeForm'>;
@@ -300,6 +301,7 @@ export default function TreeFormScreen() {
         useTaskStore.getState().setActiveTaskId(null);
       }
 
+      useProjectRefreshStore.getState().triggerProjectRefresh();
       navigation.navigate('SubmitSuccess', { treeId: data.id });
     } catch (err: any) {
       const msg = err?.message ?? JSON.stringify(err) ?? 'Please try again.';

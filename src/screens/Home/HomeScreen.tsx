@@ -14,16 +14,36 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useProjectRefreshStore } from '../../store/projectRefreshStore';
-import { fetchMyTrees, fetchAllProjects } from '../../services/treeService';
+import { fetchMyTrees, fetchAllProjects, fetchTreesByProject, fetchAllTrees } from '../../services/treeService';
 import { fetchAgentTasks } from '../../services/taskService';
 import { loadLocalTasks } from '../../services/localTaskService';
+import { supabase } from '../../services/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import ProjectSelector from '../../components/ProjectSelector';
 import CurveDivider from '../../components/CurveDivider';
 import GradientProgress from '../../components/GradientProgress';
 import { buildProgressPalette, buildProjectPalette } from '../../utils/colorMix';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Task, Project } from '../../types';
+import { Task, Project, ProjectGeofence, TreeRecord } from '../../types';
+import { fetchProjectGeofence, sqMetersToHectares } from '../../services/projectGeofenceService';
+
+// ─── Status classification helpers ──────────────────────────────────────────
+const isHealthyTree = (t: TreeRecord) => {
+  const hs = (t.health_status || '').toLowerCase().trim();
+  const tc = (t.tree_condition || '').toLowerCase().trim();
+  return hs === 'healthy' || tc === 'healthy';
+};
+const isSickTree = (t: TreeRecord) => {
+  const hs = (t.health_status || '').toLowerCase().trim();
+  const tc = (t.tree_condition || '').toLowerCase().trim();
+  return hs === 'sick' || tc === 'stressed' || tc === 'diseased';
+};
+const isDeadTree = (t: TreeRecord) => {
+  const hs = (t.health_status || '').toLowerCase().trim();
+  const tc = (t.tree_condition || '').toLowerCase().trim();
+  return hs === 'dead' || tc === 'dead';
+};
 
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
@@ -42,103 +62,207 @@ export default function HomeScreen() {
   const [taskStats, setTaskStats] = useState({ total: 0, assigned: 0, rejected: 0, completed: 0 });
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
+  const [projectGeofence, setProjectGeofence] = useState<ProjectGeofence | null>(null);
+  const [showGeofencePromptModal, setShowGeofencePromptModal] = useState(false);
+  const promptedProjectsRef = useRef<Set<string>>(new Set());
   const loadSeqRef = useRef(0);
 
   const firstName = (user?.full_name?.trim()?.split(' ')[0] || '').replace(/[.!]$/, '');
   const greetingName = firstName || 'there';
 
-  // Fetch all projects on mount
+  // ─── Instant local cache for immediate display (<10ms) ─────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    const cacheKey = `@treeapp_stats_${activeProjectId || 'all'}`;
+
+    // 1. Check in-memory tree store first
+    const memoryTrees = useTreeStore.getState().trees;
+    if (memoryTrees && memoryTrees.length > 0) {
+      const match = activeProjectId
+        ? memoryTrees.filter((t) => t.project_id === activeProjectId)
+        : memoryTrees;
+      if (match.length > 0) {
+        setStats({
+          total: match.length,
+          healthy: match.filter(isHealthyTree).length,
+          sick: match.filter(isSickTree).length,
+          dead: match.filter(isDeadTree).length,
+        });
+      }
+    }
+
+    // 2. Check persistent AsyncStorage
+    AsyncStorage.getItem(cacheKey).then((raw) => {
+      if (!cancelled && raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed.total === 'number') {
+            setStats(parsed);
+          }
+        } catch {}
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProjectId]);
+
+  // Fetch all projects on mount & ensure an active project is selected
   useEffect(() => {
     let active = true;
     (async () => {
       const { data } = await fetchAllProjects();
-      if (active && data) setAllProjects(data);
+      if (active && data && data.length > 0) {
+        setAllProjects(data);
+        if (!useAuthStore.getState().activeProjectId) {
+          setActiveProjectId(data[0].id);
+        }
+      }
     })();
     return () => { active = false; };
-  }, []);
+  }, [setActiveProjectId]);
 
   const loadTrees = useCallback(async () => {
-    if (!userId) return;
     const seq = ++loadSeqRef.current;
-    const { data } = await fetchMyTrees(userId);
-    if (seq !== loadSeqRef.current) return;
-    if (data) {
-      const visibleTrees = activeProjectId
-        ? data.filter((t) => t.project_id === activeProjectId)
-        : data;
+
+    try {
+      let visibleTrees: TreeRecord[] = [];
+
+      if (activeProjectId) {
+        // Fetch project-specific trees
+        const { data: projTrees } = await fetchTreesByProject(activeProjectId);
+        if (projTrees && projTrees.length > 0) {
+          visibleTrees = projTrees;
+        } else if (userId) {
+          // Fallback to user's trees for this project
+          const { data: myTrees } = await fetchMyTrees(userId);
+          visibleTrees = (myTrees || []).filter((t) => t.project_id === activeProjectId);
+        }
+      } else {
+        // All Projects view
+        const { data: allTrees } = await fetchAllTrees();
+        if (allTrees && allTrees.length > 0) {
+          visibleTrees = allTrees;
+        } else if (userId) {
+          const { data: myTrees } = await fetchMyTrees(userId);
+          visibleTrees = myTrees || [];
+        }
+      }
+
+      if (seq !== loadSeqRef.current) return;
+
       setTrees(visibleTrees);
-      setStats({
+      const computedStats = {
         total: visibleTrees.length,
-        healthy: visibleTrees.filter((t) => t.health_status === 'healthy').length,
-        sick: visibleTrees.filter((t) => t.health_status === 'sick').length,
-        dead: visibleTrees.filter((t) => t.health_status === 'dead').length,
-      });
+        healthy: visibleTrees.filter(isHealthyTree).length,
+        sick: visibleTrees.filter(isSickTree).length,
+        dead: visibleTrees.filter(isDeadTree).length,
+      };
+      setStats(computedStats);
+
+      // Cache stats in persistent storage for instant next-time rendering
+      const cacheKey = `@treeapp_stats_${activeProjectId || 'all'}`;
+      AsyncStorage.setItem(cacheKey, JSON.stringify(computedStats)).catch(() => {});
+    } catch (e) {
+      console.warn('[HomeScreen] Error loading trees:', e);
     }
   }, [userId, activeProjectId, setTrees]);
 
   const loadTasks = useCallback(async () => {
     if (!userId) return;
     const seq = ++loadSeqRef.current;
-    
-    // Fetch DB tasks
-    const { data: dbTasks } = await fetchAgentTasks(userId);
-    if (seq !== loadSeqRef.current) return;
-    
-    // Fetch local tasks
-    const localTasks = await loadLocalTasks();
-    if (seq !== loadSeqRef.current) return;
-    
-    // Fetch tree captures (count as completed tasks)
-    const { data: treeData } = await fetchMyTrees(userId);
-    if (seq !== loadSeqRef.current) return;
-    
-    // Filter tasks and tree captures by active project if selected
-    let visibleTasks: Task[] = [
-      ...(dbTasks ?? []),
-      ...localTasks,
-    ];
-    let visibleTrees = treeData ?? [];
 
-    if (activeProjectId) {
-      visibleTasks = visibleTasks.filter((t) => t.project_id === activeProjectId);
-      visibleTrees = visibleTrees.filter((t) => t.project_id === activeProjectId);
+    try {
+      const [agentTasksRes, localTasks, projectTreesRes] = await Promise.all([
+        fetchAgentTasks(userId),
+        loadLocalTasks(),
+        activeProjectId ? fetchTreesByProject(activeProjectId) : fetchAllTrees(),
+      ]);
+
+      if (seq !== loadSeqRef.current) return;
+
+      const dbTasks = agentTasksRes.data ?? [];
+      let visibleTasks: Task[] = [...dbTasks, ...localTasks];
+      let visibleTrees = projectTreesRes.data ?? [];
+
+      if (activeProjectId) {
+        visibleTasks = visibleTasks.filter((t) => t.project_id === activeProjectId);
+        visibleTrees = visibleTrees.filter((t) => t.project_id === activeProjectId);
+      }
+
+      const treeCaptures = visibleTrees.length;
+      const dbCompleted = visibleTasks.filter((t) => t.status === 'completed').length;
+
+      setTaskStats({
+        total: visibleTasks.length + treeCaptures,
+        assigned: visibleTasks.filter((t) => t.status === 'assigned' || t.status === 'in_progress').length,
+        rejected: visibleTasks.filter((t) => t.status === 'rejected').length,
+        completed: dbCompleted + treeCaptures,
+      });
+    } catch (e) {
+      console.warn('[HomeScreen] Error loading tasks:', e);
     }
-
-    const treeCaptures = visibleTrees.length;
-    const dbCompleted = visibleTasks.filter((t) => t.status === 'completed').length;
-    
-    // Calculate stats from active project tasks + tree captures
-    setTaskStats({
-      total: visibleTasks.length + treeCaptures,
-      assigned: visibleTasks.filter((t) => t.status === 'assigned' || t.status === 'in_progress').length,
-      rejected: visibleTasks.filter((t) => t.status === 'rejected').length,
-      completed: dbCompleted + treeCaptures,
-    });
   }, [userId, activeProjectId]);
+
+  const loadGeofence = useCallback(async () => {
+    if (!activeProjectId) {
+      setProjectGeofence(null);
+      return;
+    }
+    const { data } = await fetchProjectGeofence(activeProjectId);
+    setProjectGeofence(data);
+    const isCompleted = !!data && data.locked && data.coordinates && data.coordinates.length >= 3;
+    if (!isCompleted && !promptedProjectsRef.current.has(activeProjectId)) {
+      promptedProjectsRef.current.add(activeProjectId);
+      setShowGeofencePromptModal(true);
+    }
+  }, [activeProjectId]);
+
+  // Real-time listener: auto-update stats when tree records change in database
+  useEffect(() => {
+    const channel = supabase
+      .channel(`home-trees-realtime-${activeProjectId || 'all'}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tree_records',
+        },
+        () => {
+          loadTrees();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeProjectId, loadTrees]);
 
   useFocusEffect(
     useCallback(() => {
       refreshCredits();
       loadTrees();
       loadTasks();
-    }, [loadTrees, loadTasks, refreshCredits])
+      loadGeofence();
+    }, [loadTrees, loadTasks, loadGeofence, refreshCredits])
   );
 
   // Instantly reload when the active project changes
   useEffect(() => {
-    if (refreshKey > 0) {
-      refreshCredits();
-      loadTrees();
-      loadTasks();
-    }
-  }, [refreshKey]);
+    loadTrees();
+    loadTasks();
+    loadGeofence();
+  }, [activeProjectId, refreshKey, loadTrees, loadTasks, loadGeofence]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadTrees();
-    await loadTasks();
+    await Promise.all([loadTrees(), loadTasks(), loadGeofence()]);
     setRefreshing(false);
   };
+
 
   return (
     <View style={styles.container}>
@@ -185,7 +309,7 @@ export default function HomeScreen() {
             </View>
           </TouchableOpacity>
         </LinearGradient>
-        <CurveDivider height={30} color="#f0f4f1" cornerRadius={24} style={styles.curveDivider} />
+        <CurveDivider height={23} color="#f0f4f1" cornerRadius={25} style={styles.curveDivider} />
       </View>
 
       <View style={styles.contentSection}>
@@ -208,6 +332,52 @@ export default function HomeScreen() {
             <Text style={styles.treeStatLabel}>Dead</Text>
           </View>
         </View>
+
+        {/* Land Area Geofencing Card (Mandatory Setup & Status) */}
+        {activeProjectId ? (
+          !projectGeofence?.locked || !projectGeofence.coordinates || projectGeofence.coordinates.length < 3 ? (
+            <TouchableOpacity
+              style={styles.geofenceNoticeCard}
+              onPress={() => navigation.navigate('Map', { startGeofenceWalk: true })}
+              activeOpacity={0.85}
+            >
+              <View style={styles.geofenceNoticeIconWrap}>
+                <Ionicons name="map" size={24} color="#b45309" />
+              </View>
+              <View style={styles.geofenceNoticeInfo}>
+                <View style={styles.geofenceNoticeBadgeRow}>
+                  <Text style={styles.geofenceNoticeBadgeText}>1-TIME SETUP REQUIRED</Text>
+                </View>
+                <Text style={styles.geofenceNoticeTitle}>Land Geofencing Pending</Text>
+                <Text style={styles.geofenceNoticeSub}>Walk land perimeter with phone & save corners to lock</Text>
+              </View>
+              <View style={styles.geofenceNoticeActionBtn}>
+                <Text style={styles.geofenceNoticeActionText}>Walk & Lock</Text>
+                <Ionicons name="arrow-forward" size={13} color="#fff" />
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.geofenceSuccessCard}
+              onPress={() => navigation.navigate('Map')}
+              activeOpacity={0.85}
+            >
+              <View style={styles.geofenceSuccessIconWrap}>
+                <Ionicons name="shield-checkmark" size={22} color="#15803d" />
+              </View>
+              <View style={styles.geofenceSuccessInfo}>
+                <Text style={styles.geofenceSuccessTitle}>Land Boundary Locked 🔒</Text>
+                <Text style={styles.geofenceSuccessSub}>
+                  {projectGeofence.area_hectares || sqMetersToHectares(projectGeofence.area_sq_m)} ha · {(projectGeofence.perimeter_m || 0).toLocaleString()}m perimeter ({projectGeofence.coordinates.length} corners)
+                </Text>
+              </View>
+              <View style={styles.geofenceViewMapBtn}>
+                <Text style={styles.geofenceViewMapBtnText}>View Map</Text>
+                <Ionicons name="chevron-forward" size={14} color="#15803d" />
+              </View>
+            </TouchableOpacity>
+          )
+        ) : null}
 
         {/* Capture a Tree Card */}
         <TouchableOpacity
@@ -368,6 +538,50 @@ export default function HomeScreen() {
         </View>
       </View>
     </Modal>
+
+    {/* First-Time Land Geofencing Prompt Modal */}
+    <Modal
+      visible={showGeofencePromptModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowGeofencePromptModal(false)}
+    >
+      <View style={styles.promptModalBackdrop}>
+        <View style={styles.promptModalCard}>
+          <View style={styles.promptModalIconCircle}>
+            <Ionicons name="map" size={32} color="#F09125" />
+          </View>
+          <Text style={styles.promptModalTitle}>Land Geofencing Required</Text>
+          <Text style={styles.promptModalProject}>
+            {allProjects.find((p) => p.id === activeProjectId)?.name || 'This Project'}
+          </Text>
+          <Text style={styles.promptModalBody}>
+            Before trees can be surveyed or tasks completed, this project requires its land area boundary to be geofenced and locked.
+            {'\n\n'}
+            This is a 1-time setup. Please walk along the perimeter with your phone and record a point at each corner of the land.
+          </Text>
+          <View style={styles.promptModalActions}>
+            <TouchableOpacity
+              style={styles.promptModalPrimaryBtn}
+              onPress={() => {
+                setShowGeofencePromptModal(false);
+                navigation.navigate('Map', { startGeofenceWalk: true });
+              }}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="walk" size={18} color="#fff" />
+              <Text style={styles.promptModalPrimaryBtnText}>Start Boundary Walk</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.promptModalSecondaryBtn}
+              onPress={() => setShowGeofencePromptModal(false)}
+            >
+              <Text style={styles.promptModalSecondaryBtnText}>Remind Me Later</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
     </View>
   );
 }
@@ -380,7 +594,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a5c2a',
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 50,
+    paddingBottom: 45,
   },
   curveDivider: {
     position: 'absolute',
@@ -391,8 +605,8 @@ const styles = StyleSheet.create({
   },
   contentSection: {
     backgroundColor: '#f0f4f1',
-    paddingBottom: 8,
-    marginTop: -4,
+    paddingBottom: 5,
+    marginTop: 0,
   },
   bannerTopRow: {
     flexDirection: 'row',
@@ -543,7 +757,7 @@ const styles = StyleSheet.create({
   treeStatsRow: {
     flexDirection: 'row',
     marginHorizontal: 16,
-    marginTop: 6,
+    marginTop: 0,
     gap: 8,
   },
   treeStatCard: {
@@ -606,4 +820,147 @@ const styles = StyleSheet.create({
     color: '#888',
     marginTop: 8,
   },
+  // Geofence Notice & Success Cards
+  geofenceNoticeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 14,
+    padding: 14,
+    gap: 12,
+    borderWidth: 1.5,
+    borderColor: '#f59e0b',
+    elevation: 3,
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+  },
+  geofenceNoticeIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#fef3c7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  geofenceNoticeInfo: { flex: 1 },
+  geofenceNoticeBadgeRow: { marginBottom: 3 },
+  geofenceNoticeBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#b45309',
+    letterSpacing: 0.5,
+  },
+  geofenceNoticeTitle: { fontSize: 13, fontWeight: '700', color: '#1a1a1a' },
+  geofenceNoticeSub: { fontSize: 11, color: '#666', marginTop: 2 },
+  geofenceNoticeActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#b45309',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  geofenceNoticeActionText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+
+  geofenceSuccessCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 14,
+    padding: 14,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  geofenceSuccessIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#dcfce7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  geofenceSuccessInfo: { flex: 1 },
+  geofenceSuccessTitle: { fontSize: 13, fontWeight: '700', color: '#15803d' },
+  geofenceSuccessSub: { fontSize: 11, color: '#666', marginTop: 2 },
+  geofenceViewMapBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  geofenceViewMapBtnText: { color: '#15803d', fontSize: 11, fontWeight: '700' },
+
+  // Prompt Modal Styles
+  promptModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  promptModalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 22,
+    alignItems: 'center',
+    maxWidth: 360,
+    width: '100%',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+  },
+  promptModalIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#fff7ed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  promptModalTitle: { fontSize: 18, fontWeight: '800', color: '#1a1a1a', textAlign: 'center' },
+  promptModalProject: { fontSize: 13, fontWeight: '600', color: '#1a5c2a', marginTop: 4, textAlign: 'center' },
+  promptModalBody: {
+    fontSize: 13,
+    color: '#4b5563',
+    lineHeight: 19,
+    textAlign: 'center',
+    marginVertical: 14,
+  },
+  promptModalActions: { width: '100%', gap: 10 },
+  promptModalPrimaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#1a5c2a',
+    paddingVertical: 13,
+    borderRadius: 12,
+  },
+  promptModalPrimaryBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  promptModalSecondaryBtn: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  promptModalSecondaryBtnText: { color: '#888', fontSize: 13, fontWeight: '600' },
 });
+

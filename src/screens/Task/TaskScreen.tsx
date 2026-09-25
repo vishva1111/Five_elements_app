@@ -20,6 +20,7 @@ import { loadLocalTasks } from '../../services/localTaskService';
 import { fetchAuditsForTrees } from '../../services/auditService';
 import { Task, Project, TreeRecord } from '../../types';
 import { displayTreeId, parseTreeMeta, resolveTreeId } from '../../utils/treeId';
+import { fetchProjectGeofence } from '../../services/projectGeofenceService';
 import CircularProgress from '../../components/CircularProgress';
 import TreeCard from '../../components/TreeCard';
 import { Ionicons } from '@expo/vector-icons';
@@ -50,10 +51,12 @@ export default function TaskScreen() {
   const [activeTab, setActiveTab] = useState<TaskTab>('assigned');
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>('all');
+  const [hasRemainingGeofence, setHasRemainingGeofence] = useState(false);
   // uuid (tree record) → project tree ID, e.g. "ARAV-001" (see utils/treeId.ts)
   const [treeIds, setTreeIds] = useState<Record<string, string>>({});
   const [auditsByTree, setAuditsByTree] = useState<Record<string, any[]>>({});
   const loadSeqRef = useRef(0);
+
   // Keep stable refs so loadTasks never needs to be recreated on value changes
   const activeProjectIdRef = useRef(activeProjectId);
   useEffect(() => { activeProjectIdRef.current = activeProjectId; }, [activeProjectId]);
@@ -104,7 +107,19 @@ export default function TaskScreen() {
     const visibleTasks = pid ? combinedTasks.filter((t) => t.project_id === pid) : combinedTasks;
     setTasks(visibleTasks);
 
+    // Check if active project has remaining geofencing setup
+    if (pid) {
+      fetchProjectGeofence(pid).then((geoRes) => {
+        if (seq !== loadSeqRef.current) return;
+        const isDone = Boolean(geoRes.data?.locked && geoRes.data?.coordinates && geoRes.data.coordinates.length >= 3);
+        setHasRemainingGeofence(!isDone);
+      });
+    } else {
+      setHasRemainingGeofence(false);
+    }
+
     // Fetch audits for all trees so approved cards have complete audit schedules
+
     if (visibleTrees.length > 0) {
       fetchAuditsForTrees(visibleTrees.map((t) => t.id)).then((audits) => {
         if (seq === loadSeqRef.current && audits) {
@@ -524,7 +539,41 @@ export default function TaskScreen() {
 
         {/* Tab content */}
         <View style={s.content}>
-          {activeTab === 'assigned' && renderTaskList(filterByDate(assignedTasks))}
+          {activeTab === 'assigned' && (
+            <>
+              {hasRemainingGeofence && (
+                <TouchableOpacity
+                  style={s.geofenceTaskCard}
+                  onPress={() => navigation.getParent()?.navigate('Map', { startGeofenceWalk: true })}
+                  activeOpacity={0.85}
+                >
+                  <View style={s.geofenceTaskHeader}>
+                    <View style={s.geofenceTaskBadge}>
+                      <Text style={s.geofenceTaskBadgeText}>1-TIME MANDATORY SETUP</Text>
+                    </View>
+                    <View style={s.geofenceTaskPriority}>
+                      <Text style={s.geofenceTaskPriorityText}>REQUIRED</Text>
+                    </View>
+                  </View>
+                  <Text style={s.geofenceTaskTitle}>Land Perimeter Geofencing</Text>
+                  <Text style={s.geofenceTaskSub}>
+                    Walk the land edge perimeter with your phone and save a point at each corner to define and lock this project's boundary.
+                  </Text>
+                  <View style={s.geofenceTaskFooter}>
+                    <View style={s.geofenceTaskInfo}>
+                      <Ionicons name="walk" size={16} color="#1a5c2a" />
+                      <Text style={s.geofenceTaskInfoText}>Walk corners on Map</Text>
+                    </View>
+                    <View style={s.geofenceTaskActionBtn}>
+                      <Text style={s.geofenceTaskActionText}>Start Walk</Text>
+                      <Ionicons name="arrow-forward" size={13} color="#fff" />
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              )}
+              {renderTaskList(filterByDate(assignedTasks))}
+            </>
+          )}
           {activeTab === 'completed' && renderTaskList(filterByDate(completedItems))}
           {activeTab === 'approved' && renderTaskList(filterByDate(approvedItems))}
           {activeTab === 'rejected' && renderTaskList(filterByDate(rejectedTasks))}
@@ -721,4 +770,93 @@ const s = StyleSheet.create({
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
   emptyText: { fontSize: 16, fontWeight: '800', color: '#555' },
   emptySubText: { fontSize: 13, color: '#888', marginTop: 4, textAlign: 'center', paddingHorizontal: 24 },
+  // Mandatory Geofence Task Card
+  geofenceTaskCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: '#f59e0b',
+    elevation: 3,
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+  },
+  geofenceTaskHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  geofenceTaskBadge: {
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  geofenceTaskBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#b45309',
+    letterSpacing: 0.5,
+  },
+  geofenceTaskPriority: {
+    backgroundColor: '#fee2e2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  geofenceTaskPriorityText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#dc2626',
+  },
+  geofenceTaskTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1a1a1a',
+    marginTop: 2,
+  },
+  geofenceTaskSub: {
+    fontSize: 12,
+    color: '#666',
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  geofenceTaskFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+  },
+  geofenceTaskInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  geofenceTaskInfoText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1a5c2a',
+  },
+  geofenceTaskActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#1a5c2a',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  geofenceTaskActionText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
 });
+

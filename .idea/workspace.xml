@@ -4,14 +4,16 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="3 photos,card audit,auto audit time set or cheak.">
+    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="history page in not change any user and mobail navigation overide problem solve.">
       <change beforePath="$PROJECT_DIR$/.expo/dev/logs/start.log" beforeDir="false" afterPath="$PROJECT_DIR$/.expo/dev/logs/start.log" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/TreeCard.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/TreeCard.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/History/HistoryScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/HistoryScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/MapPreview.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/MapPreview.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/Capture/MapPickerScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/MapPickerScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/Capture/TreeFormScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/TreeFormScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/Home/HomeScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Home/HomeScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/Map/TreeMapScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Map/TreeMapScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/treeService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/treeService.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/types/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/types/index.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -277,7 +279,15 @@
       <option name="project" value="LOCAL" />
       <updated>1790247383267</updated>
     </task>
-    <option name="localTasksCounter" value="25" />
+    <task id="LOCAL-00025" summary="history page in not change any user and mobail navigation overide problem solve.">
+      <option name="closed" value="true" />
+      <created>1790255152087</created>
+      <option name="number" value="00025" />
+      <option name="presentableId" value="LOCAL-00025" />
+      <option name="project" value="LOCAL" />
+      <updated>1790255152087</updated>
+    </task>
+    <option name="localTasksCounter" value="26" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -291,7 +301,7 @@
                   <entry key="branch">
                     <value>
                       <list>
-                        <option value="audit-update_flow" />
+                        <option value="origin/vishva_changes_par" />
                       </list>
                     </value>
                   </entry>
@@ -304,7 +314,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="update features 2" />
     <MESSAGE value="project according to login" />
     <MESSAGE value="login session bug fixed." />
     <MESSAGE value="credit logic update" />
@@ -329,6 +338,7 @@
     <MESSAGE value="approve/reject according update/audit and chnage some designs." />
     <MESSAGE value="tree card update." />
     <MESSAGE value="3 photos,card audit,auto audit time set or cheak." />
-    <option name="LAST_COMMIT_MESSAGE" value="3 photos,card audit,auto audit time set or cheak." />
+    <MESSAGE value="history page in not change any user and mobail navigation overide problem solve." />
+    <option name="LAST_COMMIT_MESSAGE" value="history page in not change any user and mobail navigation overide problem solve." />
   </component>
 </project>
