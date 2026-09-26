@@ -19,6 +19,7 @@ import logo from './src/assets/logo.png';
 // Screens
 import LoginScreen from './src/screens/Auth/LoginScreen';
 import HomeScreen from './src/screens/Home/HomeScreen';
+import ProjectSelectScreen from './src/screens/Home/ProjectSelectScreen';
 import CaptureScreen from './src/screens/Capture/CaptureScreen';
 import MapPickerScreen from './src/screens/Capture/MapPickerScreen';
 import TreeFormScreen from './src/screens/Capture/TreeFormScreen';
@@ -28,7 +29,6 @@ import HistoryScreen from './src/screens/History/HistoryScreen';
 import TreeDetailScreen from './src/screens/History/TreeDetailScreen';
 import UpdateTreeScreen from './src/screens/History/UpdateTreeScreen';
 import EditTreeScreen from './src/screens/History/EditTreeScreen';
-import UpdateLookupScreen from './src/screens/History/UpdateLookupScreen';
 import ProfileScreen from './src/screens/Profile/ProfileScreen';
 import TaskScreen from './src/screens/Task/TaskScreen';
 import TreeMapScreen from './src/screens/Map/TreeMapScreen';
@@ -47,7 +47,6 @@ const RootStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 const CaptureStack = createNativeStackNavigator();
 const HistoryStack = createNativeStackNavigator();
-const UpdateLookupStack = createNativeStackNavigator();
 
 function CaptureNavigator() {
   return (
@@ -70,23 +69,12 @@ function HistoryNavigator() {
         headerTitleAlign: 'center',
       }}
     >
-      <HistoryStack.Screen name="HistoryList" component={HistoryScreen} options={{ title: 'MY SUBMISSIONS', headerShown: false }} />
+      <HistoryStack.Screen name="HistoryList" component={HistoryScreen} options={{ title: 'SEARCH', headerShown: false }} />
       <HistoryStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS', headerShown: false }} />
       <HistoryStack.Screen name="UpdateTree" component={UpdateTreeScreen} options={{ title: 'AUDIT TREE', headerShown: false }} />
       <HistoryStack.Screen name="EditTree" component={EditTreeScreen} options={{ title: 'EDIT TREE', headerShown: false }} />
       <HistoryStack.Screen name="Map" component={TreeMapScreen} options={{ title: 'MAP', headerShown: false }} />
     </HistoryStack.Navigator>
-  );
-}
-
-function UpdateLookupNavigator() {
-  return (
-    <UpdateLookupStack.Navigator screenOptions={{ headerShown: false }}>
-      <UpdateLookupStack.Screen name="UpdateLookup" component={UpdateLookupScreen} />
-      <UpdateLookupStack.Screen name="UpdateTree" component={UpdateTreeScreen} />
-      <UpdateLookupStack.Screen name="EditTree" component={EditTreeScreen} />
-      <UpdateLookupStack.Screen name="Map" component={TreeMapScreen} />
-    </UpdateLookupStack.Navigator>
   );
 }
 
@@ -113,8 +101,7 @@ function MainTabs() {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
           if (route.name === 'Home') iconName = focused ? 'home' : 'home-outline';
           else if (route.name === 'Task') iconName = focused ? 'checkbox' : 'checkbox-outline';
-          else if (route.name === 'Update') iconName = focused ? 'shield-checkmark' : 'shield-checkmark-outline';
-          else if (route.name === 'History') iconName = focused ? 'document-text' : 'document-text-outline';
+          else if (route.name === 'Search') iconName = focused ? 'search' : 'search-outline';
           else if (route.name === 'Profile') iconName = focused ? 'person' : 'person-outline';
           return (
             <View style={{
@@ -131,8 +118,7 @@ function MainTabs() {
           const labels: Record<string, string> = {
             Home: 'Home',
             Task: 'Tasks',
-            Update: 'Audit',
-            History: 'History',
+            Search: 'Search',
             Profile: 'Profile',
           };
           return (
@@ -176,8 +162,7 @@ function MainTabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ headerShown: false, title: 'DASHBOARD' }} />
       <Tab.Screen name="Task" component={TaskScreen} options={{ headerShown: false, title: 'TASKS' }} />
-      <Tab.Screen name="Update" component={UpdateLookupNavigator} options={{ headerShown: false, title: 'AUDIT' }} />
-      <Tab.Screen name="History" component={HistoryNavigator} options={{ headerShown: false, title: 'HISTORY' }} />
+      <Tab.Screen name="Search" component={HistoryNavigator} options={{ headerShown: false, title: 'SEARCH' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false, title: 'PROFILE' }} />
     </Tab.Navigator>
   );
@@ -318,8 +303,9 @@ export default function App() {
   if (session === undefined) {
     return (
       <View style={styles.loading}>
+        <StatusBar style="dark" />
         <Image source={logo} style={styles.loadingLogo} resizeMode="contain" />
-        <ActivityIndicator size="large" color="#1a5c2a" style={{ marginTop: 20 }} />
+        <ActivityIndicator size="large" color="#1a5c2a" style={{ marginTop: 24 }} />
         <Text style={styles.loadingText}>Five Elements</Text>
       </View>
     );
@@ -337,6 +323,7 @@ export default function App() {
               ) : (
                 <>
                   <RootStack.Screen name="Main" component={MainTabs} />
+                  <RootStack.Screen name="ProjectSelect" component={ProjectSelectScreen} options={{ headerShown: false }} />
                   <RootStack.Screen name="Capture" component={CaptureNavigator} />
                   <RootStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS' }} />
                   <RootStack.Screen name="UpdateTree" component={UpdateTreeScreen} options={{ title: 'AUDIT TREE', headerShown: false }} />
@@ -358,17 +345,18 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#ffffff',
   },
   loadingLogo: {
-    width: 120,
-    height: 120,
+    width: 140,
+    height: 140,
     marginBottom: 8,
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 20,
-    fontWeight: 'bold',
+    marginTop: 14,
+    fontSize: 22,
+    fontWeight: '700',
     color: '#1a5c2a',
+    letterSpacing: 1.2,
   },
 });

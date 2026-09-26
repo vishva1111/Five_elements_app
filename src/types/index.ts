@@ -427,9 +427,8 @@ export type MainTabParamList = {
   Capture: undefined;
   Map: { focusTreeId?: string; startGeofenceWalk?: boolean } | undefined;
   Task: undefined;
-  History: undefined;
-  /** Renamed to "Audit" in the tab bar — tree lookup + Audit 1–4 sub-tabs */
-  Update: undefined;
+  /** Tree search (was History). Audit is no longer a tab. */
+  Search: undefined;
   Profile: undefined;
 };
 

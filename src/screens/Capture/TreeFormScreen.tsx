@@ -333,26 +333,7 @@ export default function TreeFormScreen() {
             {selectedProject?.name ?? 'All Projects'}
           </Text>
         </View>
-        <View
-          style={[
-            styles.headerCredits,
-            user?.credits !== undefined && user.credits <= 3 && styles.headerCreditsLow,
-          ]}
-        >
-          <Ionicons
-            name="wallet-outline"
-            size={14}
-            color={user?.credits !== undefined && user.credits <= 3 ? '#fff' : '#1a5c2a'}
-          />
-          <Text
-            style={[
-              styles.headerCreditsText,
-              user?.credits !== undefined && user.credits <= 3 && styles.headerCreditsLowText,
-            ]}
-          >
-            {user?.credits ?? 0}
-          </Text>
-        </View>
+        <View style={{ width: 40 }} />
       </LinearGradient>
 
       <ScrollView
@@ -758,7 +739,7 @@ export default function TreeFormScreen() {
         <TouchableOpacity
           style={[styles.saveBtn, submitting && styles.saveBtnDisabled]}
           onPress={handleSubmit}
-          disabled={submitting || (user?.credits ?? 0) <= 0}
+          disabled={submitting}
         >
           <Ionicons name="checkmark-circle" size={20} color="#112121" />
           <Text style={styles.saveBtnText}>
@@ -782,16 +763,21 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     paddingBottom: 14,
     paddingHorizontal: 14,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
   backBtn: {
-    width: 44,
-    height: 44,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTextCol: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    marginLeft: 10,
   },
   headerTitle: {
     color: '#fff',

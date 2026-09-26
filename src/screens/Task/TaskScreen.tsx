@@ -536,13 +536,8 @@ export default function TaskScreen() {
 
   return (
     <View style={s.container}>
-      <ScrollView
-        style={s.scroll}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a5c2a" />}
-      >
-        {/* Header with date and project location */}
-        <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={[s.header, { paddingTop: insets.top + 12 }]}>
+      {/* Header stays fixed; the rest of the page scrolls */}
+      <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={[s.header, { paddingTop: insets.top + 8 }]}>
           <View style={s.headerRow}>
             <View style={s.headerLeft}>
               <Text style={s.headerDate}>{getTodayDate()}</Text>
@@ -571,6 +566,11 @@ export default function TaskScreen() {
           </View>
         </LinearGradient>
 
+      <ScrollView
+        style={s.scroll}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a5c2a" />}
+      >
         {/* Tabs with CircularProgress rings */}
         <View style={s.tabsWrap}>
           <View style={s.tabsRow}>
@@ -605,10 +605,10 @@ export default function TaskScreen() {
                   activeOpacity={0.7}
                 >
                   <CircularProgress
-                    size={56}
+                    size={50}
                     progress={pct}
                     color={tab.color}
-                    strokeWidth={4}
+                    strokeWidth={3.5}
                     trackColor="#E8E8E8"
                   >
                     <Text style={[s.tabCountText, { color: tab.color }]}>
@@ -704,7 +704,9 @@ const s = StyleSheet.create({
   scroll: { flex: 1 },
   header: {
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 12,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
   headerRow: {
     flexDirection: 'row',
@@ -738,27 +740,27 @@ const s = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 5,
     backgroundColor: '#fff',
     borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 3,
     borderWidth: 1.5,
     borderColor: '#E0ECDD',
   },
   tabBtnActive: {},
   tabText: { fontSize: 11, fontWeight: '800', color: '#888' },
-  tabCountText: { fontSize: 13, fontWeight: '800' },
+  tabCountText: { fontSize: 11, fontWeight: '800' },
   dateSelectorWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 8, gap: 8 },
   dateAllBtn: {
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#fff',
     borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    minWidth: 56,
-    height: 68,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    minWidth: 52,
+    height: 62,
   },
   dateAllBtnActive: { backgroundColor: '#1a5c2a' },
   dateAllText: { fontSize: 12, fontWeight: '800', color: '#1a5c2a' },
@@ -769,15 +771,15 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#fff',
     borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    minWidth: 56,
-    height: 68,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    minWidth: 52,
+    height: 62,
   },
   dateItemActive: { backgroundColor: '#1a5c2a' },
   dateLabel: { fontSize: 9, fontWeight: '800', color: '#888', letterSpacing: 0.5 },
   dateLabelActive: { color: '#fff' },
-  dateDay: { fontSize: 18, fontWeight: '800', color: '#222', marginTop: 1 },
+  dateDay: { fontSize: 16, fontWeight: '800', color: '#222', marginTop: 1 },
   dateDayActive: { color: '#fff' },
   dateMonth: { fontSize: 10, fontWeight: '600', color: '#888' },
   dateMonthActive: { color: '#fff' },

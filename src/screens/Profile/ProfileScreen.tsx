@@ -68,7 +68,7 @@ export default function ProfileScreen() {
     >
       {/* ═══ Hero header with wave bottom ═══ */}
       <LinearGradient
-        colors={['#0d3320', '#1a5c2a', '#2e8b4a']}
+        colors={['#123f24', '#1a5c2a', '#2e7d43']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.hero}
@@ -101,11 +101,6 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Wave divider */}
-        <View style={styles.waveContainer}>
-          <View style={styles.wave1} />
-          <View style={styles.wave2} />
-        </View>
       </LinearGradient>
 
       {/* ═══ Quick stats row ═══ */}
@@ -134,32 +129,6 @@ export default function ProfileScreen() {
           label="Dead"
           gradient={['#b91c1c', '#ef4444']}
         />
-      </View>
-
-      {/* ═══ Credits card ═══ */}
-      <View style={styles.section}>
-        <LinearGradient
-          colors={['#f0fdf4', '#dcfce7']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.creditsCard}
-        >
-          <View style={styles.creditsIconWrap}>
-            <Ionicons name="flash" size={24} color="#F09125" />
-          </View>
-          <View style={styles.creditsBody}>
-            <Text style={styles.creditsTitle}>Credits</Text>
-            <Text style={styles.creditsValue}>{user?.credits ?? 0}</Text>
-            <Text style={styles.creditsSub}>1 credit per photo upload</Text>
-          </View>
-          {user?.credits !== undefined && user.credits <= 3 && (
-            <View style={[styles.creditBadge, user.credits === 0 && styles.creditBadgeDanger]}>
-              <Text style={[styles.creditBadgeText, user.credits === 0 && styles.creditBadgeTextDanger]}>
-                {user.credits === 0 ? 'Empty' : 'Low'}
-              </Text>
-            </View>
-          )}
-        </LinearGradient>
       </View>
 
       {/* ═══ Active project ═══ */}
@@ -242,7 +211,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f4f1' },
 
   /* Hero */
-  hero: { paddingBottom: 50 },
+  hero: {
+    paddingBottom: 28,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
+  },
   decoCircle: { position: 'absolute', borderRadius: 999 },
   heroContent: { alignItems: 'center', paddingTop: 48, paddingBottom: 30, paddingHorizontal: 24 },
 

@@ -314,7 +314,7 @@ export default function TreeDetailScreen() {
       {/* ─── 1. TOP HEADER (STATUS & NAVIGATION) ─── */}
       <LinearGradient colors={['#0f331d', '#1a5c2a', '#226934']} style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={20} color="#fff" />
+          <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
@@ -1051,16 +1051,18 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     paddingBottom: 14,
     paddingHorizontal: 16,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
   backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerCenter: { flex: 1, alignItems: 'center' },
+  headerCenter: { flex: 1, alignItems: 'flex-start', marginLeft: 10 },
   headerTitle: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
   headerSubtitle: { color: '#bbf7d0', fontSize: 11, marginTop: 2, fontWeight: '600' },
   completedPill: {

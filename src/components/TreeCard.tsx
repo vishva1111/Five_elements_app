@@ -438,7 +438,7 @@ const styles = StyleSheet.create({
   },
   cardMainRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   photoWrap: {
     width: 76,
@@ -480,11 +480,12 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
   },
   nameText: {
-    fontSize: 13.5,
+    fontSize: 14,
     fontWeight: '800',
     color: '#111827',
-    marginTop: 1,
-    marginBottom: 3,
+    lineHeight: 18,
+    marginTop: 2,
+    marginBottom: 6,
   },
   statusBadge: {
     flexDirection: 'row',

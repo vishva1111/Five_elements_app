@@ -2841,7 +2841,7 @@ export default function TreeMapScreen() {
                       try {
                         navigation.navigate('TreeDetail', { treeId: selectedTree.id });
                       } catch {
-                        navigation.navigate('History', {
+                        navigation.navigate('Search', {
                           screen: 'TreeDetail',
                           params: { treeId: selectedTree.id },
                         });
@@ -2924,11 +2924,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 44,
-    paddingBottom: 10,
+    paddingBottom: 14,
     paddingHorizontal: 12,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
-  backBtn: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.15)' },
-  headerCenter: { flex: 1, alignItems: 'center', marginHorizontal: 8 },
+  backBtn: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.15)' },
+  headerCenter: { flex: 1, alignItems: 'flex-start', marginLeft: 10 },
   headerTitle: { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.5 },
   headerSubtitle: { color: '#cde8d3', fontSize: 11, marginTop: 1 },
   refreshBtn: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.15)' },

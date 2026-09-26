@@ -82,7 +82,6 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({ total: 0, healthy: 0, sick: 0, dead: 0 });
   const [taskStats, setTaskStats] = useState({ total: 0, assigned: 0, rejected: 0, completed: 0 });
-  const [projectDropdownOpen, setProjectDropdownOpen] = useState(false);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [projectGeofence, setProjectGeofence] = useState<ProjectGeofence | null>(null);
   const [showGeofencePromptModal, setShowGeofencePromptModal] = useState(false);
@@ -317,7 +316,6 @@ export default function HomeScreen() {
     }
     setActiveProjectId(projectId);
     refreshCredits();
-    setProjectDropdownOpen(false);
   };
 
   // Instantly reload when the active project changes
@@ -341,11 +339,6 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={{ paddingBottom: insets.bottom + 88 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a5c2a" />}
-    >
       <View style={styles.bannerWrap}>
         <LinearGradient
           colors={['#123f24', '#1a5c2a', '#2e7d43']}
@@ -358,16 +351,13 @@ export default function HomeScreen() {
               <Text style={styles.greeting}>Hi {greetingName}</Text>
               <Text style={styles.bannerSub}>Ready to capture trees today?</Text>
             </View>
-            <View style={styles.creditsPill}>
-              <Ionicons name="wallet-outline" size={15} color="#F09125" />
-              <Text style={styles.creditsPillText}>{user?.credits ?? 0}</Text>
-            </View>
+
           </View>
 
           {/* Active Project Card - Tappable Dropdown */}
           <TouchableOpacity
             style={styles.activeProjectCard}
-            onPress={() => setProjectDropdownOpen(true)}
+            onPress={() => navigation.navigate('ProjectSelect')}
             activeOpacity={0.8}
           >
             <View style={styles.activeProjectIcon}>
@@ -379,14 +369,16 @@ export default function HomeScreen() {
                 {allProjects.find((p) => p.id === activeProjectId)?.name ?? 'All Projects'}
               </Text>
             </View>
-            <View style={styles.activeProjectArrow}>
-              <Ionicons name="chevron-down" size={18} color="#1a5c2a" />
-            </View>
+
           </TouchableOpacity>
         </LinearGradient>
-        <CurveDivider height={23} color="#f0f4f1" cornerRadius={25} style={styles.curveDivider} />
       </View>
 
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 88 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a5c2a" />}
+    >
       <View style={styles.contentSection}>
         {/* Tree Stats - 4 cards in a row */}
         <View style={styles.treeStatsRow}>
@@ -467,9 +459,7 @@ export default function HomeScreen() {
             <Text style={styles.captureTitle}>Capture a Tree</Text>
             <Text style={styles.captureSub}>Take photo + tag GPS location</Text>
           </View>
-          <View style={styles.captureBadge}>
-            <Text style={styles.captureBadgeText}>{user?.credits ?? 0} credits</Text>
-          </View>
+
         </TouchableOpacity>
 
         {/* Task Stats - 2x2 Grid with GradientProgress */}
@@ -499,7 +489,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.taskStatCard}
-              onPress={() => setProjectDropdownOpen(true)}
+              onPress={() => navigation.navigate('ProjectSelect')}
               activeOpacity={0.7}
             >
               <GradientProgress
@@ -552,73 +542,7 @@ export default function HomeScreen() {
       </View>
     </ScrollView>
 
-    {/* Project Selection Modal */}
-    <Modal
-      visible={projectDropdownOpen}
-      transparent
-      animationType="slide"
-      onRequestClose={() => setProjectDropdownOpen(false)}
-    >
-      <View style={styles.modalBackdrop}>
-        <TouchableOpacity
-          style={styles.modalBackdropTouch}
-          activeOpacity={1}
-          onPress={() => setProjectDropdownOpen(false)}
-        />
-        <View style={styles.modalSheet}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Select Project</Text>
-            <TouchableOpacity onPress={() => setProjectDropdownOpen(false)}>
-              <Ionicons name="close" size={24} color="#333" />
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            data={[{ id: '__all__', name: 'All Projects', description: 'Show all projects' }, ...allProjects]}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => {
-              const isAll = item.id === '__all__';
-              const isActive = isAll ? !activeProjectId : item.id === activeProjectId;
-              const pStats = projectStatsMap[item.id];
-              return (
-                <TouchableOpacity
-                  style={[styles.modalOption, isActive && styles.modalOptionActive]}
-                  onPress={() => handleSelectProject(isAll ? null : item.id)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.modalOptionIcon, isActive && styles.modalOptionIconActive]}>
-                    <Ionicons
-                      name={isAll ? 'layers-outline' : 'folder-outline'}
-                      size={18}
-                      color={isActive ? '#fff' : '#1a5c2a'}
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 8 }}>
-                      <Text style={[styles.modalOptionName, isActive && styles.modalOptionNameActive]}>
-                        {item.name}
-                      </Text>
-                      {pStats !== undefined && (
-                        <View style={[styles.projectCountBadge, isActive && styles.projectCountBadgeActive]}>
-                          <Text style={[styles.projectCountBadgeText, isActive && styles.projectCountBadgeTextActive]}>
-                            {pStats.total} {pStats.total === 1 ? 'tree' : 'trees'}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                    {'description' in item && item.description ? (
-                      <Text style={[styles.modalOptionDesc, isActive && styles.modalOptionDescActive]}>
-                        {item.description}
-                      </Text>
-                    ) : null}
-                  </View>
-                  {isActive && <Ionicons name="checkmark" size={20} color="#fff" />}
-                </TouchableOpacity>
-              );
-            }}
-          />
-        </View>
-      </View>
-    </Modal>
+
 
     {/* First-Time Land Geofencing Prompt Modal */}
     <Modal
@@ -670,12 +594,14 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f4f1' },
   scroll: { flex: 1 },
-  bannerWrap: { zIndex: 5 },
+  bannerWrap: { zIndex: 5, overflow: 'visible' },
   banner: {
     backgroundColor: '#1a5c2a',
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 45,
+    paddingBottom: 22,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
   curveDivider: {
     position: 'absolute',
@@ -855,7 +781,7 @@ const styles = StyleSheet.create({
   treeStatsRow: {
     flexDirection: 'row',
     marginHorizontal: 16,
-    marginTop: 0,
+    marginTop: 14,
     gap: 8,
   },
   treeStatCard: {

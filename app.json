@@ -19,7 +19,7 @@
       "splash": {
         "image": "./assets/splash-icon.png",
         "resizeMode": "contain",
-        "backgroundColor": "#123f24"
+        "backgroundColor": "#ffffff"
       },
       "infoPlist": {
         "NSCameraUsageDescription": "TreeApp needs camera access to photograph trees in the field.",
@@ -32,11 +32,11 @@
       "splash": {
         "image": "./assets/splash-icon.png",
         "resizeMode": "contain",
-        "backgroundColor": "#123f24"
+        "backgroundColor": "#ffffff"
       },
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#123f24"
+        "backgroundColor": "#ffffff"
       },
       "config": {},
       "permissions": [
@@ -58,7 +58,7 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#123f24"
+          "backgroundColor": "#ffffff"
         }
       ],
       [

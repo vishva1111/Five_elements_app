@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
+  TextInput,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -107,6 +108,8 @@ export default function HistoryScreen() {
   const [conditionFilter, setConditionFilter] = useState<TreeCondition | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [auditFilter, setAuditFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [tabsOpen, setTabsOpen] = useState(false);
   const [auditItems, setAuditItems] = useState<HistoryItem[]>([]);
   const [auditsByTree, setAuditsByTree] = useState<Record<string, any[]>>({});
 
@@ -268,7 +271,16 @@ export default function HistoryScreen() {
     const filterCondition = (conditionFilter || 'all').toLowerCase();
     const conditionMatch = filterCondition === 'all' || itemCondition === filterCondition;
     const statusMatch = statusFilter === 'all' || item.status === statusFilter;
-    return projectMatch && conditionMatch && statusMatch;
+    const query = searchQuery.trim().toLowerCase();
+    const searchMatch =
+      !query ||
+      (item.title || '').toLowerCase().includes(query) ||
+      (item.tree_id || '').toLowerCase().includes(query) ||
+      (item.surveyor || '').toLowerCase().includes(query) ||
+      (item.status || '').toLowerCase().includes(query) ||
+      (item.condition || '').toLowerCase().includes(query) ||
+      (item.id || '').toLowerCase().includes(query);
+    return projectMatch && conditionMatch && statusMatch && searchMatch;
   });
 
   const counts = {
@@ -277,6 +289,22 @@ export default function HistoryScreen() {
     approved: allItems.filter((i) => i.status === 'approved').length,
     rejected: allItems.filter((i) => i.status === 'rejected').length,
   };
+
+  const selectedFilterValue =
+    activeCategory === 'condition'
+      ? conditionFilter
+      : activeCategory === 'status'
+      ? statusFilter
+      : auditFilter;
+  const selectedFilterLabel =
+    selectedFilterValue === 'all'
+      ? ''
+      : (activeCategory === 'condition'
+          ? CONDITION_FILTERS
+          : activeCategory === 'status'
+          ? STATUS_FILTERS
+          : AUDIT_FILTERS
+        ).find((f) => f.value === selectedFilterValue)?.label || '';
 
   const renderFilterChips = () => {
     let filters: { label: string; value: string }[] = [];
@@ -323,7 +351,10 @@ export default function HistoryScreen() {
                 !active && f.value !== 'all' && activeCategory === 'status' && { backgroundColor: STATUS_COLORS[f.value] + '15', borderColor: STATUS_COLORS[f.value] + '40' },
                 !active && f.value !== 'all' && activeCategory === 'audit' && { backgroundColor: AUDIT_COLORS[f.value] + '15', borderColor: AUDIT_COLORS[f.value] + '40' },
               ]}
-              onPress={() => onPress(f.value)}
+              onPress={() => {
+                onPress(f.value);
+                setTabsOpen(false);
+              }}
             >
               <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
             </TouchableOpacity>
@@ -372,35 +403,85 @@ export default function HistoryScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={styles.header}>
-        <Ionicons name="leaf" size={20} color="#fff" />
-        <Text style={styles.headerTitle}>HISTORY</Text>
-        <View style={styles.headerCountBadge}>
-          <Text style={styles.headerCountText}>{counts.total}</Text>
+      <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={[styles.header, { paddingTop: Math.max(insets.top + 6, 36) }]}>
+        <View style={styles.headerTop}>
+          <View style={styles.headerCopy}>
+            <View style={styles.titleRow}>
+              <Text style={styles.headerTitle}>Find a tree</Text>
+              <Text style={styles.selectionInline} numberOfLines={1}>
+                {CATEGORIES.find((cat) => cat.key === activeCategory)?.label}
+                {selectedFilterLabel ? ` · ${selectedFilterLabel}` : ' · All'}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.countOrb}>
+            <Text style={styles.countNumber}>{counts.total}</Text>
+            <Text style={styles.countCaption}>matches</Text>
+          </View>
+        </View>
+        <View style={styles.searchRow}>
+          <View style={styles.searchBar}>
+            <Ionicons name="search" size={20} color="#1a5c2a" />
+            <TextInput
+              style={styles.searchInput}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="ID, species, or surveyor"
+              placeholderTextColor="#6b7280"
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+              accessibilityLabel="Search trees"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setSearchQuery('')}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+              >
+                <Ionicons name="close-circle" size={20} color="#6b7280" />
+              </TouchableOpacity>
+            )}
+          </View>
+          <TouchableOpacity
+            style={[styles.tabsButton, tabsOpen && styles.tabsButtonOpen]}
+            onPress={() => setTabsOpen((open) => !open)}
+            accessibilityRole="button"
+            accessibilityLabel="Show search filters"
+            accessibilityState={{ expanded: tabsOpen }}
+          >
+            <Ionicons name="options" size={22} color={tabsOpen ? '#1a5c2a' : '#fff'} />
+          </TouchableOpacity>
         </View>
       </LinearGradient>
 
-      {/* Category Tabs */}
-      <View style={styles.categoryBar}>
-        {CATEGORIES.map((cat) => {
-          const active = activeCategory === cat.key;
-          return (
-            <TouchableOpacity
-              key={cat.key}
-              style={[styles.categoryBtn, active && styles.categoryBtnActive]}
-              onPress={() => handleCategoryChange(cat.key)}
-            >
-              <Ionicons name={cat.icon as any} size={14} color={active ? '#fff' : '#1a5c2a'} />
-              <Text style={[styles.categoryText, active && styles.categoryTextActive]}>{cat.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* Filter Chips */}
-      <View style={styles.chipBar}>
-        {renderFilterChips()}
-      </View>
+      {tabsOpen && (
+        <View style={styles.filterSheet}>
+          <Text style={styles.sheetLabel}>LOOK BY</Text>
+          <View style={styles.tabMenu}>
+            {CATEGORIES.map((cat) => {
+              const active = activeCategory === cat.key;
+              return (
+                <TouchableOpacity
+                  key={cat.key}
+                  style={[styles.categoryBtn, active && styles.categoryBtnActive]}
+                  onPress={() => handleCategoryChange(cat.key)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Ionicons name={cat.icon as any} size={16} color={active ? '#fff' : '#1a5c2a'} />
+                  <Text style={[styles.categoryText, active && styles.categoryTextActive]}>{cat.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <Text style={styles.sheetLabel}>THEN NARROW</Text>
+          <View style={styles.chipBar}>
+            {renderFilterChips()}
+          </View>
+        </View>
+      )}
 
       {/* List */}
       <FlatList
@@ -413,14 +494,18 @@ export default function HistoryScreen() {
         }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>🌱</Text>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="search" size={28} color="#1a5c2a" />
+            </View>
             <Text style={styles.emptyText}>No records found</Text>
             <Text style={styles.emptySubText}>
-              {conditionFilter !== 'all' || statusFilter !== 'all' || auditFilter !== 'all'
+              {searchQuery.trim()
+                ? 'No trees match that search'
+                : conditionFilter !== 'all' || statusFilter !== 'all' || auditFilter !== 'all'
                 ? 'Try a different filter'
                 : activeCategory === 'audit'
                 ? 'Your audit records will appear here'
-                : 'Your work history will appear here'}
+                : 'Search by tree ID, species, or surveyor'}
             </Text>
           </View>
         }
@@ -432,36 +517,142 @@ export default function HistoryScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f4f1' },
   header: {
+    paddingBottom: 12,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  headerCopy: { flex: 1, paddingRight: 12 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+  },
+  selectionInline: {
+    flexShrink: 1,
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  kicker: {
+    color: '#F09125',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    marginBottom: 1,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: -0.3,
+  },
+  countOrb: {
+    minWidth: 58,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 14,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  countNumber: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  countCaption: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingTop: 48,
-    paddingBottom: 14,
-    paddingHorizontal: 16,
   },
-  headerTitle: {
-    fontSize: 19,
-    fontWeight: '800',
-    color: '#fff',
+  searchBar: {
     flex: 1,
-  },
-  headerCountBadge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 14,
-  },
-  headerCountText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  categoryBar: {
     flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    alignItems: 'center',
     gap: 8,
     backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#123f24',
+    paddingVertical: 0,
+  },
+  tabsButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  tabsButtonOpen: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#F09125',
+  },
+  sheetHead: {
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  selectionPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  selectionText: {
+    color: '#1a5c2a',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  filterSheet: {
+    marginHorizontal: 20,
+    marginTop: 12,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    paddingTop: 14,
+    paddingBottom: 6,
+    borderWidth: 1,
+    borderColor: '#E8F5E9',
+    elevation: 6,
+    shadowColor: '#1a5c2a',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+  },
+  sheetLabel: {
+    marginLeft: 16,
+    marginBottom: 8,
+    color: '#6b7280',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+  },
+  tabMenu: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    gap: 8,
   },
   categoryBtn: {
     flex: 1,
@@ -469,8 +660,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    paddingVertical: 10,
-    borderRadius: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
     backgroundColor: '#E8F5E9',
   },
   categoryBtnActive: {
@@ -493,9 +684,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
     backgroundColor: '#E8F5E9',
   },
   chipActive: {
@@ -510,7 +701,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '800',
   },
-  list: { padding: 16, paddingTop: 8, paddingBottom: 100 },
+  list: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100 },
 
   historyCard: {
     backgroundColor: '#fff',
@@ -643,8 +834,16 @@ const styles = StyleSheet.create({
     color: '#888',
   },
 
-  empty: { alignItems: 'center', paddingVertical: 60 },
-  emptyEmoji: { fontSize: 48, marginBottom: 12 },
-  emptyText: { fontSize: 16, fontWeight: '800', color: '#555' },
+  empty: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 28 },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#E8F5E9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  emptyText: { fontSize: 18, fontWeight: '800', color: '#1a5c2a' },
   emptySubText: { fontSize: 13, color: '#888', marginTop: 4 },
 });
