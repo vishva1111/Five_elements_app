@@ -4,20 +4,17 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="audit page remove,history page rename to search,fix design.">
+    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="using tree defult data and chnage some name and chnage some design.">
       <change beforePath="$PROJECT_DIR$/.expo/dev/logs/start.log" beforeDir="false" afterPath="$PROJECT_DIR$/.expo/dev/logs/start.log" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/App.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/index.js" beforeDir="false" afterPath="$PROJECT_DIR$/index.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/package-lock.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Capture/SubmitSuccessScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/SubmitSuccessScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Capture/TreeFormScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/TreeFormScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Profile/ProfileScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Profile/ProfileScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/prebuild.log" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/MultiProgressRing.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/StatusBadge.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/TreeCard.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/TreeCard.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/hooks/useLocation.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/services/treeService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/treeService.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/types/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/types/index.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/supabase/migrations/001_add_tree_columns.sql" beforeDir="false" afterPath="$PROJECT_DIR$/supabase/migrations/001_add_tree_columns.sql" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -339,7 +336,15 @@
       <option name="project" value="LOCAL" />
       <updated>1790428218596</updated>
     </task>
-    <option name="localTasksCounter" value="32" />
+    <task id="LOCAL-00032" summary="using tree defult data and chnage some name and chnage some design.">
+      <option name="closed" value="true" />
+      <created>1790587242487</created>
+      <option name="number" value="00032" />
+      <option name="presentableId" value="LOCAL-00032" />
+      <option name="project" value="LOCAL" />
+      <updated>1790587242488</updated>
+    </task>
+    <option name="localTasksCounter" value="33" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -366,7 +371,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="clean project" />
     <MESSAGE value="small design bug" />
     <MESSAGE value="project selection logic and redesign the interface." />
     <MESSAGE value="task feature" />
@@ -391,6 +395,7 @@
     <MESSAGE value="all page app nav overide solve." />
     <MESSAGE value="add tree to user direction in map" />
     <MESSAGE value="audit page remove,history page rename to search,fix design." />
-    <option name="LAST_COMMIT_MESSAGE" value="audit page remove,history page rename to search,fix design." />
+    <MESSAGE value="using tree defult data and chnage some name and chnage some design." />
+    <option name="LAST_COMMIT_MESSAGE" value="using tree defult data and chnage some name and chnage some design." />
   </component>
 </project>

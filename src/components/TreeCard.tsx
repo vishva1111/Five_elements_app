@@ -96,6 +96,8 @@ export default function TreeCard({
   const statusColor = STATUS_COLORS[effectiveStatus] || '#7c3aed';
   const isRejected = effectiveStatus === 'rejected';
   const isAssigned = effectiveStatus === 'assigned' || effectiveStatus === 'in_progress';
+  const isCompleted = effectiveStatus === 'completed';
+  const isApproved = effectiveStatus === 'approved';
 
   // Resolved ID: displayIdProp -> treeId from tree -> task ID snippet
   const resolvedId =
@@ -158,21 +160,43 @@ export default function TreeCard({
   const surveyor = task?.surveyor || tree?.surveyor;
 
   // Date
-  const rawDate = task?.created_at || tree?.submitted_at || tree?.survey_date;
+  const rawDate =
+    (effectiveStatus === 'completed' && task?.completed_at) ||
+    task?.created_at ||
+    tree?.submitted_at ||
+    tree?.survey_date;
   const dateStr = formatDateCustom(rawDate);
 
   const isAudit = task?.task_type === 'audit' || !!task?.audit_round || actionVariant === 'audit';
+  const isCompletedAudit = effectiveStatus === 'completed' && isAudit;
   const CardContainer = isAssigned && !onPress ? View : TouchableOpacity;
   const containerProps = isAssigned && !onPress ? {} : { onPress, activeOpacity: 0.82 };
 
   return (
     <CardContainer
-      style={[styles.card, { borderLeftColor: isAudit ? '#ea580c' : statusColor }]}
+      style={[
+        styles.card,
+        isAssigned && !isAudit && styles.plantingCard,
+        isCompletedAudit && styles.completedAuditCard,
+        isCompleted && !isCompletedAudit && styles.statusCard,
+        isApproved && styles.statusCard,
+        isRejected && styles.rejectedCard,
+      ]}
       {...containerProps}
     >
-      <View style={styles.cardMainRow}>
-        {/* ─── LEFT: Photo Thumbnail (Hidden for assigned tasks unless audit task) ─── */}
-        {(!isAssigned || isAudit) && (
+      {isAssigned && !isAudit ? (
+        <View style={[styles.plantingAccent, { backgroundColor: statusColor }]} />
+      ) : null}
+      {isCompletedAudit ? <View style={styles.completedAuditAccent} /> : null}
+      {isCompleted && !isCompletedAudit ? <View style={[styles.statusAccent, { backgroundColor: statusColor }]} /> : null}
+      {isApproved ? <View style={[styles.statusAccent, { backgroundColor: statusColor }]} /> : null}
+      {isRejected ? <View style={styles.rejectedAccent} /> : null}
+      <View style={[styles.cardMainRow, ((isAssigned && !isAudit) || isCompleted || isApproved || isRejected) && styles.plantingRow]}>
+        {isAssigned && !isAudit ? (
+          <View style={styles.plantingMark}>
+            <Ionicons name="leaf" size={22} color="#1a5c2a" />
+          </View>
+        ) : (
           <View style={styles.photoWrap}>
             {photoUrl ? (
               <Image source={{ uri: photoUrl }} style={styles.photo} resizeMode="cover" />
@@ -193,29 +217,28 @@ export default function TreeCard({
             </Text>
 
             {isAssigned ? (
-              onAction ? (
-                <TouchableOpacity
-                  style={[
-                    styles.startBtn,
-                    {
-                      backgroundColor: actionVariant === 'audit' ? '#ea580c' : statusColor,
-                      shadowColor: actionVariant === 'audit' ? '#ea580c' : statusColor,
-                    },
-                  ]}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    onAction();
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name={actionIcon || (actionVariant === 'audit' ? 'clipboard-outline' : 'play-circle-outline')}
-                    size={14}
-                    color="#fff"
-                  />
-                  <Text style={styles.startBtnText}>{actionLabel || 'Start'}</Text>
-                </TouchableOpacity>
+              onAction && isAudit ? (
+                  <TouchableOpacity
+                    style={[styles.startBtn, { backgroundColor: '#ea580c' }]}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      onAction();
+                    }}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={actionLabel || 'Audit Now'}
+                  >
+                    <Ionicons name={actionIcon || 'clipboard-outline'} size={14} color="#fff" />
+                    <Text style={styles.startBtnText}>{actionLabel || 'Audit Now'}</Text>
+                  </TouchableOpacity>
               ) : null
+            ) : isCompletedAudit ? (
+              <View style={styles.completedAuditBadge}>
+                <Ionicons name="clipboard" size={11} color="#9a3412" />
+                <Text style={styles.completedAuditBadgeText}>
+                  AUDIT {auditRound || computedAuditStatus?.maxRound || ''}
+                </Text>
+              </View>
             ) : (
               <View
                 style={[
@@ -293,7 +316,7 @@ export default function TreeCard({
           )}
 
           {/* Row 4: Audit Progress (4 Dots + Overdue/Due Status) */}
-          {((!isAssigned && effectiveStatus === 'approved') || (isAssigned && isAudit)) && computedAuditStatus ? (() => {
+          {((!isAssigned && effectiveStatus === 'approved') || isCompletedAudit || (isAssigned && isAudit)) && computedAuditStatus ? (() => {
             const isCompleted = computedAuditStatus.allCompleted;
             const isOverdue = computedAuditStatus.isOverdue || effectiveDueLabel?.toLowerCase().includes('overdue');
             const isTaskDay = !isCompleted && !isOverdue && (computedAuditStatus.isDue || effectiveDueLabel === 'Audit Now' || effectiveDueLabel?.toLowerCase().includes('due today'));
@@ -366,15 +389,27 @@ export default function TreeCard({
             <View style={[styles.dateRow, isAssigned && styles.assignedDateRow]}>
               <Ionicons name="calendar-outline" size={12} color="#6b7280" />
               <Text style={[styles.dateText, isAssigned && styles.assignedDateText]}>
-                {isAssigned ? `Assigned: ${dateStr}` : dateStr}
+                {isAssigned ? `Assigned: ${dateStr}` : isCompletedAudit ? `Audited: ${dateStr}` : dateStr}
               </Text>
             </View>
           ) : null}
         </View>
+        {isAssigned && !isAudit && onAction ? (
+          <TouchableOpacity
+            style={styles.plantingBtn}
+            onPress={onAction}
+            activeOpacity={0.82}
+            accessibilityRole="button"
+            accessibilityLabel="Planting"
+          >
+            <Ionicons name="leaf" size={16} color="#fff" />
+            <Text style={styles.plantingBtnText}>{actionLabel || 'Planting'}</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {/* ─── OPTIONAL BOTTOM ACTION BUTTON ─── */}
-      {!isAssigned && onAction && actionLabel && (actionVariant !== 'audit' || (computedAuditStatus && computedAuditStatus.isDue)) ? (
+      {!isAssigned && !isRejected && onAction && actionLabel && (actionVariant !== 'audit' || (computedAuditStatus && computedAuditStatus.isDue)) ? (
         <TouchableOpacity
           style={styles.actionBtnTouch}
           onPress={(e) => {
@@ -383,20 +418,7 @@ export default function TreeCard({
           }}
           activeOpacity={0.82}
         >
-          {isRejected || actionVariant === 'update' ? (
-            <LinearGradient
-              colors={['#f87171', '#ef4444', '#dc2626']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.updateGradientBtn}
-            >
-              <View style={styles.actionIconBadge}>
-                <Ionicons name="create" size={13} color="#dc2626" />
-              </View>
-              <Text style={styles.updateBtnText}>{actionLabel}</Text>
-              <Ionicons name="arrow-forward" size={14} color="#fff" />
-            </LinearGradient>
-          ) : actionVariant === 'audit' ? (
+          {actionVariant === 'audit' ? (
             <LinearGradient
               colors={['#2e7d32', '#1a5c2a']}
               start={{ x: 0, y: 0 }}
@@ -436,9 +458,131 @@ const styles = StyleSheet.create({
     borderLeftColor: '#7c3aed',
     flexDirection: 'column',
   },
+  plantingCard: {
+    backgroundColor: '#fff',
+    borderLeftWidth: 0,
+    overflow: 'hidden',
+    paddingVertical: 10,
+    paddingLeft: 16,
+    paddingRight: 11,
+  },
+  plantingAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
+  },
+  completedAuditCard: {
+    backgroundColor: '#fffaf5',
+    borderLeftWidth: 0,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#fed7aa',
+    paddingLeft: 16,
+  },
+  completedAuditAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
+    backgroundColor: '#ea580c',
+  },
+  statusCard: {
+    backgroundColor: '#fff',
+    borderLeftWidth: 0,
+    overflow: 'hidden',
+    paddingVertical: 8,
+    paddingLeft: 14,
+    paddingRight: 10,
+  },
+  statusAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
+  },
+  rejectedCard: {
+    backgroundColor: '#fff',
+    borderLeftWidth: 0,
+    overflow: 'hidden',
+    paddingVertical: 8,
+    paddingLeft: 14,
+    paddingRight: 8,
+  },
+  rejectedAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
+    backgroundColor: '#ef4444',
+  },
+  completedAuditBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    backgroundColor: '#ffedd5',
+    borderWidth: 1,
+    borderColor: '#fdba74',
+  },
+  completedAuditBadgeText: {
+    color: '#9a3412',
+    fontSize: 8.5,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  plantingMark: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e5f6ea',
+  },
+  plantingBtn: {
+    width: 58,
+    height: 58,
+    borderRadius: 12,
+    marginLeft: 8,
+    backgroundColor: '#1a5c2a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plantingBtnText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 9,
+    marginTop: 2,
+  },
+  updateSquareBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 10,
+    marginLeft: 8,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+  },
+  updateSquareText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 9,
+    marginTop: 2,
+  },
   cardMainRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+  },
+  plantingRow: {
+    alignItems: 'center',
   },
   photoWrap: {
     width: 76,

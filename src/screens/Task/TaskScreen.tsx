@@ -17,7 +17,7 @@ import { useProjectRefreshStore } from '../../store/projectRefreshStore';
 import { fetchMyTrees, fetchTreesByProject, fetchAllTrees, fetchAllProjects, backfillProjectTreeIds } from '../../services/treeService';
 import { fetchAgentTasks, startTask } from '../../services/taskService';
 import { loadLocalTasks } from '../../services/localTaskService';
-import { fetchAuditsForTrees, getAuditStatus, getDueLabel, ensureAuditTaskForTree } from '../../services/auditService';
+import { fetchAuditsForTrees, getAuditStatus, getDueLabel, getLatestAudit, ensureAuditTaskForTree } from '../../services/auditService';
 import { Task, Project, TreeRecord } from '../../types';
 import { displayTreeId, parseTreeMeta, resolveTreeId } from '../../utils/treeId';
 import { fetchProjectGeofence } from '../../services/projectGeofenceService';
@@ -326,7 +326,17 @@ export default function TaskScreen() {
 
     tasks.forEach((t) => {
       if (t.status === 'completed') {
-        list.push(t);
+        const treeId = t.tree_record_id || t.tree_id || t.id;
+        const latestAudit = getLatestAudit(auditsByTree[treeId] || []);
+        const latestAuditDate = latestAudit?.submitted_at || latestAudit?.survey_date || null;
+        list.push({
+          ...t,
+          completed_at: latestAuditDate || t.completed_at || t.created_at,
+          photo_url: latestAudit?.photo_url || t.photo_url,
+          tree_condition: latestAudit?.tree_condition || t.tree_condition,
+          audit_round: latestAudit?.monitoring_round || t.audit_round || null,
+          task_type: latestAudit ? 'audit' : t.task_type,
+        });
         seenIds.add(t.id);
         if (t.tree_id) seenIds.add(t.tree_id);
         if (t.tree_record_id) seenIds.add(t.tree_record_id);
@@ -341,6 +351,8 @@ export default function TaskScreen() {
         seenIds.add(t.id);
         const meta = parseTreeMeta(t.notes);
         const condition = t.tree_condition || meta.tree_condition || 'Healthy';
+        const latestAudit = getLatestAudit(auditsByTree[t.id] || []);
+        const latestAuditDate = latestAudit?.submitted_at || latestAudit?.survey_date || null;
         list.push({
           id: t.id,
           tree_id: t.id,
@@ -355,18 +367,25 @@ export default function TaskScreen() {
           progress: 100,
           status: 'completed' as const,
           created_at: t.submitted_at,
-          photo_url: t.photo_url,
+          completed_at: latestAuditDate || t.submitted_at,
+          photo_url: latestAudit?.photo_url || t.photo_url,
           latitude: t.latitude,
           longitude: t.longitude,
-          tree_condition: condition,
+          tree_condition: latestAudit?.tree_condition || condition,
           tree_condition_color: condition === 'Healthy' ? '#16a34a' : condition === 'Stressed' ? '#d97706' : condition === 'Diseased' ? '#dc2626' : '#4b5563',
-          surveyor: t.surveyor || meta.surveyor,
+          surveyor: latestAudit?.surveyor || t.surveyor || meta.surveyor,
+          audit_round: latestAudit?.monitoring_round || null,
+          task_type: latestAudit ? 'audit' : 'capture',
         });
       }
     });
 
-    return list;
-  }, [tasks, projectTrees]);
+    return list.sort((a, b) => {
+      const aTime = new Date(a.completed_at || a.created_at || 0).getTime();
+      const bTime = new Date(b.completed_at || b.created_at || 0).getTime();
+      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+    });
+  }, [tasks, projectTrees, auditsByTree]);
 
   // Tab counts
   const assignedCount = assignedItems.length;
@@ -435,7 +454,8 @@ export default function TaskScreen() {
       }
     }
 
-    const isAuditTask = task.task_type === 'audit' || !!task.audit_round;
+    const isAuditTask = (task.task_type === 'audit' || !!task.audit_round) && (task.status === 'assigned' || task.status === 'in_progress');
+    const isCompletedAudit = task.status === 'completed' && (task.task_type === 'audit' || !!task.audit_round);
     const targetId = treeRecord?.id || task.tree_id || task.id;
     const projectTreeId = treeRecord ? treeIds[treeRecord.id] || resolveTreeId(treeRecord) || displayTreeId(treeRecord) : undefined;
     const isAssigned = task.status === 'assigned' || task.status === 'in_progress';
@@ -475,12 +495,12 @@ export default function TaskScreen() {
       <TreeCard
         key={task.id}
         tree={treeRecord ? { ...treeRecord, locked: isApproved } : null}
-        task={task}
+        task={isCompletedAudit ? { ...task, task_type: 'audit' } : task}
         status={isApproved && !isAuditTask ? 'approved' : task.status}
         audits={treeAudits}
         displayId={projectTreeId}
         showSurveyor={false}
-        onPress={handlePress}
+        onPress={isAssigned && !isAuditTask ? undefined : handlePress}
         onAction={
           isAuditTask
             ? handleStartAudit
@@ -494,7 +514,7 @@ export default function TaskScreen() {
           isAuditTask
             ? 'Audit Now'
             : isAssigned
-            ? 'Start'
+            ? 'Planting'
             : isRejected
             ? 'Update Submission'
             : undefined

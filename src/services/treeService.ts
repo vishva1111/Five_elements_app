@@ -1530,6 +1530,12 @@ export async function updateBaselineTree(
     photo_urls?: string[];
     dbh_cm?: number;
     height_m?: number;
+    wood_density?: number;
+    crown_diameter_m?: number;
+    age_years?: number;
+    multi_stem?: string;
+    event_type?: string;
+    quantity?: number;
     tree_condition?: string;
     health_status?: string;
     land_type?: string;

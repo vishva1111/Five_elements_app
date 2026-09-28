@@ -168,7 +168,6 @@ export type RootStackParamList = {
 export type CaptureStackParamList = {
   CaptureCamera: undefined;
   MapPicker: { photoUris: string[]; initialCoords?: Coordinates };
-  GNSSCapture: { photoUris: string[] };
   TreeForm: { photoUris: string[]; coords: Coordinates };
   SubmitSuccess: { treeId: string };
 };
@@ -458,10 +457,5 @@ export type MainTabParamList = {
   /** Tree search (was History). Audit is no longer a tab. */
   Search: undefined;
   Profile: undefined;
-};
-
-export type UpdateLookupStackParamList = {
-  UpdateLookup: undefined;
-  UpdateTree: { treeId: string; treeIdDisplay: string; currentRound: number };
 };
 
