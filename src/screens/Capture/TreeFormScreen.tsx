@@ -22,7 +22,7 @@ import {
   CaptureStackParamList,
   TreeFormData,
   TREE_SPECIES,
-  EVENT_TYPES,
+  getSpeciesDefault,
   TREE_CONDITION_OPTIONS,
   LAND_TYPE_OPTIONS,
   TreeCondition,
@@ -205,14 +205,6 @@ export default function TreeFormScreen() {
       Alert.alert('Required', 'Please select or enter a tree species.');
       return;
     }
-    if (!form.dbh_cm || parseFloat(form.dbh_cm) <= 0) {
-      Alert.alert('Required', 'Please enter DBH (cm).');
-      return;
-    }
-    if (!form.height_m || parseFloat(form.height_m) <= 0) {
-      Alert.alert('Required', 'Please enter Height (m).');
-      return;
-    }
     if (!user) return;
 
     setSubmitting(true);
@@ -374,11 +366,14 @@ export default function TreeFormScreen() {
 
         {/* Form */}
         <View style={styles.form}>
-
           {/* ─── SECTION: Tree Identity ─── */}
           <View style={styles.sectionHeader}>
             <Ionicons name="finger-print" size={16} color="#1a5c2a" />
-            <Text style={styles.sectionTitle}>Tree Identity</Text>
+            <Text style={[styles.sectionTitle, styles.sectionTitleGrow]}>Tree Identity</Text>
+            <View style={styles.plantingTag}>
+              <Ionicons name="leaf" size={12} color="#1a5c2a" />
+              <Text style={styles.plantingTagText}>Planting</Text>
+            </View>
           </View>
 
           {/* Tree ID — auto-generated */}
@@ -411,12 +406,18 @@ export default function TreeFormScreen() {
                   nestedScrollEnabled
                   keyboardShouldPersistTaps="handled"
                 >
-                  {TREE_SPECIES.map((sp) => (
+                  {TREE_SPECIES.map((sp) => {
+                    const defaults = getSpeciesDefault(sp);
+                    return (
                     <TouchableOpacity
                       key={sp}
                       style={[styles.speciesItem, form.species === sp && styles.speciesItemActive]}
                       onPress={() => {
-                        setForm({ ...form, species: sp });
+                        setForm({
+                          ...form,
+                          species: sp,
+                          scientific_name: defaults?.scientificName ?? '',
+                        });
                         setShowSpeciesPicker(false);
                       }}
                     >
@@ -424,7 +425,8 @@ export default function TreeFormScreen() {
                         {sp}
                       </Text>
                     </TouchableOpacity>
-                  ))}
+                    );
+                  })}
                 </ScrollView>
               </View>
             )}
@@ -449,14 +451,23 @@ export default function TreeFormScreen() {
             <Text style={styles.sectionTitle}>Location</Text>
           </View>
 
-          {/* Lat / Long — read-only from GPS */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>LAT / LONG</Text>
-            <View style={styles.readOnlyField}>
-              <Text style={styles.readOnlyText}>
-                {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
-              </Text>
-              <Ionicons name="checkmark-circle" size={14} color="#22c55e" />
+          {/* Lat / Long — separate read-only boxes from GPS */}
+          <View style={styles.measureGrid}>
+            <View style={styles.measureCell}>
+              <Text style={styles.fieldLabel}>LAT</Text>
+              <View style={styles.readOnlyField}>
+                <Text style={styles.readOnlyText} numberOfLines={1}>
+                  {coords.latitude.toFixed(6)}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.measureCell}>
+              <Text style={styles.fieldLabel}>LONG</Text>
+              <View style={styles.readOnlyField}>
+                <Text style={styles.readOnlyText} numberOfLines={1}>
+                  {coords.longitude.toFixed(6)}
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -487,7 +498,7 @@ export default function TreeFormScreen() {
           {/* 4-column compact grid */}
           <View style={styles.measureGrid}>
             <View style={styles.measureCell}>
-              <Text style={styles.measureLabel}>DBH (CM) <Text style={styles.required}>*</Text></Text>
+              <Text style={styles.measureLabel}>DBH (CM)</Text>
               <TextInput
                 style={styles.measureInput}
                 value={form.dbh_cm}
@@ -499,7 +510,7 @@ export default function TreeFormScreen() {
               />
             </View>
             <View style={styles.measureCell}>
-              <Text style={styles.measureLabel}>HEIGHT (M) <Text style={styles.required}>*</Text></Text>
+              <Text style={styles.measureLabel}>HEIGHT (M)</Text>
               <TextInput
                 style={styles.measureInput}
                 value={form.height_m}
@@ -511,7 +522,7 @@ export default function TreeFormScreen() {
               />
             </View>
             <View style={styles.measureCell}>
-              <Text style={styles.measureLabel}>DENSITY (G/CM³) <Text style={styles.required}>*</Text></Text>
+              <Text style={styles.measureLabel}>DENSITY (G/CM³)</Text>
               <TextInput
                 style={styles.measureInput}
                 value={form.wood_density}
@@ -545,26 +556,39 @@ export default function TreeFormScreen() {
           {/* Tree Condition */}
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>CONDITION</Text>
-            <View style={styles.healthRow}>
-              {TREE_CONDITION_OPTIONS.map((opt) => (
-                <TouchableOpacity
-                  key={opt.label}
-                  style={[
-                    styles.healthBtn,
-                    styles.healthBtnCompact,
-                    { borderColor: opt.color },
-                    form.tree_condition === opt.label && { backgroundColor: opt.color },
-                  ]}
-                  onPress={() => setForm({ ...form, tree_condition: opt.label })}
-                >
-                  <Text style={[
-                    styles.healthBtnText,
-                    { color: form.tree_condition === opt.label ? '#fff' : opt.color },
-                  ]}>
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.conditionGrid}>
+              {TREE_CONDITION_OPTIONS.map((opt) => {
+                const selected = form.tree_condition === opt.label;
+                const icon =
+                  opt.label === 'Healthy' ? 'leaf' :
+                  opt.label === 'Stressed' ? 'alert-circle' :
+                  opt.label === 'Diseased' ? 'medkit' :
+                  'close-circle';
+                return (
+                  <TouchableOpacity
+                    key={opt.label}
+                    activeOpacity={0.85}
+                    style={[
+                      styles.conditionCard,
+                      { borderColor: selected ? opt.color : '#E4EDE6' },
+                      selected && { backgroundColor: opt.color },
+                    ]}
+                    onPress={() => setForm({ ...form, tree_condition: opt.label })}
+                  >
+                    <View style={[styles.conditionIcon, { backgroundColor: selected ? 'rgba(255,255,255,0.22)' : `${opt.color}1A` }]}>
+                      <Ionicons name={icon} size={16} color={selected ? '#fff' : opt.color} />
+                    </View>
+                    <Text style={[styles.conditionLabel, selected && styles.conditionLabelActive]}>
+                      {opt.label}
+                    </Text>
+                    <Ionicons
+                      name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                      size={16}
+                      color={selected ? '#fff' : '#C5D0C8'}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
 
@@ -600,32 +624,10 @@ export default function TreeFormScreen() {
             </View>
           </View>
 
-          {/* Event Type */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>EVENT TYPE</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.eventTypeScroll}
-            >
-              {EVENT_TYPES.map((type) => (
-                <TouchableOpacity
-                  key={type}
-                  style={[styles.eventTypeBtn, form.event_type === type && styles.eventTypeBtnActive]}
-                  onPress={() => setForm({ ...form, event_type: type })}
-                >
-                  <Text style={[styles.eventTypeText, form.event_type === type && styles.eventTypeTextActive]}>
-                    {type}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
           {/* Surveyor + Date in one row */}
           <View style={styles.measureGrid}>
             <View style={styles.measureCell}>
-              <Text style={styles.fieldLabel}>SURVEYOR</Text>
+              <Text style={styles.fieldLabel}>FIELD SURVEYOR</Text>
               <View style={styles.readOnlyField}>
                 <Text style={styles.readOnlyText}>{form.surveyor || '—'}</Text>
               </View>
@@ -929,6 +931,9 @@ const styles = StyleSheet.create({
     color: '#1a5c2a',
     textTransform: 'uppercase',
   },
+  sectionTitleGrow: {
+    flex: 1,
+  },
   // Read-only field
   readOnlyField: {
     flexDirection: 'row',
@@ -1000,6 +1005,22 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 2,
     elevation: 1,
+  },
+  plantingTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#E5F6EA',
+    borderWidth: 1,
+    borderColor: '#B7E0C2',
+  },
+  plantingTagText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1a5c2a',
   },
   // Event Type
   eventTypeScroll: {
@@ -1161,12 +1182,21 @@ const styles = StyleSheet.create({
     flexGrow: 0,
   },
   speciesItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
     backgroundColor: '#fff',
     borderRadius: 14,
+  },
+  speciesItemMeta: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1a5c2a',
   },
   speciesItemActive: {
     backgroundColor: '#EAF3DE',
@@ -1178,6 +1208,40 @@ const styles = StyleSheet.create({
   speciesItemTextActive: {
     color: '#1a5c2a',
     fontWeight: '600',
+  },
+  conditionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  conditionCard: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    backgroundColor: '#fff',
+  },
+  conditionIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  conditionLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1a1a1a',
+  },
+  conditionLabelActive: {
+    color: '#fff',
   },
   // Health Status
   healthRow: {

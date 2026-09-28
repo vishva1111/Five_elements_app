@@ -31,6 +31,8 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- ─── 1. tree_records: columns the app reads/writes ──────────────────────────
 ALTER TABLE public.tree_records ADD COLUMN IF NOT EXISTS tree_id          text;
 ALTER TABLE public.tree_records ADD COLUMN IF NOT EXISTS scientific_name  text;
+ALTER TABLE public.tree_records ADD COLUMN IF NOT EXISTS co2_default_kg   numeric;
+ALTER TABLE public.tree_records ADD COLUMN IF NOT EXISTS co2_range        text;
 ALTER TABLE public.tree_records ADD COLUMN IF NOT EXISTS dbh_cm           numeric;
 ALTER TABLE public.tree_records ADD COLUMN IF NOT EXISTS height_m         numeric;
 ALTER TABLE public.tree_records ADD COLUMN IF NOT EXISTS wood_density     numeric;

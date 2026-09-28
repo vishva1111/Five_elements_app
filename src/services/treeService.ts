@@ -174,6 +174,7 @@ export async function insertTreeRecord(
     'event_type', 'quantity', 'dbh_cm', 'height_m', 'wood_density',
     'crown_diameter_m', 'tree_condition', 'multi_stem', 'age_years',
     'land_type', 'surveyor', 'survey_date', 'tree_id', 'scientific_name',
+    'co2_default_kg', 'co2_range',
     'photo_urls',
   ];
 

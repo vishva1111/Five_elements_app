@@ -493,25 +493,28 @@ export default function TreeDetailScreen() {
         {/* ─── 3. MERGED SPECIES & GROWTH VITALS CARD ─── */}
         <View style={styles.speciesGrowthCard}>
           {/* Species Identity Top Row */}
-          <View style={styles.speciesTopRow}>
+          <View style={styles.identityPass}>
+            <View style={styles.identityMark}>
+              <Ionicons name="leaf" size={22} color="#fff" />
+            </View>
             <View style={{ flex: 1 }}>
+              <Text style={styles.identityKicker}>TREE IDENTITY</Text>
               <Text style={styles.speciesTitle}>{tree.species}</Text>
               {scientificName ? <Text style={styles.speciesScientific}>{scientificName}</Text> : null}
-              {surveyName ? (
-                <View style={styles.surveyNamePill}>
-                  <Ionicons name="clipboard-outline" size={12} color="#15803d" />
-                  <Text style={styles.surveyNameText} numberOfLines={1}>
-                    {surveyName}
-                  </Text>
-                </View>
-              ) : null}
             </View>
-
-            <View style={styles.treeIdBadge}>
-              <Ionicons name="finger-print" size={13} color="#15803d" />
-              <Text style={styles.treeIdText}>{displayId}</Text>
+            <View style={styles.identityStamp}>
+              <Text style={styles.identityStampLabel}>{eventType || 'Planting'}</Text>
+              <Text style={styles.identityStampId}>{displayId}</Text>
             </View>
           </View>
+          {surveyName ? (
+            <View style={styles.surveyorStrip}>
+              <Ionicons name="person" size={14} color="#123f24" />
+              <Text style={styles.surveyorStripText} numberOfLines={1}>
+                Field surveyor · {surveyor || surveyName}
+              </Text>
+            </View>
+          ) : null}
 
           {/* Divider */}
           <View style={styles.speciesGrowthDivider} />
@@ -804,8 +807,7 @@ export default function TreeDetailScreen() {
                 <SpecRow label="Form" value={multiStem ?? 'Single stem'} />
                 <SpecRow label="Tree Age at Planting" value={ageYears ? `${ageYears}y` : '—'} />
                 <SpecRow label="Land / Soil Type" value={landType ?? '—'} />
-                <SpecRow label="Planting Event" value={eventType ?? '—'} />
-                <SpecRow label="Planting Surveyor" value={surveyor ?? '—'} />
+                <SpecRow label="Field Surveyor" value={surveyor ?? '—'} />
                 {cleanNotes ? <SpecRow label="Planting Notes" value={cleanNotes} /> : null}
               </View>
             </View>
@@ -1326,7 +1328,54 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 10,
   },
-  speciesTitle: { fontSize: 19, fontWeight: '900', color: '#111827' },
+  speciesTitle: { fontSize: 22, fontWeight: '900', color: '#123f24' },
+  identityPass: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  identityMark: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#1a5c2a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  identityKicker: { fontSize: 10, fontWeight: '800', color: '#6b8f78', letterSpacing: 1.1 },
+  identityStamp: {
+    minWidth: 86,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#1a5c2a',
+    backgroundColor: '#F3FBF5',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    alignItems: 'flex-end',
+  },
+  identityStampLabel: { fontSize: 11, fontWeight: '800', color: '#1a5c2a' },
+  identityStampId: { fontSize: 13, fontWeight: '900', color: '#123f24', marginTop: 2 },
+  surveyorStrip: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#EAF6EE',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  surveyorStripText: { flex: 1, color: '#123f24', fontSize: 13, fontWeight: '700' },
+  eventChipRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  eventChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#E5F6EA',
+    borderWidth: 1,
+    borderColor: '#B7E0C2',
+  },
+  eventChipText: { fontSize: 12, fontWeight: '700', color: '#1a5c2a' },
   speciesScientific: {
     fontSize: 12,
     fontStyle: 'italic',

@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
-import { fetchAllProjects } from '../../services/treeService';
+import { fetchUserProjects } from '../../services/treeService';
 import { Project } from '../../types';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -21,14 +21,15 @@ const { width: SCREEN_W } = Dimensions.get('window');
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { user, activeProjectId, signOut, refreshCredits } = useAuthStore();
+  const { user, activeProjectId, signOut, refreshCredits, assignedProjects } = useAuthStore();
   const trees = useTreeStore((s) => s.trees) ?? [];
   const [allProjects, setAllProjects] = useState<Project[]>([]);
 
   useEffect(() => {
     let active = true;
     (async () => {
-      const { data } = await fetchAllProjects();
+      if (!user?.id) return;
+      const { data } = await fetchUserProjects(user.id);
       if (active && data) setAllProjects(data);
     })();
     return () => { active = false; };
@@ -131,16 +132,30 @@ export default function ProfileScreen() {
         />
       </View>
 
-      {/* ═══ Active project ═══ */}
+      {/* ═══ User projects ═══ */}
       <View style={styles.section}>
-        <View style={styles.projectCard}>
-          <View style={styles.projectIconWrap}>
-            <Ionicons name="folder-open" size={20} color="#fff" />
-          </View>
-          <View style={styles.projectBody}>
-            <Text style={styles.projectLabel}>Active Project</Text>
-            <Text style={styles.projectName} numberOfLines={1}>{projectName}</Text>
-          </View>
+        <Text style={styles.sectionHead}>My Projects</Text>
+        <View style={styles.detailsCard}>
+          {(allProjects.length > 0 ? allProjects : assignedProjects).map((project, index, list) => (
+            <View key={project.id} style={[styles.detailRow, index === list.length - 1 && { borderBottomWidth: 0 }]}>
+              <View style={styles.detailIconWrap}>
+                <Ionicons name="folder-open-outline" size={16} color="#1a5c2a" />
+              </View>
+              <View style={styles.detailBody}>
+                <Text style={styles.detailValue}>{project.name}</Text>
+                {project.id === activeProjectId ? (
+                  <Text style={styles.detailLabel}>Active</Text>
+                ) : null}
+              </View>
+            </View>
+          ))}
+          {allProjects.length === 0 && assignedProjects.length === 0 ? (
+            <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
+              <View style={styles.detailBody}>
+                <Text style={styles.detailValue}>{projectName}</Text>
+              </View>
+            </View>
+          ) : null}
         </View>
       </View>
 

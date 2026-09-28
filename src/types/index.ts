@@ -28,6 +28,8 @@ export interface TreeRecord {
   longitude: number;
   species: string;
   scientific_name?: string;
+  co2_default_kg?: number;
+  co2_range?: string;
   health_status: HealthStatus;
   notes?: string;
   submitted_at: string;
@@ -59,6 +61,8 @@ export interface TreeRecordInsert {
   longitude: number;
   species: string;
   scientific_name?: string;
+  co2_default_kg?: number;
+  co2_range?: string;
   health_status: HealthStatus;
   notes?: string;
   synced?: boolean;
@@ -286,24 +290,48 @@ export interface MonitoringFormData {
   survey_date: string;
 }
 
-export const TREE_SPECIES = [
-  'Teak (Sagwan)',
-  'Neem',
-  'Peepal',
-  'Banyan (Vad)',
-  'Mango (Keri)',
-  'Coconut (Nariyal)',
-  'Bamboo (Vans)',
-  'Eucalyptus',
-  'Acacia',
-  'Gulmohar',
-  'Ashoka',
-  'Jamun',
-  'Amla (Awla)',
-  'Arjun',
-  'Sheesham (Dalbergia)',
-  'Other',
-] as const;
+export interface SpeciesDefault {
+  commonName: string;
+  scientificName: string;
+  co2Range: string;
+  co2Default: number;
+}
+
+/** kg CO2e / tree / year. Source: Tree species and CO2 sequestration defaults. */
+export const SPECIES_DEFAULTS: SpeciesDefault[] = [
+  { commonName: 'Neem', scientificName: 'Azadirachta indica', co2Range: '10–20', co2Default: 15 },
+  { commonName: 'Mango', scientificName: 'Mangifera indica', co2Range: '10–20', co2Default: 15 },
+  { commonName: 'Teak', scientificName: 'Tectona grandis', co2Range: '4–10', co2Default: 7 },
+  { commonName: 'Eucalyptus', scientificName: 'Eucalyptus spp.', co2Range: '20–42', co2Default: 30 },
+  { commonName: 'Banyan', scientificName: 'Ficus benghalensis', co2Range: '50–4,476', co2Default: 100 },
+  { commonName: 'Peepal', scientificName: 'Ficus religiosa', co2Range: '20–80', co2Default: 50 },
+  { commonName: 'Ashoka', scientificName: 'Saraca asoca', co2Range: '10–15', co2Default: 12 },
+  { commonName: 'Gulmohar', scientificName: 'Delonix regia', co2Range: '8–20', co2Default: 15 },
+  { commonName: 'Indian Rosewood', scientificName: 'Dalbergia sissoo', co2Range: '10–25', co2Default: 18 },
+  { commonName: 'Cashew', scientificName: 'Anacardium occidentale', co2Range: '10–15', co2Default: 12 },
+  { commonName: 'Tamarind', scientificName: 'Tamarindus indica', co2Range: '12–18', co2Default: 15 },
+  { commonName: 'Jamun', scientificName: 'Syzygium cumini', co2Range: '10–20', co2Default: 15 },
+  { commonName: 'Pongamia', scientificName: 'Pongamia pinnata', co2Range: '8–15', co2Default: 12 },
+  { commonName: 'Babul / Acacia', scientificName: 'Acacia nilotica', co2Range: '8–20', co2Default: 15 },
+  { commonName: 'Prosopis', scientificName: 'Prosopis juliflora', co2Range: '8–25', co2Default: 18 },
+  { commonName: 'Rain Tree', scientificName: 'Albizia saman', co2Range: '15–40', co2Default: 25 },
+  { commonName: 'Ash', scientificName: 'Fraxinus spp.', co2Range: '10–25', co2Default: 18 },
+  { commonName: 'Oak', scientificName: 'Quercus spp.', co2Range: '14–44', co2Default: 25 },
+  { commonName: 'Maple', scientificName: 'Acer spp.', co2Range: '12–30', co2Default: 20 },
+  { commonName: 'Pine', scientificName: 'Pinus spp.', co2Range: '10–25', co2Default: 18 },
+  { commonName: 'Spruce', scientificName: 'Picea spp.', co2Range: '14–40', co2Default: 25 },
+  { commonName: 'Douglas fir', scientificName: 'Pseudotsuga menziesii', co2Range: '15–44', co2Default: 30 },
+  { commonName: 'Mahogany', scientificName: 'Swietenia macrophylla', co2Range: '12–30', co2Default: 20 },
+  { commonName: 'Bamboo (stand)', scientificName: 'Bambusoideae', co2Range: '15–35', co2Default: 25 },
+  { commonName: 'Mangrove (average)', scientificName: 'Rhizophora spp. etc.', co2Range: '5–15', co2Default: 10 },
+];
+
+export const TREE_SPECIES = SPECIES_DEFAULTS.map((item) => item.commonName);
+
+export function getSpeciesDefault(commonName: string): SpeciesDefault | undefined {
+  const key = commonName.trim().toLowerCase();
+  return SPECIES_DEFAULTS.find((item) => item.commonName.toLowerCase() === key);
+}
 
 export const HEALTH_STATUS_OPTIONS: { label: string; value: HealthStatus; color: string }[] = [
   { label: 'Healthy', value: 'healthy', color: '#22c55e' },

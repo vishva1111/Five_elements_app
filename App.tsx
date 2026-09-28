@@ -3,18 +3,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import { StyleSheet, View, ActivityIndicator, Text, Image } from 'react-native';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
+import { createBottomTabNavigator, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { supabase } from './src/services/supabase';
 import { useAuthStore } from './src/store/authStore';
 import { useTreeStore } from './src/store/treeStore';
 import { fetchUserProfile, fetchMyTrees, fetchUserProjects, fetchAllProjects, buildUserFromProfile, computeCreditsForProject, INITIAL_CREDITS, getCachedUserProjects, cacheUserProjects } from './src/services/treeService';
 import { getCachedActiveProject } from './src/store/authStore';
 import logo from './src/assets/logo.png';
+import FloatingTabBar from './src/components/FloatingTabBar';
 
 // Screens
 import LoginScreen from './src/screens/Auth/LoginScreen';
@@ -85,86 +85,90 @@ const HIDE_TAB_BAR_SCREENS = new Set([
   'EditTree',
 ]);
 
+function shouldHideTabBar(state: { index: number; routes: { name: string; state?: { index?: number } }[] }) {
+  const route = state.routes[state.index];
+  const focusedName = getFocusedRouteNameFromRoute(route as any);
+  const routeIndex = route?.state?.index;
+  return Boolean(
+    (focusedName && HIDE_TAB_BAR_SCREENS.has(focusedName)) ||
+    (typeof routeIndex === 'number' && routeIndex > 0)
+  );
+}
+
+function SwipeTabBar({
+  onSync,
+  ...props
+}: BottomTabBarProps & {
+  onSync: (state: BottomTabBarProps['state'], navigation: BottomTabBarProps['navigation']) => void;
+}) {
+  const onSyncRef = useRef(onSync);
+  onSyncRef.current = onSync;
+
+  useEffect(() => {
+    onSyncRef.current(props.state, props.navigation);
+  }, [props.state, props.navigation]);
+
+  if (shouldHideTabBar(props.state)) return null;
+  return <FloatingTabBar {...props} />;
+}
+
 function MainTabs() {
-  const insets = useSafeAreaInsets();
+  const navRef = useRef<any>(null);
+  const indexRef = useRef(0);
+  const routesRef = useRef<string[]>([]);
+  const swipeEnabledRef = useRef(true);
+  const [swipeEnabled, setSwipeEnabled] = useState(true);
+
+  const syncSwipe = (
+    tabState: { index: number; routes: { name: string; state?: { index?: number } }[] },
+    navigation: any
+  ) => {
+    navRef.current = navigation;
+    indexRef.current = tabState.index;
+    routesRef.current = tabState.routes.map((route) => route.name);
+    const nextEnabled = !shouldHideTabBar(tabState);
+    swipeEnabledRef.current = nextEnabled;
+    setSwipeEnabled((current) => (current === nextEnabled ? current : nextEnabled));
+  };
+
+  const onPageSwipe = (event: { nativeEvent: { state: number; translationX: number; velocityX: number } }) => {
+    if (event.nativeEvent.state !== State.END) return;
+    if (!swipeEnabledRef.current || !navRef.current) return;
+    const { translationX, velocityX } = event.nativeEvent;
+    const nextDelta =
+      translationX <= -56 || (translationX < -24 && velocityX < -500)
+        ? 1
+        : translationX >= 56 || (translationX > 24 && velocityX > 500)
+          ? -1
+          : 0;
+    if (!nextDelta) return;
+    const nextName = routesRef.current[indexRef.current + nextDelta];
+    if (!nextName) return;
+    navRef.current.navigate(nextName);
+  };
+
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => {
-        const focusedName = getFocusedRouteNameFromRoute(route);
-        const routeIndex = (route as any).state?.index;
-        const hideTabBar = Boolean(
-          (focusedName && HIDE_TAB_BAR_SCREENS.has(focusedName)) ||
-          (typeof routeIndex === 'number' && routeIndex > 0)
-        );
-        return {
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName: keyof typeof Ionicons.glyphMap = 'home';
-          if (route.name === 'Home') iconName = focused ? 'home' : 'home-outline';
-          else if (route.name === 'Task') iconName = focused ? 'checkbox' : 'checkbox-outline';
-          else if (route.name === 'Search') iconName = focused ? 'search' : 'search-outline';
-          else if (route.name === 'Profile') iconName = focused ? 'person' : 'person-outline';
-          return (
-            <View style={{
-              backgroundColor: focused ? 'rgba(26,92,42,0.12)' : 'transparent',
-              borderRadius: 14,
-              paddingHorizontal: 16,
-              paddingVertical: 6,
-            }}>
-              <Ionicons name={iconName} size={focused ? 24 : 22} color={color} />
-            </View>
-          );
-        },
-        tabBarLabel: ({ focused, color }) => {
-          const labels: Record<string, string> = {
-            Home: 'Home',
-            Task: 'Tasks',
-            Search: 'Search',
-            Profile: 'Profile',
-          };
-          return (
-            <Text style={{
-              fontSize: 10,
-              fontWeight: focused ? '700' : '500',
-              color,
-              marginBottom: 2,
-              letterSpacing: 0.3,
-            }}>
-              {labels[route.name] ?? route.name}
-            </Text>
-          );
-        },
-        tabBarActiveTintColor: '#1a5c2a',
-        tabBarInactiveTintColor: '#999',
-        tabBarShowLabel: true,
-        tabBarStyle: hideTabBar
-          ? { display: 'none' }
-          : {
-              backgroundColor: '#fff',
-              borderTopWidth: 0,
-              elevation: 20,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: -4 },
-              shadowOpacity: 0.1,
-              shadowRadius: 12,
-              paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
-              paddingTop: 8,
-              height: 68 + (insets.bottom > 0 ? insets.bottom : 8),
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-              position: 'absolute',
-            },
-        headerStyle: { backgroundColor: '#1a5c2a' },
-        headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: 'bold', fontSize: 19 },
-        headerTitleAlign: 'center',
-        };
-      }}
-    >
-      <Tab.Screen name="Home" component={HomeScreen} options={{ headerShown: false, title: 'DASHBOARD' }} />
-      <Tab.Screen name="Task" component={TaskScreen} options={{ headerShown: false, title: 'TASKS' }} />
-      <Tab.Screen name="Search" component={HistoryNavigator} options={{ headerShown: false, title: 'SEARCH' }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false, title: 'PROFILE' }} />
-    </Tab.Navigator>
+    <PanGestureHandler
+      enabled={swipeEnabled}
+      activeOffsetX={[-28, 28]}
+        failOffsetY={[-18, 18]}
+        onHandlerStateChange={onPageSwipe}
+      >
+    <View style={styles.root}>
+      <Tab.Navigator
+        tabBar={(props) => <SwipeTabBar {...props} onSync={syncSwipe} />}
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: { display: 'none' },
+        }}
+      >
+        <Tab.Screen name="Home" component={HomeScreen} options={{ headerShown: false, title: 'DASHBOARD' }} />
+        <Tab.Screen name="Task" component={TaskScreen} options={{ headerShown: false, title: 'TASKS' }} />
+        <Tab.Screen name="Search" component={HistoryNavigator} options={{ headerShown: false, title: 'SEARCH' }} />
+        <Tab.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false, title: 'PROFILE' }} />
+      </Tab.Navigator>
+    </View>
+    </PanGestureHandler>
   );
 }
 
