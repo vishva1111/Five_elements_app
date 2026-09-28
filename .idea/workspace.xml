@@ -4,17 +4,11 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="using tree defult data and chnage some name and chnage some design.">
+    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="task card design update.">
       <change beforePath="$PROJECT_DIR$/.expo/dev/logs/start.log" beforeDir="false" afterPath="$PROJECT_DIR$/.expo/dev/logs/start.log" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/prebuild.log" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/MultiProgressRing.tsx" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/StatusBadge.tsx" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/components/TreeCard.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/TreeCard.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/hooks/useLocation.ts" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/treeService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/treeService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/types/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/types/index.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -344,7 +338,15 @@
       <option name="project" value="LOCAL" />
       <updated>1790587242488</updated>
     </task>
-    <option name="localTasksCounter" value="33" />
+    <task id="LOCAL-00033" summary="design chnage.">
+      <option name="closed" value="true" />
+      <created>1790595070729</created>
+      <option name="number" value="00033" />
+      <option name="presentableId" value="LOCAL-00033" />
+      <option name="project" value="LOCAL" />
+      <updated>1790595070729</updated>
+    </task>
+    <option name="localTasksCounter" value="34" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -371,8 +373,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="small design bug" />
-    <MESSAGE value="project selection logic and redesign the interface." />
     <MESSAGE value="task feature" />
     <MESSAGE value="add task page and chnage design." />
     <MESSAGE value="add 4 tabs in task page." />
@@ -396,6 +396,8 @@
     <MESSAGE value="add tree to user direction in map" />
     <MESSAGE value="audit page remove,history page rename to search,fix design." />
     <MESSAGE value="using tree defult data and chnage some name and chnage some design." />
-    <option name="LAST_COMMIT_MESSAGE" value="using tree defult data and chnage some name and chnage some design." />
+    <MESSAGE value="design chnage." />
+    <MESSAGE value="task card design update." />
+    <option name="LAST_COMMIT_MESSAGE" value="task card design update." />
   </component>
 </project>

@@ -176,22 +176,22 @@ export default function TreeCard({
     <CardContainer
       style={[
         styles.card,
-        isAssigned && !isAudit && styles.plantingCard,
-        isCompletedAudit && styles.completedAuditCard,
-        isCompleted && !isCompletedAudit && styles.statusCard,
-        isApproved && styles.statusCard,
+        // Every state shares the Assign-tab card design: white card, no coloured
+        // left border, a 5px accent bar on the left and identical padding.
+        isAssigned && styles.plantingCard,
+        (isCompleted || isApproved) && styles.statusCard,
         isRejected && styles.rejectedCard,
       ]}
       {...containerProps}
     >
-      {isAssigned && !isAudit ? (
-        <View style={[styles.plantingAccent, { backgroundColor: statusColor }]} />
+      {isAssigned ? (
+        <View style={[styles.plantingAccent, { backgroundColor: isAudit ? '#ea580c' : statusColor }]} />
       ) : null}
       {isCompletedAudit ? <View style={styles.completedAuditAccent} /> : null}
       {isCompleted && !isCompletedAudit ? <View style={[styles.statusAccent, { backgroundColor: statusColor }]} /> : null}
       {isApproved ? <View style={[styles.statusAccent, { backgroundColor: statusColor }]} /> : null}
       {isRejected ? <View style={styles.rejectedAccent} /> : null}
-      <View style={[styles.cardMainRow, ((isAssigned && !isAudit) || isCompleted || isApproved || isRejected) && styles.plantingRow]}>
+      <View style={[styles.cardMainRow, styles.plantingRow]}>
         {isAssigned && !isAudit ? (
           <View style={styles.plantingMark}>
             <Ionicons name="leaf" size={22} color="#1a5c2a" />
@@ -473,14 +473,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: 5,
   },
-  completedAuditCard: {
-    backgroundColor: '#fffaf5',
-    borderLeftWidth: 0,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#fed7aa',
-    paddingLeft: 16,
-  },
   completedAuditAccent: {
     position: 'absolute',
     left: 0,
@@ -493,9 +485,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderLeftWidth: 0,
     overflow: 'hidden',
-    paddingVertical: 8,
-    paddingLeft: 14,
-    paddingRight: 10,
+    paddingVertical: 10,
+    paddingLeft: 16,
+    paddingRight: 11,
   },
   statusAccent: {
     position: 'absolute',
@@ -508,9 +500,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderLeftWidth: 0,
     overflow: 'hidden',
-    paddingVertical: 8,
-    paddingLeft: 14,
-    paddingRight: 8,
+    paddingVertical: 10,
+    paddingLeft: 16,
+    paddingRight: 11,
   },
   rejectedAccent: {
     position: 'absolute',
