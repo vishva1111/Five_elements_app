@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAuthStore } from '../../store/authStore';
+import { getCachedActiveProject, useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useProjectRefreshStore } from '../../store/projectRefreshStore';
 import { fetchMyTrees, fetchAllProjects, fetchTreesByProject, fetchAllTrees } from '../../services/treeService';
@@ -175,8 +175,12 @@ export default function HomeScreen() {
       const { data } = await fetchAllProjects();
       if (active && data && data.length > 0) {
         setAllProjects(data);
-        if (!useAuthStore.getState().activeProjectId) {
-          setActiveProjectId(data[0].id);
+        const state = useAuthStore.getState();
+        if (!state.activeProjectId) {
+          const userId = state.user?.id ?? state.session?.user?.id;
+          const savedProjectId = userId ? await getCachedActiveProject(userId) : null;
+          const savedProject = data.find((project) => project.id === savedProjectId);
+          if (active) setActiveProjectId(savedProject?.id ?? data[0].id);
         }
       }
     })();
