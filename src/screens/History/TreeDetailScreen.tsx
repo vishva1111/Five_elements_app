@@ -52,7 +52,7 @@ export default function TreeDetailScreen() {
   const route = useRoute<Route>();
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const { treeId } = route.params;
+  const { treeId, asAuditProfile } = route.params;
 
   const [tree, setTree] = useState<TreeRecord | null>(null);
   const [task, setTask] = useState<Task | null>(null);
@@ -276,6 +276,7 @@ export default function TreeDetailScreen() {
   const isRejected = Boolean(task?.status === 'rejected');
   const isPending = !isApproved && !isRejected;
   const hasAudits = audits.length > 0;
+  const showAuditProfile = hasAudits || Boolean(asAuditProfile);
 
   // ── Multi-photo support ────────────────────────────────────────────────────
   // Planting photos: use photo_urls if available, else wrap single photo_url
@@ -319,12 +320,12 @@ export default function TreeDetailScreen() {
 
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>
-            {hasAudits ? 'TREE PROFILE' : 'TREE DETAILS'}
+            {showAuditProfile ? 'TREE PROFILE' : 'TREE DETAILS'}
           </Text>
           <Text style={styles.headerSubtitle}>{displayId}</Text>
         </View>
 
-        {hasAudits && auditStatus.allCompleted ? (
+        {showAuditProfile && auditStatus.allCompleted ? (
           <View style={styles.completedPill}>
             <Ionicons name="checkmark-done" size={12} color="#fff" />
             <Text style={styles.completedPillText}>4/4 DONE</Text>
@@ -614,7 +615,7 @@ export default function TreeDetailScreen() {
         </View>
 
         {/* ─── 5. INTERACTIVE 4-STEP AUDIT JOURNEY (POST-AUDIT MODE ONLY) ─── */}
-        {hasAudits ? (
+        {showAuditProfile ? (
           <View style={styles.journeyCard}>
             <View style={styles.journeyHeader}>
               <View style={styles.journeyTitleWrap}>
@@ -869,7 +870,7 @@ export default function TreeDetailScreen() {
       </Modal>
 
       {/* ─── 8. BOTTOM ACTION BUTTON (APPROVAL & AUDIT AWARE) ─── */}
-      {!hasAudits ? (
+      {!showAuditProfile ? (
         !isApproved ? (
           // Pre-Audit, Unapproved or Rejected: Field Worker can edit the tree
           <TouchableOpacity
@@ -963,7 +964,8 @@ export default function TreeDetailScreen() {
           </View>
         </View>
       ) : !auditStatus.isDue ? (
-        // Post-Audit, Next Round NOT due yet (remaining time ticking)
+        // Next round is not due. The assigned-audit card opens this profile, and
+        // the audit form stays locked until that round becomes Audit Now.
         <TouchableOpacity
           style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}
           activeOpacity={0.8}

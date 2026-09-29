@@ -464,10 +464,12 @@ export default function TaskScreen() {
     const treeAudits = auditsByTree[targetId] || [];
 
     const handlePress = () => {
-      // Card tap always opens the tree's details page first — the audit form
-      // is only entered explicitly via the "Audit Now" button (or the
-      // "Start Audit" action on the details page).
-      navigation.navigate('TreeDetail', { treeId: targetId });
+      // Assigned audit cards open the audit tree profile. Other cards still
+      // open tree details. The audit form is only entered via "Audit Now".
+      navigation.navigate('TreeDetail', {
+        treeId: targetId,
+        asAuditProfile: isAuditTask,
+      });
     };
 
     const handleStartAudit = () => {

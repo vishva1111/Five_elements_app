@@ -351,7 +351,15 @@ export default function HomeScreen() {
               <Text style={styles.greeting}>Hi {greetingName}</Text>
               <Text style={styles.bannerSub}>Ready to capture trees today?</Text>
             </View>
-
+            <TouchableOpacity
+              style={styles.noticeBtn}
+              onPress={() => navigation.navigate('Notifications')}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel="Open notifications"
+            >
+              <Ionicons name="notifications" size={20} color="#123f24" />
+            </TouchableOpacity>
           </View>
 
           {/* Active Project Card - Tappable Dropdown */}
@@ -622,6 +630,27 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   bannerGreeting: { flex: 1 },
+  noticeBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noticeBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noticeBadgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
   creditsPill: {
     flexDirection: 'row',
     alignItems: 'center',

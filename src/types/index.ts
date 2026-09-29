@@ -174,7 +174,7 @@ export type CaptureStackParamList = {
 
 export type HistoryStackParamList = {
   HistoryList: undefined;
-  TreeDetail: { treeId: string };
+  TreeDetail: { treeId: string; asAuditProfile?: boolean };
   UpdateTree: { treeId: string; treeIdDisplay: string; currentRound: number };
   EditTree: { treeId: string; taskId?: string | null; rejectionNotes?: string | null };
   Map: { focusTreeId?: string; focusLat?: number; focusLng?: number; startGeofenceWalk?: boolean } | undefined;

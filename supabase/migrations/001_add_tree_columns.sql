@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
--- 001 — All schema the app needs: tree_records columns + monitoring rounds
+-- 001 — Single database schema: trees, monitoring, audit tasks, and geofences
 --
 -- Run in: Supabase Dashboard → SQL Editor → New query → paste → Run
 -- Safe to re-run: every statement is IF NOT EXISTS / DROP-then-CREATE.
@@ -145,13 +145,124 @@ WHERE t.id = r.id AND r.rn > 1;
 CREATE UNIQUE INDEX IF NOT EXISTS tree_records_tree_id_key
   ON public.tree_records (tree_id) WHERE tree_id IS NOT NULL;
 
--- ─── 7. Let PostgREST see the new table/columns immediately ────────────────
+-- ─── 7. Audit tasks: link tasks to a tree and an audit round ────────────────
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS tree_record_id uuid
+  REFERENCES public.tree_records (id) ON DELETE CASCADE;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS audit_round integer;
+
+CREATE INDEX IF NOT EXISTS tasks_tree_record_idx
+  ON public.tasks (tree_record_id);
+CREATE INDEX IF NOT EXISTS tasks_audit_round_idx
+  ON public.tasks (audit_round);
+
+ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS tasks_select_authenticated ON public.tasks;
+CREATE POLICY tasks_select_authenticated ON public.tasks
+  FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS tasks_insert_authenticated ON public.tasks;
+CREATE POLICY tasks_insert_authenticated ON public.tasks
+  FOR INSERT TO authenticated WITH CHECK (true);
+
+DROP POLICY IF EXISTS tasks_update_authenticated ON public.tasks;
+CREATE POLICY tasks_update_authenticated ON public.tasks
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS tasks_delete_authenticated ON public.tasks;
+CREATE POLICY tasks_delete_authenticated ON public.tasks
+  FOR DELETE TO authenticated USING (true);
+
+-- Approve and reject were missing from the original status check.
+ALTER TABLE public.tasks DROP CONSTRAINT IF EXISTS tasks_status_check;
+ALTER TABLE public.tasks ADD CONSTRAINT tasks_status_check
+  CHECK (status IN ('assigned', 'in_progress', 'completed', 'approved', 'rejected'));
+
+-- ─── 8. One land boundary per project, plus change requests ─────────────────
+CREATE TABLE IF NOT EXISTS public.project_geofences (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id      text NOT NULL UNIQUE,
+  project_name    text,
+  coordinates     jsonb NOT NULL DEFAULT '[]'::jsonb,
+  area_sq_m       numeric DEFAULT 0,
+  perimeter_m     numeric DEFAULT 0,
+  status          text NOT NULL DEFAULT 'locked',
+  locked          boolean NOT NULL DEFAULT true,
+  locked_at       timestamptz DEFAULT now(),
+  locked_by       uuid,
+  locked_by_name  text,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+  created_by      uuid,
+  notes           text
+);
+
+CREATE INDEX IF NOT EXISTS project_geofences_project_id_idx
+  ON public.project_geofences (project_id);
+
+CREATE TABLE IF NOT EXISTS public.geofence_change_requests (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id        text NOT NULL,
+  project_name      text,
+  requested_by      uuid NOT NULL,
+  requested_by_name text,
+  reason            text NOT NULL,
+  status            text NOT NULL DEFAULT 'pending',
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  reviewed_at       timestamptz,
+  reviewed_by       uuid,
+  reviewed_by_name  text,
+  review_notes      text
+);
+
+CREATE INDEX IF NOT EXISTS geofence_change_requests_project_id_idx
+  ON public.geofence_change_requests (project_id);
+CREATE INDEX IF NOT EXISTS geofence_change_requests_status_idx
+  ON public.geofence_change_requests (status);
+
+ALTER TABLE public.project_geofences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.geofence_change_requests ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS geofences_select_all ON public.project_geofences;
+CREATE POLICY geofences_select_all ON public.project_geofences
+  FOR SELECT TO authenticated, anon USING (true);
+
+DROP POLICY IF EXISTS geofences_insert_authenticated ON public.project_geofences;
+CREATE POLICY geofences_insert_authenticated ON public.project_geofences
+  FOR INSERT TO authenticated WITH CHECK (true);
+
+DROP POLICY IF EXISTS geofences_update_authenticated ON public.project_geofences;
+CREATE POLICY geofences_update_authenticated ON public.project_geofences
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS geofences_delete_authenticated ON public.project_geofences;
+CREATE POLICY geofences_delete_authenticated ON public.project_geofences
+  FOR DELETE TO authenticated USING (true);
+
+DROP POLICY IF EXISTS change_requests_select_all ON public.geofence_change_requests;
+CREATE POLICY change_requests_select_all ON public.geofence_change_requests
+  FOR SELECT TO authenticated, anon USING (true);
+
+DROP POLICY IF EXISTS change_requests_insert_authenticated ON public.geofence_change_requests;
+CREATE POLICY change_requests_insert_authenticated ON public.geofence_change_requests
+  FOR INSERT TO authenticated WITH CHECK (true);
+
+DROP POLICY IF EXISTS change_requests_update_authenticated ON public.geofence_change_requests;
+CREATE POLICY change_requests_update_authenticated ON public.geofence_change_requests
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+-- ─── 9. Let PostgREST see the new tables and columns immediately ────────────
 NOTIFY pgrst, 'reload schema';
 
--- ─── 8. Verify ──────────────────────────────────────────────────────────────
--- Expect trees_with_id > 0 and monitoring_rows = 0 to start with.
+-- ─── 10. Verify ─────────────────────────────────────────────────────────────
 SELECT count(*) FILTER (WHERE tree_id IS NOT NULL) AS trees_with_id,
        count(*)                                    AS total_trees
 FROM public.tree_records;
 
 SELECT count(*) AS monitoring_rows FROM public.tree_monitoring_records;
+
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = 'tasks'
+  AND column_name IN ('tree_record_id', 'audit_round');

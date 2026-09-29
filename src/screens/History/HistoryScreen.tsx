@@ -701,7 +701,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '800',
   },
-  list: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100 },
+  list: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 100 },
 
   historyCard: {
     backgroundColor: '#fff',

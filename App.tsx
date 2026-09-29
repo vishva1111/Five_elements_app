@@ -9,6 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { supabase } from './src/services/supabase';
+import { AppDialogHost, setWorkReportUser } from './src/services/appDialog';
 import { useAuthStore } from './src/store/authStore';
 import { useTreeStore } from './src/store/treeStore';
 import { fetchUserProfile, fetchMyTrees, fetchUserProjects, fetchAllProjects, buildUserFromProfile, computeCreditsForProject, INITIAL_CREDITS, getCachedUserProjects, cacheUserProjects } from './src/services/treeService';
@@ -20,6 +21,7 @@ import FloatingTabBar from './src/components/FloatingTabBar';
 import LoginScreen from './src/screens/Auth/LoginScreen';
 import HomeScreen from './src/screens/Home/HomeScreen';
 import ProjectSelectScreen from './src/screens/Home/ProjectSelectScreen';
+import NotificationHistoryScreen from './src/screens/Home/NotificationHistoryScreen';
 import CaptureScreen from './src/screens/Capture/CaptureScreen';
 import MapPickerScreen from './src/screens/Capture/MapPickerScreen';
 import TreeFormScreen from './src/screens/Capture/TreeFormScreen';
@@ -264,6 +266,7 @@ export default function App() {
         loadUserData(s.user.id, s.user.email ?? '')
           .then(({ user, projects, initialActiveProjectId }) => {
             setUser(user);
+            setWorkReportUser(user?.full_name || user?.email || 'Field user');
             // While the user is still choosing projects on the login screen,
             // do NOT overwrite the selection they are about to confirm there —
             // the login screen owns project assignment until it clears the flag
@@ -328,6 +331,7 @@ export default function App() {
                 <>
                   <RootStack.Screen name="Main" component={MainTabs} />
                   <RootStack.Screen name="ProjectSelect" component={ProjectSelectScreen} options={{ headerShown: false }} />
+                  <RootStack.Screen name="Notifications" component={NotificationHistoryScreen} options={{ headerShown: false }} />
                   <RootStack.Screen name="Capture" component={CaptureNavigator} />
                   <RootStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS' }} />
                   <RootStack.Screen name="UpdateTree" component={UpdateTreeScreen} options={{ title: 'AUDIT TREE', headerShown: false }} />
@@ -337,6 +341,7 @@ export default function App() {
               )}
             </RootStack.Navigator>
           </NavigationContainer>
+          <AppDialogHost />
         </PaperProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
