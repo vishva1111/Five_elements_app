@@ -6,10 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  Alert,
-  ActivityIndicator,
-  Linking,
-  FlatList,
   Image,
 } from 'react-native';
 import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
@@ -17,17 +13,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useTaskStore } from '../../store/taskStore';
-import { fetchMyTrees, fetchAllProjects } from '../../services/treeService';
-import { fetchAgentTasks } from '../../services/taskService';
-import {
-  loadLocalTasks,
-  saveLocalTasks,
-  makeLocalTask,
-  refreshLocalProgress,
-  isLocalTask,
-} from '../../services/localTaskService';
-import { Task, Project } from '../../types';
+import { useProjectRefreshStore } from '../../store/projectRefreshStore';
+import { fetchMyTrees, fetchTreesByProject, fetchAllTrees, fetchAllProjects, backfillProjectTreeIds } from '../../services/treeService';
+import { fetchAgentTasks, startTask } from '../../services/taskService';
+import { loadLocalTasks } from '../../services/localTaskService';
+import { fetchAuditsForTrees, getAuditStatus, getDueLabel, getLatestAudit, ensureAuditTaskForTree } from '../../services/auditService';
+import { Task, Project, TreeRecord } from '../../types';
+import { displayTreeId, parseTreeMeta, resolveTreeId } from '../../utils/treeId';
+import { fetchProjectGeofence } from '../../services/projectGeofenceService';
 import CircularProgress from '../../components/CircularProgress';
+import TreeCard from '../../components/TreeCard';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -35,22 +30,10 @@ type TaskTab = 'assigned' | 'completed' | 'approved' | 'rejected';
 
 const TABS: { key: TaskTab; label: string; color: string }[] = [
   { key: 'assigned', label: 'Assigned', color: '#1a5c2a' },
-  { key: 'completed', label: 'Completed', color: '#22c55e' },
-  { key: 'approved', label: 'Approved', color: '#8b5cf6' },
+  { key: 'completed', label: 'Completed', color: '#16a34a' },
+  { key: 'approved', label: 'Approved', color: '#7c3aed' },
   { key: 'rejected', label: 'Rejected', color: '#ef4444' },
 ];
-
-// Local-calendar-day date string (YYYY-MM-DD), NOT UTC. `.toISOString()` on a local
-// Date object converts to UTC first, which silently rolls back a day for any positive
-// UTC offset (e.g. India, UTC+5:30) — that was the actual cause of dates looking wrong
-// on this screen.
-function localDateStr(d: Date | string = new Date()): string {
-  const date = typeof d === 'string' ? new Date(d) : d
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
 
 export default function TaskScreen() {
   const navigation = useNavigation<any>();
@@ -59,20 +42,24 @@ export default function TaskScreen() {
   const user = useAuthStore((s) => s.user);
   const userId = user?.id;
   const activeProjectId = useAuthStore((s) => s.activeProjectId);
-  const assignedProjects = useAuthStore((s) => s.assignedProjects) ?? [];
-  const refreshCredits = useAuthStore((s) => s.refreshCredits);
+  const refreshKey = useProjectRefreshStore((s) => s.refreshKey);
   const trees = useTreeStore((s) => s.trees) ?? [];
   const setTrees = useTreeStore((s) => s.setTrees);
   const tasks = useTaskStore((s) => s.tasks) ?? [];
   const setTasks = useTaskStore((s) => s.setTasks);
-  const localTasks = useTaskStore((s) => s.localTasks) ?? [];
-  const setLocalTasks = useTaskStore((s) => s.setLocalTasks);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<TaskTab>('assigned');
-  const [addingDemo, setAddingDemo] = useState(false);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>('all');
+  const [hasRemainingGeofence, setHasRemainingGeofence] = useState(false);
+  // uuid (tree record) → project tree ID, e.g. "ARAV-001" (see utils/treeId.ts)
+  const [treeIds, setTreeIds] = useState<Record<string, string>>({});
+  const [auditsByTree, setAuditsByTree] = useState<Record<string, any[]>>({});
   const loadSeqRef = useRef(0);
+
+  // Keep stable refs so loadTasks never needs to be recreated on value changes
+  const activeProjectIdRef = useRef(activeProjectId);
+  useEffect(() => { activeProjectIdRef.current = activeProjectId; }, [activeProjectId]);
 
   // Dashboard boxes can open this screen on a specific tab (e.g. Rejected/Completed).
   useEffect(() => {
@@ -83,57 +70,106 @@ export default function TaskScreen() {
   // Filter tasks by selected date
   const filterByDate = (taskList: Task[]) => {
     if (selectedDate === 'all') return taskList;
-    const dateStr = selectedDate === 'today' ? localDateStr() : selectedDate;
+    const dateStr = selectedDate === 'today' ? new Date().toISOString().split('T')[0] : selectedDate;
     return taskList.filter((t) => {
+      // Due audit tasks belong in TODAY's active queue
+      if (t.task_type === 'audit' && selectedDate === 'today') return true;
       if (!t.created_at) return false;
-      return localDateStr(t.created_at) === dateStr;
+      return t.created_at.split('T')[0] === dateStr;
     });
   };
 
   useEffect(() => {
     let cancelled = false;
-    loadLocalTasks().then((loaded) => {
-      if (!cancelled && loaded.length > 0) setLocalTasks(loaded);
-    });
-
     (async () => {
       const { data } = await fetchAllProjects();
       if (!cancelled && data) setAllProjects(data);
     })();
-
     return () => { cancelled = true; };
   }, []);
 
   const loadTasks = useCallback(async () => {
     if (!userId) return;
     const seq = ++loadSeqRef.current;
-    const [treesRes, tasksRes] = await Promise.all([
-      fetchMyTrees(userId),
+    const pid = activeProjectIdRef.current;
+
+    // Fetch trees for active project (or all trees), so audits for any project tree can be monitored
+    const treePromise = pid ? fetchTreesByProject(pid) : fetchAllTrees();
+
+    const [treesRes, tasksRes, localTasks] = await Promise.all([
+      treePromise,
       fetchAgentTasks(userId),
+      loadLocalTasks(),
     ]);
     if (seq !== loadSeqRef.current) return;
-    const myTrees = treesRes.data ?? [];
-    const localWithProgress = refreshLocalProgress(localTasks, myTrees);
-
-    // Tasks fetched from the backend are already scoped by assignee_id === me — if it's
-    // assigned to me, I should see it, full stop. No extra project filter on top of that;
-    // `assignedProjects` is never populated anywhere in the app, so that used to silently
-    // hide every real assigned task unless it happened to match whatever project the user
-    // currently had active for tree capture.
-    const visibleTasks = tasksRes.data ?? []
-
-    // Local/demo tasks are created ad-hoc under whichever project context is active, so
-    // it still makes sense to scope those to the current project selection.
-    const filterLocalByProject = (t: Task) =>
-      !t.project_id || (assignedProjects ?? []).some((p) => p.id === t.project_id) || t.project_id === activeProjectId
-
-    let visibleLocal = localWithProgress.filter(filterLocalByProject)
-    if (activeProjectId) {
-      visibleLocal = visibleLocal.filter((t) => t.project_id === activeProjectId)
+    let myTrees = treesRes.data ?? [];
+    if (myTrees.length === 0) {
+      const fallback = await fetchMyTrees(userId);
+      if (fallback.data && fallback.data.length > 0) {
+        myTrees = fallback.data;
+      }
     }
 
-    setTasks([...visibleTasks, ...visibleLocal]);
-  }, [userId, activeProjectId, assignedProjects, setTasks, localTasks]);
+    // Filter trees by active project if selected
+    const visibleTrees = pid ? myTrees.filter((t) => t.project_id === pid) : myTrees;
+    setTrees(visibleTrees);
+
+    // Filter DB + local tasks by active project if selected
+    const combinedTasks: Task[] = [...(tasksRes.data ?? []), ...localTasks];
+    const visibleTasks = pid ? combinedTasks.filter((t) => t.project_id === pid) : combinedTasks;
+    setTasks(visibleTasks);
+
+    // Check if active project has remaining geofencing setup
+    if (pid) {
+      fetchProjectGeofence(pid).then((geoRes) => {
+        if (seq !== loadSeqRef.current) return;
+        const isDone = Boolean(geoRes.data?.locked && geoRes.data?.coordinates && geoRes.data.coordinates.length >= 3);
+        setHasRemainingGeofence(!isDone);
+      });
+    } else {
+      setHasRemainingGeofence(false);
+    }
+
+    // Fetch audits for all trees so approved cards have complete audit schedules
+    if (visibleTrees.length > 0) {
+      fetchAuditsForTrees(visibleTrees.map((t) => t.id)).then((audits) => {
+        if (seq === loadSeqRef.current && audits) {
+          setAuditsByTree(audits);
+
+          // Auto-assign audit tasks in Supabase for any tree due right now
+          visibleTrees.forEach((t) => {
+            const treeAudits = audits[t.id] || [];
+            const st = getAuditStatus(t, treeAudits);
+            if (!st.allCompleted && (st.isDue || st.isOverdue)) {
+              ensureAuditTaskForTree({
+                tree: t,
+                round: st.currentRound,
+                userId,
+                dueDate: st.nextDate ? new Date(st.nextDate) : new Date(),
+                isOverdue: st.isOverdue,
+              }).catch(() => {});
+            }
+          });
+        }
+      });
+    }
+
+    // Tree capture cards labelled with the project tree ID (e.g. ARAV-001).
+    if (myTrees.length > 0) {
+      backfillProjectTreeIds(myTrees).then((enriched) => {
+        if (seq !== loadSeqRef.current || !enriched) return;
+        const resolved: Record<string, string> = {};
+        enriched.forEach((t) => {
+          const id = resolveTreeId(t);
+          if (t?.id && id) resolved[t.id] = id;
+        });
+        if (Object.keys(resolved).length > 0) {
+          setTreeIds((prev) => ({ ...prev, ...resolved }));
+        }
+      });
+    }
+  // activeProjectId read via ref — stable callback, no recreation on project change
+  }, [userId, setTasks, setTrees]);
 
   useFocusEffect(
     useCallback(() => {
@@ -141,9 +177,11 @@ export default function TaskScreen() {
     }, [loadTasks])
   );
 
+  // Instantly reload whenever the active project changes (refreshKey incremented
+  // by setActiveProjectId in authStore — fires even when this screen is not focused)
   useEffect(() => {
-    loadTasks();
-  }, [activeProjectId, loadTasks]);
+    if (refreshKey > 0) loadTasks();
+  }, [refreshKey]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -151,64 +189,16 @@ export default function TaskScreen() {
     setRefreshing(false);
   };
 
-  // "Start Now" — same as the original flow: go straight to the capture screen.
-  // We stash which task this was started from so TreeFormScreen can complete the
-  // *right* task on submit (works for both capture-style tasks and our existing-tree
-  // tickets), instead of guessing via fuzzy matching.
-  const handleStartNow = (task: Task) => {
-    useTaskStore.getState().setActiveTaskId(task.id);
+  const handleStartTask = async (task: Task) => {
+    if (!task.started_at) {
+      await startTask(task.id);
+      setTasks(tasks.map((t) => (t.id === task.id ? { ...t, started_at: new Date().toISOString(), status: 'in_progress' } : t)));
+    }
     navigation.navigate('Capture');
   };
 
-  const handleAddDemoTask = async () => {
-    setAddingDemo(true);
-    const names = ['Demo Survey — Phase 1', 'Demo Planting Drive', 'Demo Health Check'];
-    const localOnly = localTasks.filter(isLocalTask).filter((t) => activeProjectId ? t.project_id === activeProjectId : true);
-    const used = new Set(localOnly.map((t) => t.name));
-    const name = names.find((n) => !used.has(n)) ?? `Demo Task ${localOnly.length + 1}`;
-    const due = new Date(Date.now() + 30 * 86400000).toISOString();
-    const newTask = makeLocalTask({
-      name,
-      target_count: 50,
-      location: 'Demo field site',
-      priority: 'medium',
-      due_date: due,
-      project_id: activeProjectId ?? undefined,
-    });
-    const updated = [...localTasks, newTask];
-    setLocalTasks(updated);
-    await saveLocalTasks(updated);
-
-    // Reload tasks with the updated local list (loadTasks uses stale closure)
-    if (userId) {
-      const [treesRes, tasksRes] = await Promise.all([
-        fetchMyTrees(userId),
-        fetchAgentTasks(userId),
-      ]);
-      const myTrees = treesRes.data ?? [];
-      const localWithProgress = refreshLocalProgress(updated, myTrees);
-      const assignedProjectIds = new Set((assignedProjects ?? []).map((p) => p.id));
-      const filterByAssigned = (t: Task) => !t.project_id || assignedProjectIds.has(t.project_id);
-      if (tasksRes.data) {
-        let visibleTasks = tasksRes.data.filter(filterByAssigned);
-        if (activeProjectId) visibleTasks = visibleTasks.filter((t) => t.project_id === activeProjectId);
-        let visibleLocal = localWithProgress.filter(filterByAssigned);
-        if (activeProjectId) visibleLocal = visibleLocal.filter((t) => t.project_id === activeProjectId);
-        setTasks([...visibleTasks, ...visibleLocal]);
-      } else {
-        let visibleLocal = localWithProgress.filter(filterByAssigned);
-        if (activeProjectId) visibleLocal = visibleLocal.filter((t) => t.project_id === activeProjectId);
-        setTasks(visibleLocal);
-      }
-    }
-
-    setAddingDemo(false);
-    Alert.alert('Demo task added', `"${name}" saved for this project.`);
-  };
-
   const handleOpenMap = (location: string) => {
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
-    Linking.openURL(url);
+    navigation.getParent()?.navigate('Map');
   };
 
   const getTodayDate = () => {
@@ -217,34 +207,205 @@ export default function TaskScreen() {
     return now.toLocaleDateString('en-IN', options);
   };
 
-  const assignedTasks = tasks.filter((t) => t.status === 'assigned');
-  const inProgressTasks = tasks.filter((t) => t.status === 'in_progress');
-  const completedTasks = tasks.filter((t) => t.status === 'completed');
-  const approvedTasks = tasks.filter((t) => t.status === 'approved');
+  // Ensure trees are filtered by active project
+  const projectTrees = useMemo(() => {
+    if (!activeProjectId) return trees;
+    return trees.filter((t) => t.project_id === activeProjectId);
+  }, [trees, activeProjectId]);
+
+  // assigned + in_progress both show in the Assigned tab
+  const assignedTasks = tasks.filter((t) => t.status === 'assigned' || t.status === 'in_progress');
   const rejectedTasks = tasks.filter((t) => t.status === 'rejected');
 
-  // Count tasks for each tab
-  const treeCaptures = trees.length;
-  const assignedCount = assignedTasks.length;
-  const inProgressCount = inProgressTasks.length;
-  const completedCount = completedTasks.length + treeCaptures;
-  const approvedCount = approvedTasks.length;
+  // Auto-assigned audit tasks for any tree whose audit time is NOW
+  const assignedItems = useMemo(() => {
+    const list: Task[] = [...assignedTasks];
+    const seenKeys = new Set<string>();
+
+    assignedTasks.forEach((t) => {
+      const tid = t.tree_record_id || t.tree_id;
+      if (tid) {
+        seenKeys.add(`${tid}_${t.audit_round || 1}`);
+        seenKeys.add(tid);
+      }
+    });
+
+    projectTrees.forEach((t) => {
+      const audits = auditsByTree[t.id] || [];
+      const auditStatus = getAuditStatus(t, audits);
+      if (!auditStatus.allCompleted && (auditStatus.isDue || auditStatus.isOverdue)) {
+        const key = `${t.id}_${auditStatus.currentRound}`;
+        if (!seenKeys.has(key) && !seenKeys.has(t.id)) {
+          seenKeys.add(key);
+          const resolvedId = treeIds[t.id] || resolveTreeId(t) || displayTreeId(t);
+          const taskTitle = `Audit Round #${auditStatus.currentRound} — ${t.species || 'Tree'} (${resolvedId})`;
+          const dueLabel = getDueLabel(auditStatus);
+
+          list.unshift({
+            id: `audit-${t.id}-${auditStatus.currentRound}`,
+            name: taskTitle,
+            title: taskTitle,
+            project_id: t.project_id,
+            assignee_id: userId || '',
+            target_count: 1,
+            remaining: 1,
+            captured: 0,
+            progress: 0,
+            status: 'assigned',
+            priority: auditStatus.isOverdue ? 'high' : 'medium',
+            created_at: t.submitted_at || new Date().toISOString(),
+            photo_url: t.photo_url,
+            latitude: t.latitude,
+            longitude: t.longitude,
+            tree_id: t.id,
+            tree_record_id: t.id,
+            audit_round: auditStatus.currentRound,
+            task_type: 'audit',
+            tree_condition: t.tree_condition,
+            notes: dueLabel,
+          });
+        }
+      }
+    });
+
+    return list;
+  }, [assignedTasks, projectTrees, auditsByTree, treeIds, userId]);
+
+  // Approved Tasks + Approved Trees (locked or approved status)
+  const approvedItems = useMemo(() => {
+    const list: Task[] = [];
+    const seenIds = new Set<string>();
+
+    tasks.forEach((t) => {
+      if (t.status === 'approved') {
+        list.push(t);
+        seenIds.add(t.id);
+        if (t.tree_id) seenIds.add(t.tree_id);
+        if (t.tree_record_id) seenIds.add(t.tree_record_id);
+      }
+    });
+
+    projectTrees.forEach((t) => {
+      const linkedTask = tasks.find((tk) => tk.tree_id === t.id || tk.id === t.id);
+      const isApproved = Boolean(t.locked || linkedTask?.status === 'approved');
+      if (isApproved && !seenIds.has(t.id)) {
+        seenIds.add(t.id);
+        const meta = parseTreeMeta(t.notes);
+        const condition = t.tree_condition || meta.tree_condition || 'Healthy';
+        list.push({
+          id: t.id,
+          tree_id: t.id,
+          tree_record_id: t.id,
+          name: t.species || 'Tree Capture',
+          project_id: t.project_id,
+          assignee_id: t.user_id || '',
+          target_count: 1,
+          priority: 'medium' as const,
+          captured: 1,
+          remaining: 0,
+          progress: 100,
+          status: 'approved' as const,
+          created_at: t.submitted_at,
+          photo_url: t.photo_url,
+          latitude: t.latitude,
+          longitude: t.longitude,
+          tree_condition: condition,
+          tree_condition_color: condition === 'Healthy' ? '#16a34a' : condition === 'Stressed' ? '#d97706' : condition === 'Diseased' ? '#dc2626' : '#4b5563',
+          surveyor: t.surveyor || meta.surveyor,
+        });
+      }
+    });
+
+    return list;
+  }, [tasks, projectTrees]);
+
+  // Completed Tasks (pending review) + Completed Trees (pending review)
+  const completedItems = useMemo(() => {
+    const list: Task[] = [];
+    const seenIds = new Set<string>();
+
+    tasks.forEach((t) => {
+      if (t.status === 'completed') {
+        const treeId = t.tree_record_id || t.tree_id || t.id;
+        const latestAudit = getLatestAudit(auditsByTree[treeId] || []);
+        const latestAuditDate = latestAudit?.submitted_at || latestAudit?.survey_date || null;
+        list.push({
+          ...t,
+          completed_at: latestAuditDate || t.completed_at || t.created_at,
+          photo_url: latestAudit?.photo_url || t.photo_url,
+          tree_condition: latestAudit?.tree_condition || t.tree_condition,
+          audit_round: latestAudit?.monitoring_round || t.audit_round || null,
+          task_type: latestAudit ? 'audit' : t.task_type,
+        });
+        seenIds.add(t.id);
+        if (t.tree_id) seenIds.add(t.tree_id);
+        if (t.tree_record_id) seenIds.add(t.tree_record_id);
+      }
+    });
+
+    projectTrees.forEach((t) => {
+      const linkedTask = tasks.find((tk) => tk.tree_id === t.id || tk.id === t.id);
+      const isApproved = Boolean(t.locked || linkedTask?.status === 'approved');
+      const isRejected = linkedTask?.status === 'rejected';
+      if (!isApproved && !isRejected && !seenIds.has(t.id)) {
+        seenIds.add(t.id);
+        const meta = parseTreeMeta(t.notes);
+        const condition = t.tree_condition || meta.tree_condition || 'Healthy';
+        const latestAudit = getLatestAudit(auditsByTree[t.id] || []);
+        const latestAuditDate = latestAudit?.submitted_at || latestAudit?.survey_date || null;
+        list.push({
+          id: t.id,
+          tree_id: t.id,
+          tree_record_id: t.id,
+          name: t.species || 'Tree Capture',
+          project_id: t.project_id,
+          assignee_id: t.user_id || '',
+          target_count: 1,
+          priority: 'medium' as const,
+          captured: 1,
+          remaining: 0,
+          progress: 100,
+          status: 'completed' as const,
+          created_at: t.submitted_at,
+          completed_at: latestAuditDate || t.submitted_at,
+          photo_url: latestAudit?.photo_url || t.photo_url,
+          latitude: t.latitude,
+          longitude: t.longitude,
+          tree_condition: latestAudit?.tree_condition || condition,
+          tree_condition_color: condition === 'Healthy' ? '#16a34a' : condition === 'Stressed' ? '#d97706' : condition === 'Diseased' ? '#dc2626' : '#4b5563',
+          surveyor: latestAudit?.surveyor || t.surveyor || meta.surveyor,
+          audit_round: latestAudit?.monitoring_round || null,
+          task_type: latestAudit ? 'audit' : 'capture',
+        });
+      }
+    });
+
+    return list.sort((a, b) => {
+      const aTime = new Date(a.completed_at || a.created_at || 0).getTime();
+      const bTime = new Date(b.completed_at || b.created_at || 0).getTime();
+      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+    });
+  }, [tasks, projectTrees, auditsByTree]);
+
+  // Tab counts
+  const assignedCount = assignedItems.length;
+  const completedCount = completedItems.length;
+  const approvedCount = approvedItems.length;
   const rejectedCount = rejectedTasks.length;
   const reviewedCount = approvedCount + rejectedCount;
-  const totalTasks = assignedCount + inProgressCount + completedCount + approvedCount + rejectedCount;
+  const totalTasks = assignedCount + completedCount + approvedCount + rejectedCount;
 
-  // Extract unique dates from assigned tasks (descending, past first)
+  // Date selector — pull dates from active tasks and trees so every tab's date filter works
   const dates = useMemo(() => {
-    const todayStr = localDateStr();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split('T')[0];
     const dateSet = new Set<string>();
-    assignedTasks.forEach((t) => {
-      if (t.created_at) dateSet.add(localDateStr(t.created_at));
+    tasks.forEach((t) => {
+      if (t.created_at) dateSet.add(t.created_at.split('T')[0]);
     });
-    inProgressTasks.forEach((t) => {
-      if (t.created_at) dateSet.add(localDateStr(t.created_at));
-    });
-    trees.forEach((t) => {
-      if (t.submitted_at) dateSet.add(localDateStr(t.submitted_at));
+    projectTrees.forEach((t) => {
+      if (t.submitted_at) dateSet.add(t.submitted_at.split('T')[0]);
     });
     const sorted = Array.from(dateSet).sort((a, b) => b.localeCompare(a));
     return sorted.map((dateStr) => {
@@ -260,111 +421,120 @@ export default function TaskScreen() {
         isToday: dateStr === todayStr,
       };
     });
-  }, [assignedTasks, inProgressTasks, trees]);
+  }, [tasks, projectTrees]);
 
   const activeProject = allProjects.find((p) => p.id === activeProjectId);
 
+  // uuid → tree record: lets a completed card know it stands for a tree capture,
+  // so it can be labelled with the project tree ID instead of the DB uuid.
+  const treeByUuid = useMemo(() => {
+    const map = new Map<string, TreeRecord>();
+    projectTrees.forEach((t) => {
+      if (t?.id) map.set(t.id, t);
+    });
+    return map;
+  }, [projectTrees]);
+
   const renderTaskCard = (task: Task) => {
-    const started = !!task.started_at;
-    const createdDate = task.created_at ? new Date(task.created_at) : null;
-    const dayName = createdDate ? createdDate.toLocaleDateString('en-IN', { weekday: 'short' }) : '';
-    const dateStr = createdDate ? createdDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-    const statusColor = task.status === 'completed' ? '#22c55e'
-      : task.status === 'approved' ? '#8b5cf6'
-      : task.status === 'rejected' ? '#ef4444'
-      : '#1a5c2a';
-    const isTreeCapture = task.status === 'completed' && task.photo_url;
-    const isAssigned = task.status === 'assigned';
-    
-    const conditionColors: Record<string, string> = {
-      Healthy: '#22c55e',
-      Stressed: '#f59e0b',
-      Diseased: '#ef4444',
-      Dead: '#6b7280',
-    };
-    
-    const handlePress = () => {
-      if (isTreeCapture && task.id) {
-        navigation.navigate('TreeDetail', { treeId: task.id });
+    // For rejected tasks or tree captures, resolve the linked tree record
+    let treeRecord =
+      treeByUuid.get(task.id) ||
+      (task.tree_id ? treeByUuid.get(task.tree_id) : undefined) ||
+      (task.tree_record_id ? treeByUuid.get(task.tree_record_id) : undefined);
+
+    if (!treeRecord && task.name) {
+      const match = task.name.match(/\(([A-Fa-f0-9]{4,36})\)/);
+      if (match && match[1]) {
+        const hex = match[1].toLowerCase();
+        treeRecord = trees.find(
+          (t) =>
+            t.id.toLowerCase().startsWith(hex) ||
+            resolveTreeId(t).toLowerCase().includes(hex)
+        );
       }
+    }
+
+    const isAuditTask = (task.task_type === 'audit' || !!task.audit_round) && (task.status === 'assigned' || task.status === 'in_progress');
+    const isCompletedAudit = task.status === 'completed' && (task.task_type === 'audit' || !!task.audit_round);
+    const targetId = treeRecord?.id || task.tree_id || task.id;
+    const projectTreeId = treeRecord ? treeIds[treeRecord.id] || resolveTreeId(treeRecord) || displayTreeId(treeRecord) : undefined;
+    const isAssigned = task.status === 'assigned' || task.status === 'in_progress';
+    const isRejected = task.status === 'rejected';
+    const isApproved = task.status === 'approved' || Boolean(treeRecord?.locked);
+    const treeAudits = auditsByTree[targetId] || [];
+
+    const handlePress = () => {
+      // Assigned audit cards open the audit tree profile. Other cards still
+      // open tree details. The audit form is only entered via "Audit Now".
+      navigation.navigate('TreeDetail', {
+        treeId: targetId,
+        asAuditProfile: isAuditTask,
+      });
+    };
+
+    const handleStartAudit = () => {
+      navigation.navigate('UpdateTree', {
+        treeId: targetId,
+        treeIdDisplay: projectTreeId,
+        currentRound: task.audit_round || 1,
+      });
+    };
+
+    const handleUpdate = () => {
+      navigation.navigate('EditTree', {
+        treeId: targetId,
+        taskId: task.id,
+        rejectionNotes: task.review_notes || null,
+      });
     };
 
     return (
-      <TouchableOpacity key={task.id} style={[s.taskCard, { borderLeftColor: statusColor }]} onPress={handlePress} activeOpacity={0.7}>
-        {isTreeCapture && task.photo_url ? (
-          <View style={s.taskPhotoWrap}>
-            <Image source={{ uri: task.photo_url }} style={s.taskPhoto} resizeMode="cover" />
-          </View>
-        ) : null}
-        <View style={s.taskCardContent}>
-          <View style={s.taskCardTop}>
-            <View style={s.taskTitleWrap}>
-              <Text style={s.taskId} numberOfLines={1}>
-                {task.task_code ?? `ID: ${task.id.slice(0, 8).toUpperCase()}`}
-              </Text>
-              <Text style={s.taskName} numberOfLines={1}>{task.name}</Text>
-            </View>
-            {isAssigned ? (
-              <TouchableOpacity
-                style={s.startBtn}
-                onPress={(e) => { e.stopPropagation(); handleStartNow(task); }}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="play-circle-outline" size={14} color="#fff" />
-                <Text style={s.startBtnText}>Start Now</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={[s.statusBadge, { backgroundColor: statusColor + '18' }]}>
-                <Text style={[s.statusText, { color: statusColor }]}>{task.status.toUpperCase()}</Text>
-              </View>
-            )}
-          </View>
-          
-          {/* Extra details for tree captures */}
-          {isTreeCapture && (
-            <View style={s.treeDetailRow}>
-              {task.tree_condition ? (
-                <View style={[s.conditionBadge, { backgroundColor: (conditionColors[task.tree_condition] || '#6b7280') + '15', borderColor: (conditionColors[task.tree_condition] || '#6b7280') + '40' }]}>
-                  <View style={[s.conditionDot, { backgroundColor: conditionColors[task.tree_condition] || '#6b7280' }]} />
-                  <Text style={{ color: conditionColors[task.tree_condition] || '#6b7280', fontWeight: '700', fontSize: 10 }}>{task.tree_condition}</Text>
-                </View>
-              ) : null}
-              {task.latitude && task.longitude && (
-                <TouchableOpacity
-                  style={s.detailLink}
-                  onPress={(e) => { e.stopPropagation(); handleOpenMap(`${task.latitude},${task.longitude}`); }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="location-outline" size={11} color="#1a5c2a" />
-                  <Text style={s.detailLinkText}>Location</Text>
-                </TouchableOpacity>
-              )}
-              {task.surveyor ? (
-                <View style={s.surveyorRow}>
-                  <Ionicons name="person-outline" size={10} color="#888" />
-                  <Text style={s.surveyorText}>{task.surveyor}</Text>
-                </View>
-              ) : null}
-            </View>
-          )}
-          
-          {/* Date only - no priority badge */}
-          {createdDate ? (
-            <View style={s.dueRow}>
-              <Ionicons name="calendar-outline" size={10} color="#888" />
-              <Text style={s.dueText}>{dayName}, {dateStr}</Text>
-            </View>
-          ) : null}
-
-          {/* Who assigned this task to me */}
-          {task.assigned_by_name ? (
-            <View style={s.surveyorRow}>
-              <Ionicons name="person-circle-outline" size={11} color="#888" />
-              <Text style={s.surveyorText}>Assigned by {task.assigned_by_name}</Text>
-            </View>
-          ) : null}
-        </View>
-      </TouchableOpacity>
+      <TreeCard
+        key={task.id}
+        tree={treeRecord ? { ...treeRecord, locked: isApproved } : null}
+        task={isCompletedAudit ? { ...task, task_type: 'audit' } : task}
+        status={isApproved && !isAuditTask ? 'approved' : task.status}
+        audits={treeAudits}
+        displayId={projectTreeId}
+        showSurveyor={false}
+        onPress={isAssigned && !isAuditTask ? undefined : handlePress}
+        onAction={
+          isAuditTask
+            ? handleStartAudit
+            : isAssigned
+            ? () => handleStartTask(task)
+            : isRejected
+            ? handleUpdate
+            : undefined
+        }
+        actionLabel={
+          isAuditTask
+            ? 'Audit Now'
+            : isAssigned
+            ? 'Planting'
+            : isRejected
+            ? 'Update Submission'
+            : undefined
+        }
+        actionVariant={
+          isAuditTask
+            ? 'audit'
+            : isAssigned
+            ? 'start'
+            : isRejected
+            ? 'update'
+            : undefined
+        }
+        actionIcon={isAuditTask ? 'clipboard-outline' : undefined}
+        onLocationPress={
+          ((task.latitude && task.longitude) || (treeRecord?.latitude && treeRecord?.longitude))
+            ? () =>
+                handleOpenMap(
+                  `${task.latitude ?? treeRecord?.latitude},${task.longitude ?? treeRecord?.longitude}`
+                )
+            : undefined
+        }
+      />
     );
   };
 
@@ -383,13 +553,8 @@ export default function TaskScreen() {
 
   return (
     <View style={s.container}>
-      <ScrollView
-        style={s.scroll}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a5c2a" />}
-      >
-        {/* Header with date and project location */}
-        <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={[s.header, { paddingTop: insets.top + 12 }]}>
+      {/* Header stays fixed; the rest of the page scrolls */}
+      <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={[s.header, { paddingTop: insets.top + 8 }]}>
           <View style={s.headerRow}>
             <View style={s.headerLeft}>
               <Text style={s.headerDate}>{getTodayDate()}</Text>
@@ -418,6 +583,11 @@ export default function TaskScreen() {
           </View>
         </LinearGradient>
 
+      <ScrollView
+        style={s.scroll}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a5c2a" />}
+      >
         {/* Tabs with CircularProgress rings */}
         <View style={s.tabsWrap}>
           <View style={s.tabsRow}>
@@ -438,18 +608,33 @@ export default function TaskScreen() {
                 count = rejectedCount;
                 denominator = completedCount;
               }
+
               const pct = denominator > 0 ? (count / denominator) * 100 : 0;
               return (
                 <TouchableOpacity
                   key={tab.key}
-                  style={[s.tabBtn, active && { backgroundColor: tab.color + '15', borderColor: tab.color }]}
+                  style={[
+                    s.tabBtn,
+                    active && { backgroundColor: tab.color + '15', borderColor: tab.color },
+                    !active && { borderColor: tab.color + '40' },
+                  ]}
                   onPress={() => setActiveTab(tab.key)}
                   activeOpacity={0.7}
                 >
-                  <CircularProgress size={52} progress={pct} color={tab.color} strokeWidth={4} trackColor="#E8E8E8">
-                    <Text style={[s.tabCountText, { color: tab.color }]}>{count}/{denominator}</Text>
+                  <CircularProgress
+                    size={50}
+                    progress={pct}
+                    color={tab.color}
+                    strokeWidth={3.5}
+                    trackColor="#E8E8E8"
+                  >
+                    <Text style={[s.tabCountText, { color: tab.color }]}>
+                      {count}/{denominator}
+                    </Text>
                   </CircularProgress>
-                  <Text numberOfLines={1} style={[s.tabText, active && { color: tab.color }]}>{tab.label}</Text>
+                  <Text numberOfLines={1} style={[s.tabText, active && { color: tab.color }]}>
+                    {tab.label}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
@@ -487,79 +672,58 @@ export default function TaskScreen() {
 
         {/* Tab content */}
         <View style={s.content}>
-          {/* In-progress tasks stay in the Assigned tab (not a separate tab) so a task
-              never disappears the moment you tap Start — the card itself shows
-              Start/Complete depending on its own status. */}
-          {activeTab === 'assigned' && renderTaskList(filterByDate([...assignedTasks, ...inProgressTasks]))}
-
-          {activeTab === 'completed' && renderTaskList(filterByDate([...completedTasks, ...trees.map((t) => ({
-            id: t.id,
-            name: t.species || 'Tree Capture',
-            project_id: t.project_id,
-            assignee_id: t.user_id || '',
-            target_count: 1,
-            priority: 'medium' as const,
-            captured: 1,
-            remaining: 0,
-            progress: 100,
-            status: 'completed' as const,
-            created_at: t.submitted_at,
-            photo_url: t.photo_url,
-            latitude: t.latitude,
-            longitude: t.longitude,
-            tree_condition: (() => {
-              let meta: Record<string, any> = {};
-              const m = (t.notes || '').match(/##META##({.*})/s);
-              if (m) try { meta = JSON.parse(m[1]); } catch {}
-              return t.tree_condition || meta.tree_condition || 'Healthy';
-            })(),
-            tree_condition_color: (() => {
-              let meta: Record<string, any> = {};
-              const m = (t.notes || '').match(/##META##({.*})/s);
-              if (m) try { meta = JSON.parse(m[1]); } catch {}
-              const c = t.tree_condition || meta.tree_condition || 'Healthy';
-              return c === 'Healthy' ? '#22c55e' : c === 'Stressed' ? '#f59e0b' : c === 'Diseased' ? '#ef4444' : '#6b7280';
-            })(),
-            surveyor: t.surveyor || (() => {
-              let meta: Record<string, any> = {};
-              const m = (t.notes || '').match(/##META##({.*})/s);
-              if (m) try { meta = JSON.parse(m[1]); } catch {}
-              return meta.surveyor;
-            })(),
-          }))]))}
-          {activeTab === 'approved' && renderTaskList(filterByDate(approvedTasks))}
+          {activeTab === 'assigned' && (
+            <>
+              {hasRemainingGeofence && (
+                <TouchableOpacity
+                  style={s.geofenceTaskCard}
+                  onPress={() => navigation.getParent()?.navigate('Map', { startGeofenceWalk: true })}
+                  activeOpacity={0.85}
+                >
+                  <View style={s.geofenceTaskHeader}>
+                    <View style={s.geofenceTaskBadge}>
+                      <Text style={s.geofenceTaskBadgeText}>1-TIME MANDATORY SETUP</Text>
+                    </View>
+                    <View style={s.geofenceTaskPriority}>
+                      <Text style={s.geofenceTaskPriorityText}>REQUIRED</Text>
+                    </View>
+                  </View>
+                  <Text style={s.geofenceTaskTitle}>Land Perimeter Geofencing</Text>
+                  <Text style={s.geofenceTaskSub}>
+                    Walk the land edge perimeter with your phone and save a point at each corner to define and lock this project's boundary.
+                  </Text>
+                  <View style={s.geofenceTaskFooter}>
+                    <View style={s.geofenceTaskInfo}>
+                      <Ionicons name="walk" size={16} color="#1a5c2a" />
+                      <Text style={s.geofenceTaskInfoText}>Walk corners on Map</Text>
+                    </View>
+                    <View style={s.geofenceTaskActionBtn}>
+                      <Text style={s.geofenceTaskActionText}>Start Walk</Text>
+                      <Ionicons name="arrow-forward" size={13} color="#fff" />
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              )}
+              {renderTaskList(filterByDate(assignedItems))}
+            </>
+          )}
+          {activeTab === 'completed' && renderTaskList(filterByDate(completedItems))}
+          {activeTab === 'approved' && renderTaskList(filterByDate(approvedItems))}
           {activeTab === 'rejected' && renderTaskList(filterByDate(rejectedTasks))}
         </View>
       </ScrollView>
-
-      {/* Add Demo Button - Fixed at bottom */}
-      <View style={[s.bottomBar, { paddingBottom: insets.bottom + 8 }]}>
-        <TouchableOpacity
-          style={s.addDemoBtn}
-          onPress={handleAddDemoTask}
-          disabled={addingDemo}
-          activeOpacity={0.8}
-        >
-          {addingDemo ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="add-circle-outline" size={20} color="#fff" />
-              <Text style={s.addDemoBtnText}>Add Demo Task</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: '#f0f4f1' },
   scroll: { flex: 1 },
   header: {
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 12,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
   headerRow: {
     flexDirection: 'row',
@@ -567,7 +731,7 @@ const s = StyleSheet.create({
     gap: 14,
   },
   headerLeft: { flex: 1 },
-  headerDate: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
+  headerDate: { fontSize: 18, fontWeight: '800', color: '#fff' },
   headerSub: { fontSize: 13, fontWeight: '600', color: '#cde8d3', marginTop: 2 },
   headerDivider: {
     width: 1,
@@ -588,68 +752,65 @@ const s = StyleSheet.create({
   },
   headerLocationLabel: { fontSize: 9, fontWeight: '600', color: '#cde8d3', letterSpacing: 0.5 },
   tabsWrap: { paddingHorizontal: 12, paddingTop: 12 },
-  tabsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
+  tabsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   tabBtn: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 5,
     backgroundColor: '#fff',
-    borderRadius: 7.5,
+    borderRadius: 14,
     paddingVertical: 10,
-    paddingHorizontal: 4,
+    paddingHorizontal: 3,
     borderWidth: 1.5,
-    borderColor: '#E8E8E8',
+    borderColor: '#E0ECDD',
   },
   tabBtnActive: {},
-  tabText: { fontSize: 11, fontWeight: '700', color: '#888' },
-  tabCountText: { fontSize: 12, fontWeight: '700' },
-  dateSelectorWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 4, gap: 8 },
+  tabText: { fontSize: 11, fontWeight: '800', color: '#888' },
+  tabCountText: { fontSize: 11, fontWeight: '800' },
+  dateSelectorWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 8, gap: 8 },
   dateAllBtn: {
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#fff',
-    borderRadius: 7.5,
+    borderRadius: 14,
     paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderWidth: 1.5,
-    borderColor: '#E0ECDD',
-    minWidth: 56,
-    minHeight: 68,
+    paddingHorizontal: 10,
+    minWidth: 52,
+    height: 62,
   },
-  dateAllBtnActive: { backgroundColor: '#1a5c2a', borderColor: '#1a5c2a' },
-  dateAllText: { fontSize: 12, fontWeight: '700', color: '#1a5c2a' },
+  dateAllBtnActive: { backgroundColor: '#1a5c2a' },
+  dateAllText: { fontSize: 12, fontWeight: '800', color: '#1a5c2a' },
   dateAllTextActive: { color: '#fff' },
   dateList: { gap: 8 },
   dateItem: {
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#fff',
-    borderRadius: 7.5,
+    borderRadius: 14,
     paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderWidth: 1.5,
-    borderColor: '#E8E8E8',
-    minWidth: 56,
+    paddingHorizontal: 10,
+    minWidth: 52,
+    height: 62,
   },
-  dateItemActive: { backgroundColor: '#1a5c2a', borderColor: '#1a5c2a' },
-  dateLabel: { fontSize: 9, fontWeight: '700', color: '#888', letterSpacing: 0.5 },
+  dateItemActive: { backgroundColor: '#1a5c2a' },
+  dateLabel: { fontSize: 9, fontWeight: '800', color: '#888', letterSpacing: 0.5 },
   dateLabelActive: { color: '#fff' },
-  dateDay: { fontSize: 18, fontWeight: '800', color: '#222', marginTop: 1 },
+  dateDay: { fontSize: 16, fontWeight: '800', color: '#222', marginTop: 1 },
   dateDayActive: { color: '#fff' },
   dateMonth: { fontSize: 10, fontWeight: '600', color: '#888' },
   dateMonthActive: { color: '#fff' },
   content: { padding: 16, paddingTop: 12 },
   taskCard: {
     backgroundColor: '#fff',
-    borderRadius: 7.5,
+    borderRadius: 14,
     padding: 12,
     marginBottom: 8,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+    elevation: 4,
+    shadowColor: '#1a5c2a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
     borderLeftWidth: 3,
     borderLeftColor: '#1a5c2a',
     flexDirection: 'row',
@@ -657,7 +818,7 @@ const s = StyleSheet.create({
   taskPhotoWrap: {
     width: 80,
     height: 80,
-    borderRadius: 7.5,
+    borderRadius: 14,
     overflow: 'hidden',
     marginRight: 12,
   },
@@ -665,58 +826,172 @@ const s = StyleSheet.create({
     width: 80,
     height: 80,
   },
+  taskPhotoPlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 14,
+    backgroundColor: '#E8F5E9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   taskCardContent: {
     flex: 1,
   },
   taskCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   taskTitleWrap: { flex: 1 },
   taskId: { fontSize: 10, fontWeight: '600', color: '#999', marginBottom: 2 },
-  taskName: { fontSize: 14, fontWeight: '700', color: '#222' },
-  statusBadge: { borderRadius: 7.5, paddingHorizontal: 8, paddingVertical: 3 },
-  statusText: { fontSize: 9, fontWeight: '700' },
+  // Project tree ID on a tree-capture card (same look as components/TreeCard.tsx)
+  taskIdValue: { color: '#1a5c2a', fontFamily: 'monospace', fontWeight: '800' },
+  taskName: { fontSize: 14, fontWeight: '800', color: '#222' },
+  statusBadge: { borderRadius: 14, paddingHorizontal: 8, paddingVertical: 3 },
+  statusText: { fontSize: 9, fontWeight: '800' },
   startBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#F09125',
-    borderRadius: 7.5,
+    backgroundColor: '#1a5c2a',
+    borderRadius: 14,
     paddingVertical: 6,
     paddingHorizontal: 10,
+    elevation: 2,
+    shadowColor: '#1a5c2a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
-  startBtnText: { color: '#fff', fontWeight: '700', fontSize: 11 },
+  startBtnText: { color: '#fff', fontWeight: '800', fontSize: 11 },
+  // Update button — full-width below card details, only for rejected tasks
+  updateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    paddingVertical: 8,
+    marginTop: 10,
+    elevation: 2,
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  updateBtnText: { color: '#fff', fontWeight: '800', fontSize: 11 },
+  // Rejection reason row (review_notes)
+  rejectionReasonRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 4,
+    marginTop: 6,
+    backgroundColor: '#fef2f2',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  rejectionReasonText: { fontSize: 10, color: '#ef4444', flex: 1, lineHeight: 14 },
   taskNote: { fontSize: 12, color: '#666', marginTop: 4, lineHeight: 16 },
   dueRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4 },
   dueText: { fontSize: 10, color: '#888' },
   treeDetailRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-  detailLink: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#E8F5E9', borderRadius: 7.5 },
-  detailLinkText: { fontSize: 10, color: '#1a5c2a', fontWeight: '600' },
-  conditionBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7.5, borderWidth: 1 },
+  detailLink: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#E8F5E9', borderRadius: 14 },
+  detailLinkText: { fontSize: 10, color: '#1a5c2a', fontWeight: '800' },
+  conditionBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 14, borderWidth: 1 },
   conditionDot: { width: 6, height: 6, borderRadius: 3 },
   surveyorRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   surveyorText: { fontSize: 10, color: '#666' },
+  auditChip: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, backgroundColor: '#E8F5E9', borderRadius: 12 },
+  auditChipText: { fontSize: 10, fontWeight: '800', color: '#1a5c2a' },
   emptyState: { alignItems: 'center', paddingVertical: 48 },
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
-  emptyText: { fontSize: 16, fontWeight: '600', color: '#555' },
+  emptyText: { fontSize: 16, fontWeight: '800', color: '#555' },
   emptySubText: { fontSize: 13, color: '#888', marginTop: 4, textAlign: 'center', paddingHorizontal: 24 },
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+  // Mandatory Geofence Task Card
+  geofenceTaskCard: {
     backgroundColor: '#fff',
-    paddingHorizontal: 16,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: '#f59e0b',
+    elevation: 3,
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+  },
+  geofenceTaskHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  geofenceTaskBadge: {
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  geofenceTaskBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#b45309',
+    letterSpacing: 0.5,
+  },
+  geofenceTaskPriority: {
+    backgroundColor: '#fee2e2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  geofenceTaskPriorityText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#dc2626',
+  },
+  geofenceTaskTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1a1a1a',
+    marginTop: 2,
+  },
+  geofenceTaskSub: {
+    fontSize: 12,
+    color: '#666',
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  geofenceTaskFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: '#f3f4f6',
   },
-  addDemoBtn: {
+  geofenceTaskInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#1a5c2a',
-    borderRadius: 10,
-    paddingVertical: 14,
+    gap: 5,
   },
-  addDemoBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  geofenceTaskInfoText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1a5c2a',
+  },
+  geofenceTaskActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#1a5c2a',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  geofenceTaskActionText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
 });
+

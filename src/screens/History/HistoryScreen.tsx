@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,18 +8,24 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
+  TextInput,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useTaskStore } from '../../store/taskStore';
-import { fetchMyTrees } from '../../services/treeService';
+import { useProjectRefreshStore } from '../../store/projectRefreshStore';
+import { fetchMyTrees, backfillProjectTreeIds } from '../../services/treeService';
+import { parseTreeMeta, resolveTreeId, TREE_ID_PLACEHOLDER } from '../../utils/treeId';
 import { fetchAgentTasks } from '../../services/taskService';
-import { TreeCondition, LandType, Task, TreeRecord } from '../../types';
+import { TreeCondition, LandType, Task, TreeRecord, HistoryCategory, MONITORING_ROUNDS } from '../../types';
+import { fetchAuditsForTrees, getLatestAudit } from '../../services/auditService';
+import TreeCard from '../../components/TreeCard';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
-type FilterCategory = 'condition' | 'status';
+type FilterCategory = HistoryCategory;
 
 interface HistoryItem {
   id: string;
@@ -33,11 +39,17 @@ interface HistoryItem {
   longitude?: number;
   surveyor?: string;
   project_id?: string;
+  tree_id?: string;
+  tree_record_id?: string;
+  audit_round?: number | null;
+  rejection_notes?: string | null;
+  raw_task?: Task | null;
 }
 
 const CATEGORIES: { key: FilterCategory; label: string; icon: string }[] = [
   { key: 'condition', label: 'Condition', icon: 'leaf' },
   { key: 'status', label: 'Status', icon: 'flag' },
+  { key: 'audit', label: 'Audit', icon: 'clipboard' },
 ];
 
 const CONDITION_FILTERS: { label: string; value: TreeCondition | 'all' }[] = [
@@ -55,24 +67,38 @@ const STATUS_FILTERS: { label: string; value: string }[] = [
   { label: 'Rejected', value: 'rejected' },
 ];
 
+const AUDIT_FILTERS: { label: string; value: string }[] = [
+  { label: 'All', value: 'all' },
+  ...MONITORING_ROUNDS.map((r) => ({ label: `Audit ${r.round}`, value: String(r.round) })),
+];
+
 const CONDITION_COLORS: Record<string, string> = {
-  Healthy: '#22c55e',
-  Stressed: '#f59e0b',
-  Diseased: '#ef4444',
-  Dead: '#6b7280',
+  Healthy: '#16a34a',
+  Stressed: '#d97706',
+  Diseased: '#dc2626',
+  Dead: '#4b5563',
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  completed: '#22c55e',
-  approved: '#8b5cf6',
-  rejected: '#ef4444',
+  completed: '#16a34a',
+  approved: '#7c3aed',
+  rejected: '#dc2626',
+};
+
+const AUDIT_COLORS: Record<string, string> = {
+  '1': '#22c55e',
+  '2': '#3b82f6',
+  '3': '#f59e0b',
+  '4': '#8b5cf6',
 };
 
 export default function HistoryScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const user = useAuthStore((s) => s.user);
   const userId = user?.id;
   const activeProjectId = useAuthStore((s) => s.activeProjectId);
+  const refreshKey = useProjectRefreshStore((s) => s.refreshKey);
   const trees = useTreeStore((s) => s.trees) ?? [];
   const setTrees = useTreeStore((s) => s.setTrees);
   const tasks = useTaskStore((s) => s.tasks) ?? [];
@@ -81,6 +107,11 @@ export default function HistoryScreen() {
   const [activeCategory, setActiveCategory] = useState<FilterCategory>('condition');
   const [conditionFilter, setConditionFilter] = useState<TreeCondition | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [auditFilter, setAuditFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [tabsOpen, setTabsOpen] = useState(false);
+  const [auditItems, setAuditItems] = useState<HistoryItem[]>([]);
+  const [auditsByTree, setAuditsByTree] = useState<Record<string, any[]>>({});
 
   const loadSeqRef = useRef(0);
 
@@ -94,6 +125,51 @@ export default function HistoryScreen() {
     if (seq !== loadSeqRef.current) return;
     if (treesRes.data) setTrees(treesRes.data);
     if (tasksRes.data) setTasks(tasksRes.data);
+
+    // Trees captured before project IDs existed get one assigned + persisted so
+    // every card shows its project tree ID (e.g. ARAV-001)
+    if (treesRes.data && treesRes.data.length > 0) {
+      backfillProjectTreeIds(treesRes.data).then((enriched) => {
+        if (seq !== loadSeqRef.current || !enriched) return;
+        setTrees(enriched);
+      });
+
+      // Flatten monitoring records → one history item per audit photo
+      try {
+        const audits = await fetchAuditsForTrees(treesRes.data.map((t) => t.id));
+        if (seq !== loadSeqRef.current) return;
+        setAuditsByTree(audits);
+
+        const currentTasks = tasksRes.data || [];
+        const items: HistoryItem[] = [];
+        for (const t of treesRes.data) {
+          const records = audits[t.id] ?? [];
+          const linkedTask = currentTasks.find((tk) => tk.tree_id === t.id || tk.id === t.id);
+          const isApproved = Boolean(t.locked || linkedTask?.status === 'approved');
+          for (const r of records) {
+            items.push({
+              id: r.id ?? `${t.id}-a${r.monitoring_round}`,
+              tree_record_id: t.id,
+              type: 'tree',
+              title: t.species || 'Tree',
+              photo_url: r.photo_url || t.photo_url,
+              condition: r.tree_condition || t.tree_condition || 'Healthy',
+              status: isApproved ? 'approved' : 'completed',
+              date: r.survey_date || r.submitted_at || t.submitted_at,
+              latitude: r.latitude ?? t.latitude,
+              longitude: r.longitude ?? t.longitude,
+              surveyor: r.surveyor || t.surveyor,
+              project_id: r.project_id || t.project_id,
+              tree_id: resolveTreeId(t),
+              audit_round: r.monitoring_round ?? null,
+            });
+          }
+        }
+        setAuditItems(items);
+      } catch (auditErr) {
+        console.warn('[TreeApp] audit history load failed:', auditErr);
+      }
+    }
   }, [userId, setTrees, setTasks]);
 
   useFocusEffect(
@@ -101,6 +177,11 @@ export default function HistoryScreen() {
       loadData();
     }, [loadData])
   );
+
+  // Instantly reload when the active project changes
+  useEffect(() => {
+    if (refreshKey > 0) loadData();
+  }, [refreshKey]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -112,56 +193,94 @@ export default function HistoryScreen() {
     setActiveCategory(cat);
     setConditionFilter('all');
     setStatusFilter('all');
+    setAuditFilter('all');
   };
 
   // Merge trees + approved/rejected tasks into history items
   const allItems: HistoryItem[] = [];
 
-  // Trees
+  // Trees (enriched with latest audit data if available)
   trees.forEach((t) => {
-    let meta: Record<string, any> = {};
-    const metaMatch = (t.notes || '').match(/##META##({.*})/s);
-    if (metaMatch) { try { meta = JSON.parse(metaMatch[1]); } catch {} }
+    const meta = parseTreeMeta(t.notes);
+    const treeAudits = auditsByTree[t.id] ?? [];
+    const latest = getLatestAudit(treeAudits);
+    const rawCondition = latest?.tree_condition || t.tree_condition || meta.tree_condition || 'Healthy';
+    const normalizedCondition = rawCondition.charAt(0).toUpperCase() + rawCondition.slice(1).toLowerCase();
+    const photo = latest?.photo_url || t.photo_url;
+    const linkedTask = tasks.find((tk) => tk.tree_id === t.id || tk.id === t.id);
+    const isApproved = Boolean(t.locked || linkedTask?.status === 'approved');
+
     allItems.push({
       id: t.id,
+      tree_record_id: t.id,
       type: 'tree',
       title: t.species || 'Tree',
-      photo_url: t.photo_url,
-      condition: t.tree_condition || meta.tree_condition,
-      status: 'completed',
-      date: t.submitted_at,
-      latitude: t.latitude,
-      longitude: t.longitude,
-      surveyor: t.surveyor || meta.surveyor,
+      photo_url: photo,
+      condition: normalizedCondition,
+      status: isApproved ? 'approved' : 'completed',
+      date: latest?.survey_date || latest?.submitted_at || t.submitted_at,
+      latitude: latest?.latitude ?? t.latitude,
+      longitude: latest?.longitude ?? t.longitude,
+      surveyor: latest?.surveyor || t.surveyor || meta.surveyor,
       project_id: t.project_id,
+      tree_id: resolveTreeId(t),
+      audit_round: latest?.monitoring_round ?? null,
     });
   });
 
-  // Tasks (approved/rejected/completed with tree data)
+  // Tasks (completed, approved, rejected — all show in history with same TreeCard design)
   tasks.forEach((t) => {
-    if (t.status === 'approved' || t.status === 'rejected') {
+    if (t.status === 'approved' || t.status === 'rejected' || t.status === 'completed') {
+      const rawCondition = t.tree_condition || '';
+      const normalizedCondition = rawCondition.charAt(0).toUpperCase() + rawCondition.slice(1).toLowerCase();
       allItems.push({
         id: t.id,
+        tree_record_id: t.tree_record_id || t.tree_id || t.id,
         type: 'task',
         title: t.name || 'Task',
         photo_url: t.photo_url,
-        condition: t.tree_condition,
+        condition: normalizedCondition,
         status: t.status,
         date: t.created_at,
         latitude: t.latitude,
         longitude: t.longitude,
         surveyor: t.surveyor,
         project_id: t.project_id,
+        rejection_notes: t.review_notes || t.notes || null,
+        raw_task: t,
       });
     }
   });
 
   // Filter
-  const filtered = allItems.filter((item) => {
+  const sourceItems =
+    activeCategory === 'audit'
+      ? auditItems
+      : activeCategory === 'condition'
+      ? trees.map((t) => allItems.find((i) => i.id === t.id)).filter(Boolean) as HistoryItem[]
+      : // STATUS tab: show ALL tree cards (completed, approved, rejected)
+        allItems; // all statuses shown
+
+  const filtered = sourceItems.filter((item) => {
     const projectMatch = activeProjectId ? item.project_id === activeProjectId : true;
-    const conditionMatch = conditionFilter === 'all' || item.condition === conditionFilter;
+    if (activeCategory === 'audit') {
+      const roundMatch = auditFilter === 'all' || String(item.audit_round ?? '') === auditFilter;
+      return projectMatch && roundMatch;
+    }
+    const itemCondition = (item.condition || '').toLowerCase();
+    const filterCondition = (conditionFilter || 'all').toLowerCase();
+    const conditionMatch = filterCondition === 'all' || itemCondition === filterCondition;
     const statusMatch = statusFilter === 'all' || item.status === statusFilter;
-    return projectMatch && conditionMatch && statusMatch;
+    const query = searchQuery.trim().toLowerCase();
+    const searchMatch =
+      !query ||
+      (item.title || '').toLowerCase().includes(query) ||
+      (item.tree_id || '').toLowerCase().includes(query) ||
+      (item.surveyor || '').toLowerCase().includes(query) ||
+      (item.status || '').toLowerCase().includes(query) ||
+      (item.condition || '').toLowerCase().includes(query) ||
+      (item.id || '').toLowerCase().includes(query);
+    return projectMatch && conditionMatch && statusMatch && searchMatch;
   });
 
   const counts = {
@@ -170,6 +289,22 @@ export default function HistoryScreen() {
     approved: allItems.filter((i) => i.status === 'approved').length,
     rejected: allItems.filter((i) => i.status === 'rejected').length,
   };
+
+  const selectedFilterValue =
+    activeCategory === 'condition'
+      ? conditionFilter
+      : activeCategory === 'status'
+      ? statusFilter
+      : auditFilter;
+  const selectedFilterLabel =
+    selectedFilterValue === 'all'
+      ? ''
+      : (activeCategory === 'condition'
+          ? CONDITION_FILTERS
+          : activeCategory === 'status'
+          ? STATUS_FILTERS
+          : AUDIT_FILTERS
+        ).find((f) => f.value === selectedFilterValue)?.label || '';
 
   const renderFilterChips = () => {
     let filters: { label: string; value: string }[] = [];
@@ -187,17 +322,39 @@ export default function HistoryScreen() {
         selectedValue = statusFilter;
         onPress = setStatusFilter;
         break;
+      case 'audit':
+        filters = AUDIT_FILTERS;
+        selectedValue = auditFilter;
+        onPress = setAuditFilter;
+        break;
     }
 
     return (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
         {filters.map((f) => {
           const active = selectedValue === f.value;
+          const chipColor =
+            activeCategory === 'condition' && f.value !== 'all'
+              ? CONDITION_COLORS[f.value] || '#1a5c2a'
+              : activeCategory === 'status' && f.value !== 'all'
+              ? STATUS_COLORS[f.value] || '#1a5c2a'
+              : activeCategory === 'audit' && f.value !== 'all'
+              ? AUDIT_COLORS[f.value] || '#1a5c2a'
+              : '#1a5c2a';
           return (
             <TouchableOpacity
               key={f.value}
-              style={[styles.chip, active && styles.chipActive]}
-              onPress={() => onPress(f.value)}
+              style={[
+                styles.chip,
+                active && { backgroundColor: chipColor, borderColor: chipColor },
+                !active && f.value !== 'all' && activeCategory === 'condition' && { backgroundColor: CONDITION_COLORS[f.value] + '15', borderColor: CONDITION_COLORS[f.value] + '40' },
+                !active && f.value !== 'all' && activeCategory === 'status' && { backgroundColor: STATUS_COLORS[f.value] + '15', borderColor: STATUS_COLORS[f.value] + '40' },
+                !active && f.value !== 'all' && activeCategory === 'audit' && { backgroundColor: AUDIT_COLORS[f.value] + '15', borderColor: AUDIT_COLORS[f.value] + '40' },
+              ]}
+              onPress={() => {
+                onPress(f.value);
+                setTabsOpen(false);
+              }}
             >
               <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
             </TouchableOpacity>
@@ -208,127 +365,147 @@ export default function HistoryScreen() {
   };
 
   const renderHistoryCard = (item: HistoryItem) => {
-    const statusColor = STATUS_COLORS[item.status || ''] || '#888';
-    const conditionColor = CONDITION_COLORS[item.condition || ''] || '#6b7280';
-    const dateStr = new Date(item.date).toLocaleDateString('en-IN', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
+    const targetTreeId = item.tree_record_id || item.id;
+    const treeAudits = auditsByTree[targetTreeId] || [];
 
     return (
-      <TouchableOpacity
+      <TreeCard
         key={item.id}
-        style={[styles.historyCard, { borderLeftColor: statusColor }]}
-        onPress={() => navigation.navigate('TreeDetail', { treeId: item.id })}
-        activeOpacity={0.7}
-      >
-        {/* Photo */}
-        {item.photo_url ? (
-          <View style={styles.photoWrap}>
-            <Image source={{ uri: item.photo_url }} style={styles.photo} resizeMode="cover" />
-          </View>
-        ) : (
-          <View style={styles.photoWrap}>
-            <View style={styles.photoPlaceholder}>
-              <Text style={styles.photoPlaceholderText}>🌳</Text>
-            </View>
-          </View>
-        )}
-
-        <View style={styles.cardContent}>
-          <View style={styles.cardTop}>
-            <View style={styles.cardTitleWrap}>
-              <Text style={styles.taskId}>ID: {item.id.slice(0, 8).toUpperCase()}</Text>
-              <Text style={styles.taskName} numberOfLines={1}>{item.title}</Text>
-            </View>
-            {/* Status badge on right */}
-            <View style={[styles.statusBadge, { backgroundColor: statusColor + '20', borderColor: statusColor }]}>
-              <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-              <Text style={[styles.statusText, { color: statusColor }]}>{(item.status || '').toUpperCase()}</Text>
-            </View>
-          </View>
-
-          {/* Condition badge */}
-          {item.condition ? (
-            <View style={[styles.conditionBadge, { backgroundColor: conditionColor + '15', borderColor: conditionColor + '40' }]}>
-              <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
-              <Text style={[styles.conditionText, { color: conditionColor }]}>{item.condition}</Text>
-            </View>
-          ) : null}
-
-          {/* Location + Date */}
-          <View style={styles.bottomRow}>
-            {item.latitude && item.longitude ? (
-              <View style={styles.locationBadge}>
-                <Ionicons name="location-outline" size={10} color="#1a5c2a" />
-                <Text style={styles.locationText}>Location</Text>
-              </View>
-            ) : null}
-            <View style={styles.dateRow}>
-              <Ionicons name="calendar-outline" size={10} color="#888" />
-              <Text style={styles.date}>{dateStr}</Text>
-            </View>
-          </View>
-        </View>
-      </TouchableOpacity>
+        tree={{
+          id: targetTreeId,
+          tree_id: item.tree_id,
+          species: item.title,
+          photo_url: item.photo_url || '',
+          latitude: item.latitude || 0,
+          longitude: item.longitude || 0,
+          tree_condition: (item.condition as TreeCondition) || 'Healthy',
+          health_status: 'healthy',
+          submitted_at: item.date,
+          synced: true,
+          locked: item.status === 'approved',
+          user_id: '',
+          surveyor: item.surveyor,
+        }}
+        task={null}
+        status={item.status as any}
+        auditRound={item.audit_round}
+        audits={treeAudits}
+        rejectionNotes={null}
+        displayId={item.tree_id || undefined}
+        showSurveyor={false}
+        onPress={() => {
+          navigation.navigate('TreeDetail', { treeId: targetTreeId });
+        }}
+      />
     );
   };
 
   return (
     <View style={styles.container}>
       {/* Header */}
-      <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={styles.header}>
-        <Ionicons name="leaf" size={20} color="#fff" />
-        <Text style={styles.headerTitle}>HISTORY</Text>
-        <View style={styles.headerCountBadge}>
-          <Text style={styles.headerCountText}>{counts.total}</Text>
+      <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={[styles.header, { paddingTop: Math.max(insets.top + 6, 36) }]}>
+        <View style={styles.headerTop}>
+          <View style={styles.headerCopy}>
+            <View style={styles.titleRow}>
+              <Text style={styles.headerTitle}>Find a tree</Text>
+              <Text style={styles.selectionInline} numberOfLines={1}>
+                {CATEGORIES.find((cat) => cat.key === activeCategory)?.label}
+                {selectedFilterLabel ? ` · ${selectedFilterLabel}` : ' · All'}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.countOrb}>
+            <Text style={styles.countNumber}>{counts.total}</Text>
+            <Text style={styles.countCaption}>matches</Text>
+          </View>
+        </View>
+        <View style={styles.searchRow}>
+          <View style={styles.searchBar}>
+            <Ionicons name="search" size={20} color="#1a5c2a" />
+            <TextInput
+              style={styles.searchInput}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="ID, species, or surveyor"
+              placeholderTextColor="#6b7280"
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+              accessibilityLabel="Search trees"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setSearchQuery('')}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+              >
+                <Ionicons name="close-circle" size={20} color="#6b7280" />
+              </TouchableOpacity>
+            )}
+          </View>
+          <TouchableOpacity
+            style={[styles.tabsButton, tabsOpen && styles.tabsButtonOpen]}
+            onPress={() => setTabsOpen((open) => !open)}
+            accessibilityRole="button"
+            accessibilityLabel="Show search filters"
+            accessibilityState={{ expanded: tabsOpen }}
+          >
+            <Ionicons name="options" size={22} color={tabsOpen ? '#1a5c2a' : '#fff'} />
+          </TouchableOpacity>
         </View>
       </LinearGradient>
 
-      {/* Category Tabs */}
-      <View style={styles.categoryBar}>
-        {CATEGORIES.map((cat) => {
-          const active = activeCategory === cat.key;
-          return (
-            <TouchableOpacity
-              key={cat.key}
-              style={[styles.categoryBtn, active && styles.categoryBtnActive]}
-              onPress={() => handleCategoryChange(cat.key)}
-            >
-              <Ionicons name={cat.icon as any} size={14} color={active ? '#fff' : '#1a5c2a'} />
-              <Text style={[styles.categoryText, active && styles.categoryTextActive]}>{cat.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* Filter Chips */}
-      <View style={styles.chipBar}>
-        {renderFilterChips()}
-      </View>
-
-      {/* Count */}
-      <Text style={styles.count}>{filtered.length} record{filtered.length !== 1 ? 's' : ''}</Text>
+      {tabsOpen && (
+        <View style={styles.filterSheet}>
+          <Text style={styles.sheetLabel}>LOOK BY</Text>
+          <View style={styles.tabMenu}>
+            {CATEGORIES.map((cat) => {
+              const active = activeCategory === cat.key;
+              return (
+                <TouchableOpacity
+                  key={cat.key}
+                  style={[styles.categoryBtn, active && styles.categoryBtnActive]}
+                  onPress={() => handleCategoryChange(cat.key)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Ionicons name={cat.icon as any} size={16} color={active ? '#fff' : '#1a5c2a'} />
+                  <Text style={[styles.categoryText, active && styles.categoryTextActive]}>{cat.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <Text style={styles.sheetLabel}>THEN NARROW</Text>
+          <View style={styles.chipBar}>
+            {renderFilterChips()}
+          </View>
+        </View>
+      )}
 
       {/* List */}
       <FlatList
         data={filtered}
         keyExtractor={(item) => `${item.type}-${item.id}`}
         renderItem={({ item }) => renderHistoryCard(item)}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 96 }]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a5c2a" />
         }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>🌱</Text>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="search" size={28} color="#1a5c2a" />
+            </View>
             <Text style={styles.emptyText}>No records found</Text>
             <Text style={styles.emptySubText}>
-              {conditionFilter !== 'all' || statusFilter !== 'all'
+              {searchQuery.trim()
+                ? 'No trees match that search'
+                : conditionFilter !== 'all' || statusFilter !== 'all' || auditFilter !== 'all'
                 ? 'Try a different filter'
-                : 'Your work history will appear here'}
+                : activeCategory === 'audit'
+                ? 'Your audit records will appear here'
+                : 'Search by tree ID, species, or surveyor'}
             </Text>
           </View>
         }
@@ -338,40 +515,144 @@ export default function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: '#f0f4f1' },
   header: {
+    paddingBottom: 12,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingTop: 48,
-    paddingBottom: 14,
-    paddingHorizontal: 16,
+    justifyContent: 'space-between',
+    marginBottom: 10,
   },
-  headerTitle: {
-    fontSize: 19,
-    fontWeight: 'bold',
-    color: '#fff',
-    flex: 1,
+  headerCopy: { flex: 1, paddingRight: 12 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
   },
-  headerCountBadge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 7.5,
-  },
-  headerCountText: {
-    color: '#fff',
+  selectionInline: {
+    flexShrink: 1,
+    color: 'rgba(255,255,255,0.8)',
     fontSize: 12,
     fontWeight: '700',
   },
-  categoryBar: {
+  kicker: {
+    color: '#F09125',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    marginBottom: 1,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: -0.3,
+  },
+  countOrb: {
+    minWidth: 58,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 14,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  countNumber: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  countCaption: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  searchBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#123f24',
+    paddingVertical: 0,
+  },
+  tabsButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  tabsButtonOpen: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#F09125',
+  },
+  sheetHead: {
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  selectionPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  selectionText: {
+    color: '#1a5c2a',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  filterSheet: {
+    marginHorizontal: 20,
+    marginTop: 12,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    paddingTop: 14,
+    paddingBottom: 6,
+    borderWidth: 1,
+    borderColor: '#E8F5E9',
+    elevation: 6,
+    shadowColor: '#1a5c2a',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+  },
+  sheetLabel: {
+    marginLeft: 16,
+    marginBottom: 8,
+    color: '#6b7280',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+  },
+  tabMenu: {
     flexDirection: 'row',
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 6,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    paddingBottom: 12,
+    gap: 8,
   },
   categoryBtn: {
     flex: 1,
@@ -380,7 +661,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
     paddingVertical: 8,
-    borderRadius: 7.5,
+    borderRadius: 12,
     backgroundColor: '#E8F5E9',
   },
   categoryBtnActive: {
@@ -388,7 +669,7 @@ const styles = StyleSheet.create({
   },
   categoryText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#1a5c2a',
   },
   categoryTextActive: {
@@ -396,71 +677,67 @@ const styles = StyleSheet.create({
   },
   chipBar: {
     backgroundColor: '#fff',
-    paddingBottom: 10,
+    paddingBottom: 12,
   },
   chipScroll: {
     paddingHorizontal: 16,
     gap: 8,
   },
   chip: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 7.5,
-    backgroundColor: '#f3f4f6',
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
+    borderRadius: 12,
+    backgroundColor: '#E8F5E9',
   },
   chipActive: {
     backgroundColor: '#1a5c2a',
-    borderColor: '#1a5c2a',
   },
   chipText: {
     fontSize: 12,
     color: '#555',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   chipTextActive: {
     color: '#fff',
-    fontWeight: '700',
+    fontWeight: '800',
   },
-  count: { fontSize: 12, color: '#888', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 },
-  list: { padding: 16, paddingTop: 8 },
+  list: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 100 },
 
-  // History card
   historyCard: {
     backgroundColor: '#fff',
-    borderRadius: 7.5,
-    marginBottom: 10,
+    borderRadius: 14,
+    marginBottom: 12,
     overflow: 'hidden',
-    elevation: 2,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
     flexDirection: 'row',
     borderLeftWidth: 3,
     borderLeftColor: '#22c55e',
-    padding: 10,
+    padding: 12,
   },
   photoWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 7.5,
+    width: 90,
+    height: 90,
+    borderRadius: 14,
     overflow: 'hidden',
-    marginRight: 12,
+    marginRight: 14,
   },
   photo: {
-    width: 80,
-    height: 80,
+    width: 90,
+    height: 90,
   },
   photoPlaceholder: {
-    width: 80,
-    height: 80,
+    width: 90,
+    height: 90,
     backgroundColor: '#e8f5e9',
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 14,
   },
-  photoPlaceholderText: { fontSize: 32 },
+  photoPlaceholderText: { fontSize: 36 },
   cardContent: {
     flex: 1,
   },
@@ -468,7 +745,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   cardTitleWrap: {
     flex: 1,
@@ -476,22 +753,27 @@ const styles = StyleSheet.create({
   },
   taskId: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#999',
     marginBottom: 2,
   },
+  taskIdValue: {
+    color: '#1a5c2a',
+    fontFamily: 'monospace',
+    fontWeight: '800',
+  },
   taskName: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#222',
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 7.5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
     borderWidth: 1,
   },
   statusDot: {
@@ -501,18 +783,18 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 9,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   conditionBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 7.5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
     borderWidth: 1,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   conditionDot: {
     width: 6,
@@ -521,7 +803,7 @@ const styles = StyleSheet.create({
   },
   conditionText: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   bottomRow: {
     flexDirection: 'row',
@@ -535,12 +817,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8F5E9',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 7.5,
+    borderRadius: 14,
   },
   locationText: {
     fontSize: 10,
     color: '#1a5c2a',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   dateRow: {
     flexDirection: 'row',
@@ -552,8 +834,16 @@ const styles = StyleSheet.create({
     color: '#888',
   },
 
-  empty: { alignItems: 'center', paddingVertical: 60 },
-  emptyEmoji: { fontSize: 48, marginBottom: 12 },
-  emptyText: { fontSize: 16, fontWeight: '600', color: '#555' },
+  empty: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 28 },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#E8F5E9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  emptyText: { fontSize: 18, fontWeight: '800', color: '#1a5c2a' },
   emptySubText: { fontSize: 13, color: '#888', marginTop: 4 },
 });

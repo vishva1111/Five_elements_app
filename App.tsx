@@ -1,31 +1,37 @@
 import 'react-native-url-polyfill/auto';
 import React, { useEffect, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import { StyleSheet, View, ActivityIndicator, Text, Image, AppState } from 'react-native';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
+import { createBottomTabNavigator, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { supabase } from './src/services/supabase';
+import { AppDialogHost, setWorkReportUser } from './src/services/appDialog';
 import { useAuthStore } from './src/store/authStore';
 import { useTreeStore } from './src/store/treeStore';
 import { useQueueStore } from './src/store/queueStore';
 import { fetchUserProfile, fetchMyTrees, fetchUserProjects, fetchAllProjects, buildUserFromProfile, computeCreditsForProject, INITIAL_CREDITS, getCachedUserProjects, cacheUserProjects } from './src/services/treeService';
 import { getCachedActiveProject } from './src/store/authStore';
 import logo from './src/assets/logo.png';
+import FloatingTabBar from './src/components/FloatingTabBar';
 
 // Screens
 import LoginScreen from './src/screens/Auth/LoginScreen';
 import HomeScreen from './src/screens/Home/HomeScreen';
+import ProjectSelectScreen from './src/screens/Home/ProjectSelectScreen';
+import NotificationHistoryScreen from './src/screens/Home/NotificationHistoryScreen';
 import CaptureScreen from './src/screens/Capture/CaptureScreen';
 import MapPickerScreen from './src/screens/Capture/MapPickerScreen';
 import TreeFormScreen from './src/screens/Capture/TreeFormScreen';
 import SubmitSuccessScreen from './src/screens/Capture/SubmitSuccessScreen';
+
 import HistoryScreen from './src/screens/History/HistoryScreen';
 import TreeDetailScreen from './src/screens/History/TreeDetailScreen';
+import UpdateTreeScreen from './src/screens/History/UpdateTreeScreen';
+import EditTreeScreen from './src/screens/History/EditTreeScreen';
 import ProfileScreen from './src/screens/Profile/ProfileScreen';
 import TaskScreen from './src/screens/Task/TaskScreen';
 import TreeMapScreen from './src/screens/Map/TreeMapScreen';
@@ -68,29 +74,51 @@ function HistoryNavigator() {
         headerTitleAlign: 'center',
       }}
     >
-      <HistoryStack.Screen name="HistoryList" component={HistoryScreen} options={{ title: 'MY SUBMISSIONS', headerShown: false }} />
+      <HistoryStack.Screen name="HistoryList" component={HistoryScreen} options={{ title: 'SEARCH', headerShown: false }} />
       <HistoryStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS', headerShown: false }} />
+      <HistoryStack.Screen name="UpdateTree" component={UpdateTreeScreen} options={{ title: 'AUDIT TREE', headerShown: false }} />
+      <HistoryStack.Screen name="EditTree" component={EditTreeScreen} options={{ title: 'EDIT TREE', headerShown: false }} />
+      <HistoryStack.Screen name="Map" component={TreeMapScreen} options={{ title: 'MAP', headerShown: false }} />
     </HistoryStack.Navigator>
   );
 }
 
-function MainTabs() {
-  const insets = useSafeAreaInsets();
-  const pendingCaptures = useQueueStore((s) => s.pending);
-  const refreshQueue = useQueueStore((s) => s.refresh);
-  const drainQueue = useQueueStore((s) => s.drain);
+const HIDE_TAB_BAR_SCREENS = new Set([
+  'TreeDetail',
+  'Map',
+  'UpdateTree',
+  'EditTree',
+]);
+
+function shouldHideTabBar(state: { index: number; routes: { name: string; state?: { index?: number } }[] }) {
+  const route = state.routes[state.index];
+  const focusedName = getFocusedRouteNameFromRoute(route as any);
+  const routeIndex = route?.state?.index;
+  return Boolean(
+    (focusedName && HIDE_TAB_BAR_SCREENS.has(focusedName)) ||
+    (typeof routeIndex === 'number' && routeIndex > 0)
+  );
+}
+
+function SwipeTabBar({
+  onSync,
+  ...props
+}: BottomTabBarProps & {
+  onSync: (state: BottomTabBarProps['state'], navigation: BottomTabBarProps['navigation']) => void;
+}) {
+  const onSyncRef = useRef(onSync);
+  onSyncRef.current = onSync;
 
   useEffect(() => {
-    // Read the queue on mount, then again whenever the app returns to the
-    // foreground — with no connectivity listener in this build, that is the
-    // most reliable moment to discover signal has come back (P5-02).
-    refreshQueue();
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') drainQueue();
-    });
-    return () => sub.remove();
-  }, [refreshQueue, drainQueue]);
+    onSyncRef.current(props.state, props.navigation);
+  }, [props.state, props.navigation]);
 
+  if (shouldHideTabBar(props.state)) return null;
+  return <FloatingTabBar {...props} />;
+}
+
+function MainTabs() {
+  const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -100,7 +128,6 @@ function MainTabs() {
           else if (route.name === 'Map') iconName = focused ? 'map' : 'map-outline';
           else if (route.name === 'Task') iconName = focused ? 'clipboard' : 'clipboard-outline';
           else if (route.name === 'History') iconName = focused ? 'list' : 'list-outline';
-          else if (route.name === 'Sync') iconName = focused ? 'cloud-upload' : 'cloud-upload-outline';
           else if (route.name === 'Profile') iconName = focused ? 'person' : 'person-outline';
           return (
             <View style={{
@@ -118,7 +145,6 @@ function MainTabs() {
             Home: 'Home',
             Map: 'Map',
             Task: 'Tasks',
-            Sync: 'Sync',
             History: 'History',
             Profile: 'Profile',
           };
@@ -161,17 +187,6 @@ function MainTabs() {
       <Tab.Screen name="Home" component={HomeScreen} options={{ headerShown: false, title: 'DASHBOARD' }} />
       <Tab.Screen name="Map" component={TreeMapScreen} options={{ headerShown: false, title: 'MAP' }} />
       <Tab.Screen name="Task" component={TaskScreen} options={{ headerShown: false, title: 'TASKS' }} />
-      <Tab.Screen
-        name="Sync"
-        component={SyncQueueScreen}
-        options={{
-          headerShown: false,
-          title: 'SYNC QUEUE',
-          // The queue count is always visible, from every tab (P4-06, PG-02).
-          tabBarBadge: pendingCaptures > 0 ? pendingCaptures : undefined,
-          tabBarBadgeStyle: { backgroundColor: '#F09125', color: '#fff', fontWeight: '700' },
-        }}
-      />
       <Tab.Screen name="History" component={HistoryNavigator} options={{ headerShown: false, title: 'HISTORY' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false, title: 'PROFILE' }} />
     </Tab.Navigator>
@@ -270,6 +285,7 @@ export default function App() {
         loadUserData(s.user.id, s.user.email ?? '')
           .then(({ user, projects, initialActiveProjectId }) => {
             setUser(user);
+            setWorkReportUser(user?.full_name || user?.email || 'Field user');
             // While the user is still choosing projects on the login screen,
             // do NOT overwrite the selection they are about to confirm there —
             // the login screen owns project assignment until it clears the flag
@@ -313,8 +329,9 @@ export default function App() {
   if (session === undefined) {
     return (
       <View style={styles.loading}>
+        <StatusBar style="dark" />
         <Image source={logo} style={styles.loadingLogo} resizeMode="contain" />
-        <ActivityIndicator size="large" color="#1a5c2a" style={{ marginTop: 20 }} />
+        <ActivityIndicator size="large" color="#1a5c2a" style={{ marginTop: 24 }} />
         <Text style={styles.loadingText}>Five Elements</Text>
       </View>
     );
@@ -332,12 +349,18 @@ export default function App() {
               ) : (
                 <>
                   <RootStack.Screen name="Main" component={MainTabs} />
+                  <RootStack.Screen name="ProjectSelect" component={ProjectSelectScreen} options={{ headerShown: false }} />
+                  <RootStack.Screen name="Notifications" component={NotificationHistoryScreen} options={{ headerShown: false }} />
                   <RootStack.Screen name="Capture" component={CaptureNavigator} />
                   <RootStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS' }} />
+                  <RootStack.Screen name="UpdateTree" component={UpdateTreeScreen} options={{ title: 'AUDIT TREE', headerShown: false }} />
+                  <RootStack.Screen name="EditTree" component={EditTreeScreen} options={{ title: 'EDIT TREE', headerShown: false }} />
+                  <RootStack.Screen name="Map" component={TreeMapScreen} options={{ title: 'MAP', headerShown: false }} />
                 </>
               )}
             </RootStack.Navigator>
           </NavigationContainer>
+          <AppDialogHost />
         </PaperProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
@@ -350,17 +373,18 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#ffffff',
   },
   loadingLogo: {
-    width: 120,
-    height: 120,
+    width: 140,
+    height: 140,
     marginBottom: 8,
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 20,
-    fontWeight: 'bold',
+    marginTop: 14,
+    fontSize: 22,
+    fontWeight: '700',
     color: '#1a5c2a',
+    letterSpacing: 1.2,
   },
 });

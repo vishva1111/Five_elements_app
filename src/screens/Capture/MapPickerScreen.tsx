@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -13,7 +14,9 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CaptureStackParamList, Coordinates } from '../../types';
+import { recordTreeLocation, ACCURACY_THRESHOLD_M, COLLECTION_WINDOW_MS, MIN_VALID_READINGS } from '../../services/treeLocationService';
 import {
   getMapboxToken,
   MAPBOX_GL_JS_CDN,
@@ -44,8 +47,8 @@ html,body,#map{margin:0;padding:0;width:100%;height:100%;}
 <body>
 <div id="map"></div>
 <script>
-var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([${lat},${lng}],15);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+var map=L.map('map',{zoomControl:false,attributionControl:false,maxZoom:22}).setView([${lat},${lng}],16);
+L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{maxZoom:22,maxNativeZoom:20,attribution:'© Google Satellite'}).addTo(map);
 var marker=L.marker([${lat},${lng}],{draggable:true}).addTo(map);
 marker.on('dragend',function(e){
   var p=e.target.getLatLng();
@@ -59,14 +62,16 @@ window.moveTo=function(lat,lng){
   map.setView([lat,lng],18);
   marker.setLatLng([lat,lng]);
 };
-window.addEventListener('message',function(e){
+function handleMoveEvent(d){
   try{
-    var d=JSON.parse(e.data);
-    if(d.action==='move'&&d.lat!==undefined&&d.lng!==undefined){
+    if(d&&d.action==='move'&&d.lat!==undefined&&d.lng!==undefined){
       window.moveTo(d.lat,d.lng);
     }
   }catch(err){}
-});
+}
+window.addEventListener('message',function(e){handleMoveEvent(e.data);});
+document.addEventListener('message',function(e){handleMoveEvent(e.data);});
+try{window.ReactNativeWebView.postMessage(JSON.stringify({type:'ready'}));}catch(e){}
 </script>
 </body>
 </html>`;
@@ -113,14 +118,15 @@ window.moveTo=function(lat,lng){
   map.jumpTo({center:[lng,lat],zoom:18});
   marker.setLngLat([lng,lat]);
 };
-window.addEventListener('message',function(e){
+function handleMoveEvent(d){
   try{
-    var d=JSON.parse(e.data);
-    if(d.action==='move'&&d.lat!==undefined&&d.lng!==undefined){
+    if(d&&d.action==='move'&&d.lat!==undefined&&d.lng!==undefined){
       window.moveTo(d.lat,d.lng);
     }
   }catch(err){}
-});
+}
+window.addEventListener('message',function(e){handleMoveEvent(e.data);});
+document.addEventListener('message',function(e){handleMoveEvent(e.data);});
 map.on('load',function(){post({type:'ready'});});
 </script>
 </body>
@@ -128,129 +134,193 @@ map.on('load',function(){post({type:'ready'});});
 }
 
 export default function MapPickerScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const { photoUri } = route.params;
+  const { photoUris } = route.params;
 
   const [coords, setCoords] = useState<Coordinates | null>(null);
-  const [locating, setLocating] = useState(false);
+  const [capturing, setCapturing] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [gnssError, setGnssError] = useState<string | null>(null);
+  const [resultAccuracy, setResultAccuracy] = useState<number | null>(null);
+  const [resultSamples, setResultSamples] = useState(0);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const webViewRef = useRef<WebView>(null);
   const mountedRef = useRef(true);
 
+  // Android dispatches RN→web `postMessage` on `document` while iOS uses
+  // `window`, so drive the map with injectJavaScript (works on both).
+  const pendingMoveRef = useRef<{ lat: number; lng: number } | null>(null);
+  const moveMapTo = useCallback((lat: number, lng: number) => {
+    pendingMoveRef.current = { lat, lng };
+    webViewRef.current?.injectJavaScript(
+      `if(window.moveTo){window.moveTo(${lat},${lng});} true;`
+    );
+  }, []);
+
+  // ── Auto-start GNSS capture on mount ───────────────────────────────────
   useEffect(() => {
     mountedRef.current = true;
-    requestPermissionAndGetLocation();
+    startGNSSCapture();
     return () => { mountedRef.current = false; };
   }, []);
 
-  const requestPermissionAndGetLocation = async () => {
-    if (mountedRef.current) setLocating(true);
+  const startGNSSCapture = useCallback(async () => {
+    if (!mountedRef.current) return;
+    setCapturing(true);
+    setGnssError(null);
+    setResultAccuracy(null);
+    setResultSamples(0);
+    setProgress('Requesting location permission…');
 
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-
-      if (status !== 'granted') {
-        if (mountedRef.current) {
-          setHasPermission(false);
-          setLocating(false);
-        }
-        return;
-      }
-
-      if (mountedRef.current) setHasPermission(true);
-
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
+      const point = await recordTreeLocation((text) => {
+        if (mountedRef.current) setProgress(text);
       });
 
-      const result: Coordinates = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        accuracy: location.coords.accuracy ?? undefined,
-      };
-
-      if (mountedRef.current) {
-        setCoords(result);
-        setLocating(false);
-      }
-
-      webViewRef.current?.postMessage(
-        JSON.stringify({ action: 'move', lat: result.latitude, lng: result.longitude })
-      );
-    } catch (err) {
-      if (mountedRef.current) setLocating(false);
-    }
-  };
-
-  const handleRelocate = async () => {
-    if (locating) return;
-    setLocating(true);
-
-    try {
-      const { status } = await Location.getForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        const { status: newStatus } = await Location.requestForegroundPermissionsAsync();
-        if (newStatus !== 'granted') {
-          setHasPermission(false);
-          setLocating(false);
-          Alert.alert(
-            'Location Permission',
-            'Please enable location permission in device Settings > Apps > Five Elements > Permissions > Location.',
-          );
-          return;
-        }
-      }
-
-      setHasPermission(true);
-
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
+      if (!mountedRef.current) return;
 
       const result: Coordinates = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        accuracy: location.coords.accuracy ?? undefined,
+        latitude: point.latitude,
+        longitude: point.longitude,
+        accuracy: point.accuracy,
       };
 
       setCoords(result);
-      setLocating(false);
+      setResultAccuracy(point.accuracy);
+      setResultSamples(point.sampleCount);
+      setCapturing(false);
+      setProgress('');
 
-      webViewRef.current?.postMessage(
-        JSON.stringify({ action: 'move', lat: result.latitude, lng: result.longitude })
-      );
-    } catch (err) {
-      setLocating(false);
-      Alert.alert(
-        'GPS Error',
-        'Could not get your location. Please make sure GPS is turned on in device settings and try again.',
-      );
+      moveMapTo(point.latitude, point.longitude);
+    } catch (err: any) {
+      if (!mountedRef.current) return;
+      const msg = err?.message ?? 'GNSS capture failed';
+      setGnssError(msg);
+      setCapturing(false);
+      setProgress('');
     }
-  };
+  }, [moveMapTo]);
+
+  const handleRetake = useCallback(() => {
+    setCoords(null);
+    setResultAccuracy(null);
+    setResultSamples(0);
+    setGnssError(null);
+    startGNSSCapture();
+  }, [startGNSSCapture]);
+
+  const startGPSFallback = useCallback(async () => {
+    if (!mountedRef.current) return;
+    setCapturing(true);
+    setGnssError(null);
+    setResultAccuracy(null);
+    setResultSamples(0);
+    setProgress('Fetching GPS location…');
+
+    try {
+      if (Platform.OS === 'android') {
+        try {
+          const providerStatus = await Location.getProviderStatusAsync();
+          if (!providerStatus.locationServicesEnabled) {
+            await Location.enableNetworkProviderAsync();
+          }
+        } catch {}
+      }
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        throw new Error('Location permission denied');
+      }
+
+      // Fast-path: check last known position first
+      let locationCoords: { latitude: number; longitude: number; accuracy?: number | null } | null = null;
+      try {
+        const lastKnown = await Location.getLastKnownPositionAsync({});
+        if (lastKnown?.coords) {
+          locationCoords = lastKnown.coords;
+        }
+      } catch {}
+
+      if (!locationCoords) {
+        try {
+          const loc = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          locationCoords = loc.coords;
+        } catch {
+          const low = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Low,
+          });
+          locationCoords = low.coords;
+        }
+      }
+
+      if (!mountedRef.current) return;
+
+      if (!locationCoords) {
+        throw new Error('Unable to obtain GPS location');
+      }
+
+      const result: Coordinates = {
+        latitude: locationCoords.latitude,
+        longitude: locationCoords.longitude,
+        accuracy: locationCoords.accuracy ?? undefined,
+      };
+
+      setCoords(result);
+      setResultAccuracy(locationCoords.accuracy ?? null);
+      setResultSamples(0);
+      setCapturing(false);
+      setProgress('');
+
+      moveMapTo(result.latitude, result.longitude);
+    } catch (err: any) {
+      if (!mountedRef.current) return;
+      setGnssError(err?.message ?? 'GPS fetch failed');
+      setCapturing(false);
+      setProgress('');
+    }
+  }, [moveMapTo]);
 
   const handleWebViewMessage = useCallback((event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === 'ready') {
+        const pending = pendingMoveRef.current;
+        if (pending) moveMapTo(pending.lat, pending.lng);
+        return;
+      }
       if (data.lat !== undefined && data.lng !== undefined) {
-        setCoords({ latitude: data.lat, longitude: data.lng });
+        setCoords({ latitude: data.lat, longitude: data.lng, accuracy: resultAccuracy ?? undefined });
+        setResultAccuracy(null);
+        setResultSamples(0);
       }
     } catch {}
-  }, []);
+  }, [resultAccuracy, moveMapTo]);
 
   const handleConfirm = () => {
     if (!coords) {
-      Alert.alert('Location Required', 'Tap "My Location" or tap on the map first.');
+      Alert.alert('Location Required', 'Wait for GNSS/GPS capture to finish or tap on the map.');
       return;
     }
-    navigation.navigate('TreeForm', { photoUri, coords });
+    navigation.navigate('TreeForm', { photoUris, coords });
   };
 
-  const mapCoords = coords ?? DEFAULT_COORDS;
+  // The HTML is built once: every later move is pushed into the page with
+  // injectJavaScript, so the WebView never reloads (a reload drops the marker).
+  const mapSource = useMemo(
+    () => ({ html: buildMapHtml(DEFAULT_COORDS.latitude, DEFAULT_COORDS.longitude) }),
+    []
+  );
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={styles.header}>
+      <LinearGradient
+        colors={['#123f24', '#1a5c2a', '#2e7d43']}
+        style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 8 }]}
+      >
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -260,49 +330,88 @@ export default function MapPickerScreen() {
 
       <WebView
         ref={webViewRef}
-        source={{ html: buildMapHtml(mapCoords.latitude, mapCoords.longitude) }}
+        source={mapSource}
         style={styles.map}
         onMessage={handleWebViewMessage}
         javaScriptEnabled={true}
       />
 
-      <View style={styles.bottomPanel}>
+      <View style={[styles.bottomPanel, { paddingBottom: Math.max(insets.bottom, 16) + 16 }]}>
+        {/* Live capture progress */}
+        {capturing && (
+          <View style={styles.progressBox}>
+            <ActivityIndicator color="#1a5c2a" size="small" />
+            <Text style={styles.progressText}>{progress}</Text>
+          </View>
+        )}
+
+        {/* GNSS error */}
+        {gnssError && !capturing && (
+          <View style={styles.errorBox}>
+            <View style={styles.errorRow}>
+              <Ionicons name="alert-circle" size={18} color="#ef4444" />
+              <Text style={styles.errorText}>{gnssError}</Text>
+            </View>
+            <View style={styles.errorActions}>
+              <TouchableOpacity style={styles.retryBtn} onPress={handleRetake} activeOpacity={0.7}>
+                <Ionicons name="refresh" size={14} color="#1a5c2a" />
+                <Text style={styles.retryBtnText}>Retry GNSS</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.gpsFallbackBtn} onPress={startGPSFallback} activeOpacity={0.7}>
+                <Ionicons name="navigate" size={14} color="#fff" />
+                <Text style={styles.gpsFallbackText}>Use GPS</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Coordinates + accuracy display */}
         <View style={styles.coordsBox}>
           <Text style={styles.coordsLabel}>Selected Coordinates</Text>
           <Text style={styles.coordsValue}>
             {coords
               ? `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`
-              : 'Tap "My Location" or tap on map'}
+              : 'Starting GNSS capture… (tap map to set manually)'}
           </Text>
-          {coords?.accuracy && (
-            <Text style={styles.accuracyText}>Accuracy: ~{Math.round(coords.accuracy)}m</Text>
+          {resultAccuracy !== null && (
+            <View style={styles.accuracyRow}>
+              <Ionicons name="checkmark-circle" size={14} color="#22c55e" />
+              <Text style={styles.accuracyGood}>
+                GNSS accuracy: ±{resultAccuracy.toFixed(1)}m ({resultSamples} samples)
+              </Text>
+            </View>
+          )}
+          {coords?.accuracy != null && resultAccuracy === null && (
+            <Text style={styles.accuracyText}>
+              Accuracy: ~{Math.round(coords.accuracy)}m (drag map to adjust)
+            </Text>
           )}
         </View>
 
+        {/* Action buttons */}
         <View style={styles.btnRow}>
-          <TouchableOpacity
-            style={[styles.relocateBtn, locating && styles.btnDisabled]}
-            onPress={handleRelocate}
-            disabled={locating}
-          >
-            {locating ? (
-              <ActivityIndicator color="#1a5c2a" size="small" />
-            ) : (
-              <Ionicons name="locate" size={20} color="#1a5c2a" />
-            )}
-            <Text style={styles.relocateBtnText}>
-              {locating ? 'Locating...' : 'My Location'}
-            </Text>
-          </TouchableOpacity>
+          {capturing ? (
+            <View style={[styles.confirmBtn, styles.btnDisabled]}>
+              <ActivityIndicator color="#fff" size="small" />
+              <Text style={styles.confirmBtnText}>Capturing…</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.confirmBtn, !coords && styles.btnDisabled]}
+              onPress={handleConfirm}
+              disabled={!coords}
+            >
+              <Text style={styles.confirmBtnText}>Confirm Location</Text>
+              <Ionicons name="arrow-forward" size={18} color="#fff" />
+            </TouchableOpacity>
+          )}
 
-          <TouchableOpacity
-            style={[styles.confirmBtn, !coords && styles.btnDisabled]}
-            onPress={handleConfirm}
-            disabled={!coords}
-          >
-            <Text style={styles.confirmBtnText}>Confirm Location</Text>
-            <Ionicons name="arrow-forward" size={18} color="#fff" />
-          </TouchableOpacity>
+          {!capturing && (
+            <TouchableOpacity style={styles.retakeBtn} onPress={handleRetake}>
+              <Ionicons name="refresh" size={18} color="#1a5c2a" />
+              <Text style={styles.retakeBtnText}>Recapture</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </View>
@@ -318,42 +427,100 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     paddingBottom: 14,
     paddingHorizontal: 16,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
-  backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { color: '#fff', fontSize: 19, fontWeight: '700', textTransform: 'uppercase', textAlign: 'center', flex: 1 },
+  backBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: { color: '#fff', fontSize: 19, fontWeight: '800', textTransform: 'uppercase', textAlign: 'left', flex: 1, marginLeft: 10, letterSpacing: 0.5 },
   map: { flex: 1 },
   bottomPanel: {
     backgroundColor: '#fff',
     padding: 20,
     paddingBottom: 36,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    elevation: 8,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    elevation: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
   },
-  coordsBox: {
+  progressBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     backgroundColor: '#f0fdf4',
-    borderRadius: 7.5,
-    padding: 12,
+    borderRadius: 14,
+    padding: 14,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: '#bbf7d0',
   },
-  coordsLabel: { fontSize: 11, color: '#888', marginBottom: 4 },
-  coordsValue: { fontSize: 14, fontWeight: '600', color: '#1a5c2a', fontFamily: 'monospace' },
-  accuracyText: { fontSize: 11, color: '#888', marginTop: 4 },
-  btnRow: { flexDirection: 'row', gap: 12 },
-  relocateBtn: {
+  progressText: { fontSize: 13, fontWeight: '600', color: '#1a5c2a', flex: 1 },
+  errorBox: {
+    backgroundColor: '#FEF0E3',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#fde047',
+  },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  errorText: { fontSize: 13, fontWeight: '500', color: '#ef4444', flex: 1 },
+  errorActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  retryBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: '#1a5c2a',
-    borderRadius: 7.5,
-    paddingVertical: 14,
+    borderRadius: 10,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
   },
-  relocateBtnText: { color: '#1a5c2a', fontWeight: '600', fontSize: 14 },
+  retryBtnText: { fontSize: 13, fontWeight: '700', color: '#1a5c2a' },
+  gpsFallbackBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#F09125',
+    borderRadius: 10,
+    paddingVertical: 10,
+  },
+  gpsFallbackText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  coordsBox: {
+    backgroundColor: '#f0fdf4',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  coordsLabel: { fontSize: 11, color: '#888', marginBottom: 4, fontWeight: '600' },
+  coordsValue: { fontSize: 14, fontWeight: '700', color: '#1a5c2a', fontFamily: 'monospace' },
+  accuracyRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  accuracyGood: { fontSize: 12, fontWeight: '700', color: '#22c55e' },
+  accuracyText: { fontSize: 11, color: '#888', marginTop: 4 },
+  btnRow: { flexDirection: 'row', gap: 12 },
   confirmBtn: {
     flex: 2,
     flexDirection: 'row',
@@ -361,9 +528,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: '#1a5c2a',
-    borderRadius: 7.5,
-    paddingVertical: 14,
+    borderRadius: 14,
+    paddingVertical: 15,
+    elevation: 4,
+    shadowColor: '#1a5c2a',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
   },
-  confirmBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  confirmBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  retakeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 2,
+    borderColor: '#1a5c2a',
+    borderRadius: 14,
+    paddingVertical: 15,
+  },
+  retakeBtnText: { color: '#1a5c2a', fontWeight: '700', fontSize: 14 },
   btnDisabled: { opacity: 0.5 },
 });

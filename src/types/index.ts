@@ -159,9 +159,7 @@ export type CaptureStackParamList = {
   CaptureCamera: undefined;
   MapPicker: { photoUri: string; initialCoords?: Coordinates };
   TreeForm: { photoUri: string; coords: Coordinates };
-  /** `queued` marks a capture saved on-device but not yet confirmed by the server. */
-  SubmitSuccess: { treeId: string; queued?: boolean };
-  SyncQueue: undefined;
+  SubmitSuccess: { treeId: string };
 };
 
 export type HistoryStackParamList = {

@@ -43,22 +43,6 @@ async function attachProjectName(tree: TreeRecord): Promise<TreeRecord> {
   return enriched;
 }
 
-// ─── Run a tree_records query with the projects(name) join, falling back to a
-// plain select if the join fails (e.g. the projects table isn't set up yet) ────
-async function withProjectJoinFallback<T>(
-  buildQuery: (selectClause: string) => PromiseLike<{ data: T | null; error: any }>
-): Promise<{ data: T | null; error: any }> {
-  let { data, error } = await buildQuery('*, projects(name)');
-
-  if (error) {
-    const retry = await buildQuery('*');
-    data = retry.data;
-    error = retry.error;
-  }
-
-  return { data, error };
-}
-
 // ─── Insert a new tree record ──────────────────────────────────────────────────
 export async function insertTreeRecord(
   record: TreeRecordInsert
@@ -126,13 +110,23 @@ export async function insertTreeRecord(
 export async function fetchMyTrees(
   userId: string
 ): Promise<ApiResponse<TreeRecord[]>> {
-  const { data, error } = await withProjectJoinFallback<any[]>((select) =>
-    supabase
+  // Try with project join first; fall back to plain select if join fails
+  let { data, error } = await supabase
+    .from('tree_records')
+    .select('*, projects(name)')
+    .eq('user_id', userId)
+    .order('submitted_at', { ascending: false });
+
+  if (error) {
+    // Retry without the join (projects table may not exist yet)
+    const retry = await supabase
       .from('tree_records')
-      .select(select)
+      .select('*')
       .eq('user_id', userId)
-      .order('submitted_at', { ascending: false })
-  );
+      .order('submitted_at', { ascending: false });
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     return { data: null, error: error.message };
@@ -146,13 +140,21 @@ export async function fetchMyTrees(
 export async function fetchTreesByProject(
   projectId: string
 ): Promise<ApiResponse<TreeRecord[]>> {
-  const { data, error } = await withProjectJoinFallback<any[]>((select) =>
-    supabase
+  let { data, error } = await supabase
+    .from('tree_records')
+    .select('*, projects(name)')
+    .eq('project_id', projectId)
+    .order('submitted_at', { ascending: false });
+
+  if (error) {
+    const retry = await supabase
       .from('tree_records')
-      .select(select)
+      .select('*')
       .eq('project_id', projectId)
-      .order('submitted_at', { ascending: false })
-  );
+      .order('submitted_at', { ascending: false });
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     return { data: null, error: error.message };
@@ -166,9 +168,23 @@ export async function fetchTreesByProject(
 export async function fetchTreeById(
   id: string
 ): Promise<ApiResponse<TreeRecord>> {
-  const { data, error } = await withProjectJoinFallback<any>((select) =>
-    supabase.from('tree_records').select(select).eq('id', id).single()
-  );
+  // Try with project join first; fall back to plain select if join fails
+  let { data, error } = await supabase
+    .from('tree_records')
+    .select('*, projects(name)')
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    // Retry without the join (projects table may not exist yet)
+    const retry = await supabase
+      .from('tree_records')
+      .select('*')
+      .eq('id', id)
+      .single();
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     return { data: null, error: error.message };
@@ -460,12 +476,19 @@ export async function deleteTree(treeId: string): Promise<ApiResponse<null>> {
 
 // ─── Fetch ALL trees (for map view — not filtered by user) ────────────────────
 export async function fetchAllTrees(): Promise<ApiResponse<TreeRecord[]>> {
-  const { data, error } = await withProjectJoinFallback<any[]>((select) =>
-    supabase
+  let { data, error } = await supabase
+    .from('tree_records')
+    .select('*, projects(name)')
+    .order('submitted_at', { ascending: false });
+
+  if (error) {
+    const retry = await supabase
       .from('tree_records')
-      .select(select)
-      .order('submitted_at', { ascending: false })
-  );
+      .select('*')
+      .order('submitted_at', { ascending: false });
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     return { data: [], error: error.message };

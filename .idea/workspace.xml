@@ -4,14 +4,7 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="map upadte">
-      <change beforePath="$PROJECT_DIR$/.env.example" beforeDir="false" afterPath="$PROJECT_DIR$/.env.example" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.expo/dev/logs/start.log" beforeDir="false" afterPath="$PROJECT_DIR$/.expo/dev/logs/start.log" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/MapPreview.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/MapPreview.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Capture/MapPickerScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/MapPickerScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Map/TreeMapScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Map/TreeMapScreen.tsx" afterDir="false" />
-    </list>
+    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="notification,alert box design." />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -69,7 +62,7 @@
     &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
     &quot;dart.analysis.tool.window.visible&quot;: &quot;false&quot;,
     &quot;deletionFromPopupRequiresConfirmation&quot;: &quot;false&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;project__task&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;audit-update__flow&quot;,
     &quot;git.auto.fetch.suggestion.counter&quot;: &quot;3&quot;,
     &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
     &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
@@ -252,7 +245,111 @@
       <option name="project" value="LOCAL" />
       <updated>1789551340294</updated>
     </task>
-    <option name="localTasksCounter" value="22" />
+    <task id="LOCAL-00022" summary="approve/reject according update/audit and chnage some designs.">
+      <option name="closed" value="true" />
+      <created>1790168524505</created>
+      <option name="number" value="00022" />
+      <option name="presentableId" value="LOCAL-00022" />
+      <option name="project" value="LOCAL" />
+      <updated>1790168524506</updated>
+    </task>
+    <task id="LOCAL-00023" summary="tree card update.">
+      <option name="closed" value="true" />
+      <created>1790230610123</created>
+      <option name="number" value="00023" />
+      <option name="presentableId" value="LOCAL-00023" />
+      <option name="project" value="LOCAL" />
+      <updated>1790230610123</updated>
+    </task>
+    <task id="LOCAL-00024" summary="3 photos,card audit,auto audit time set or cheak.">
+      <option name="closed" value="true" />
+      <created>1790247383267</created>
+      <option name="number" value="00024" />
+      <option name="presentableId" value="LOCAL-00024" />
+      <option name="project" value="LOCAL" />
+      <updated>1790247383267</updated>
+    </task>
+    <task id="LOCAL-00025" summary="history page in not change any user and mobail navigation overide problem solve.">
+      <option name="closed" value="true" />
+      <created>1790255152087</created>
+      <option name="number" value="00025" />
+      <option name="presentableId" value="LOCAL-00025" />
+      <option name="project" value="LOCAL" />
+      <updated>1790255152087</updated>
+    </task>
+    <task id="LOCAL-00026" summary="add land geofancing or satallit clear view">
+      <option name="closed" value="true" />
+      <created>1790318531723</created>
+      <option name="number" value="00026" />
+      <option name="presentableId" value="LOCAL-00026" />
+      <option name="project" value="LOCAL" />
+      <updated>1790318531723</updated>
+    </task>
+    <task id="LOCAL-00027" summary="tree fancing add and cutout to throw navbar solve this bug.">
+      <option name="closed" value="true" />
+      <created>1790329520919</created>
+      <option name="number" value="00027" />
+      <option name="presentableId" value="LOCAL-00027" />
+      <option name="project" value="LOCAL" />
+      <updated>1790329520919</updated>
+    </task>
+    <task id="LOCAL-00028" summary="live location work and near tree according vibartion.">
+      <option name="closed" value="true" />
+      <created>1790335722082</created>
+      <option name="number" value="00028" />
+      <option name="presentableId" value="LOCAL-00028" />
+      <option name="project" value="LOCAL" />
+      <updated>1790335722082</updated>
+    </task>
+    <task id="LOCAL-00029" summary="all page app nav overide solve.">
+      <option name="closed" value="true" />
+      <created>1790340808211</created>
+      <option name="number" value="00029" />
+      <option name="presentableId" value="LOCAL-00029" />
+      <option name="project" value="LOCAL" />
+      <updated>1790340808211</updated>
+    </task>
+    <task id="LOCAL-00030" summary="add tree to user direction in map">
+      <option name="closed" value="true" />
+      <created>1790341510971</created>
+      <option name="number" value="00030" />
+      <option name="presentableId" value="LOCAL-00030" />
+      <option name="project" value="LOCAL" />
+      <updated>1790341510971</updated>
+    </task>
+    <task id="LOCAL-00031" summary="audit page remove,history page rename to search,fix design.">
+      <option name="closed" value="true" />
+      <created>1790428218595</created>
+      <option name="number" value="00031" />
+      <option name="presentableId" value="LOCAL-00031" />
+      <option name="project" value="LOCAL" />
+      <updated>1790428218596</updated>
+    </task>
+    <task id="LOCAL-00032" summary="using tree defult data and chnage some name and chnage some design.">
+      <option name="closed" value="true" />
+      <created>1790587242487</created>
+      <option name="number" value="00032" />
+      <option name="presentableId" value="LOCAL-00032" />
+      <option name="project" value="LOCAL" />
+      <updated>1790587242488</updated>
+    </task>
+    <task id="LOCAL-00033" summary="design chnage.">
+      <option name="closed" value="true" />
+      <created>1790595070729</created>
+      <option name="number" value="00033" />
+      <option name="presentableId" value="LOCAL-00033" />
+      <option name="project" value="LOCAL" />
+      <updated>1790595070729</updated>
+    </task>
+    <task id="LOCAL-00034" summary="notification,alert box design.">
+      <option name="closed" value="true" />
+      <created>1790670888307</created>
+      <option name="number" value="00034" />
+      <option name="presentableId" value="LOCAL-00034" />
+      <option name="project" value="LOCAL" />
+      <updated>1790670888307</updated>
+    </task>
+    <option name="localTasksCounter" value="35" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -266,14 +363,7 @@
                   <entry key="branch">
                     <value>
                       <list>
-                        <option value="origin/feature/project-tree-photo-upload" />
-                      </list>
-                    </value>
-                  </entry>
-                  <entry key="text">
-                    <value>
-                      <list>
-                        <option value="task" />
+                        <option value="audit-update_flow" />
                       </list>
                     </value>
                   </entry>
@@ -286,18 +376,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="update features" />
-    <MESSAGE value="update features 2" />
-    <MESSAGE value="project according to login" />
-    <MESSAGE value="login session bug fixed." />
-    <MESSAGE value="credit logic update" />
-    <MESSAGE value="design bug" />
-    <MESSAGE value="design bug 2" />
-    <MESSAGE value="new Feature- entire app work only with the selected project" />
-    <MESSAGE value="clean project" />
-    <MESSAGE value="small design bug" />
-    <MESSAGE value="project selection logic and redesign the interface." />
-    <MESSAGE value="task feature" />
     <MESSAGE value="add task page and chnage design." />
     <MESSAGE value="add 4 tabs in task page." />
     <MESSAGE value="4 tabs calculation with date" />
@@ -309,6 +387,20 @@
     <MESSAGE value="add logo or apk build upadte" />
     <MESSAGE value="Add Tree Markers, Geotagging, Geofencing &amp; Location Lock" />
     <MESSAGE value="location detch bug solve and project according tree fanching show." />
-    <option name="LAST_COMMIT_MESSAGE" value="location detch bug solve and project according tree fanching show." />
+    <MESSAGE value="approve/reject according update/audit and chnage some designs." />
+    <MESSAGE value="tree card update." />
+    <MESSAGE value="3 photos,card audit,auto audit time set or cheak." />
+    <MESSAGE value="history page in not change any user and mobail navigation overide problem solve." />
+    <MESSAGE value="add land geofancing or satallit clear view" />
+    <MESSAGE value="tree fancing add and cutout to throw navbar solve this bug." />
+    <MESSAGE value="live location work and near tree according vibartion." />
+    <MESSAGE value="all page app nav overide solve." />
+    <MESSAGE value="add tree to user direction in map" />
+    <MESSAGE value="audit page remove,history page rename to search,fix design." />
+    <MESSAGE value="using tree defult data and chnage some name and chnage some design." />
+    <MESSAGE value="design chnage." />
+    <MESSAGE value="task card design update." />
+    <MESSAGE value="notification,alert box design." />
+    <option name="LAST_COMMIT_MESSAGE" value="notification,alert box design." />
   </component>
 </project>

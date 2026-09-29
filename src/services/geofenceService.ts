@@ -1,5 +1,6 @@
 import * as Location from 'expo-location';
 import { GeofenceZone, GeofenceEvent, GeofenceAlert, TreeRecord } from '../types';
+import { displayTreeId } from '../utils/treeId';
 
 // ─── Haversine distance between two coordinates (in meters) ──────────────────
 // Used for geofence entry/exit detection. No external library needed.
@@ -39,7 +40,7 @@ export function createZonesFromTrees(
       latitude: t.latitude,
       longitude: t.longitude,
       radius: radiusMeters,
-      label: t.species || t.tree_id || 'Tree',
+      label: t.species || displayTreeId(t, 'Tree'),
     }));
 }
 
@@ -128,11 +129,19 @@ async function startMonitor(zones: GeofenceZone[], callback: GeofenceCallback) {
   onGeofenceCallback = callback;
   prevZoneState = new Set();
 
+  // Immediate check with last known location
+  try {
+    const lastKnown = await Location.getLastKnownPositionAsync({});
+    if (lastKnown) {
+      handlePositionUpdate(lastKnown);
+    }
+  } catch {}
+
   monitorSubscription = await Location.watchPositionAsync(
     {
-      accuracy: Location.Accuracy.High,
-      distanceInterval: 10, // update every 10 meters
-      timeInterval: 10000,  // or every 10 seconds
+      accuracy: Location.Accuracy.Balanced,
+      distanceInterval: 5, // update every 5 meters
+      timeInterval: 3000,  // or every 3 seconds
     },
     handlePositionUpdate
   );

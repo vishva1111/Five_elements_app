@@ -27,7 +27,7 @@ export default function CircularProgress({
 
   return (
     <View style={[styles.container, { width: size, height: size }]}>
-      <Svg width={size} height={size}>
+      <Svg width={size} height={size} style={{ backgroundColor: 'transparent' }}>
         <Circle
           cx={size / 2}
           cy={size / 2}
@@ -64,11 +64,13 @@ const styles = StyleSheet.create({
   container: {
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'transparent',
   },
   labelContainer: {
     position: 'absolute',
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'transparent',
   },
   label: {
     fontWeight: 'bold',

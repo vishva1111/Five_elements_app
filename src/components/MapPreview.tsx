@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Coordinates } from '../types';
 import {
@@ -67,8 +67,8 @@ function buildLeafletHtml(lat: number, lng: number): string {
 <body>
 <div id="map"></div>
 <script>
-var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([${lat},${lng}],17);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+var map=L.map('map',{zoomControl:false,attributionControl:false,maxZoom:22}).setView([${lat},${lng}],17);
+L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{maxZoom:22,maxNativeZoom:20,attribution:'© Google Satellite'}).addTo(map);
 L.marker([${lat},${lng}]).addTo(map);
 </script>
 </body>
@@ -77,6 +77,7 @@ L.marker([${lat},${lng}]).addTo(map);
 
 export default function MapPreview({
   coords,
+  onPress,
   height = 180,
 }: Props) {
   const lat = Number(coords.latitude) || 0;
@@ -91,7 +92,7 @@ export default function MapPreview({
     [lat, lng, token]
   );
 
-  return (
+  const previewBody = (
     <View style={[styles.container, { height }]}>
       <WebView
         source={{ html }}
@@ -106,11 +107,21 @@ export default function MapPreview({
       </View>
     </View>
   );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity activeOpacity={0.88} onPress={onPress}>
+        {previewBody}
+      </TouchableOpacity>
+    );
+  }
+
+  return previewBody;
 }
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 7.5,
+    borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: '#e8f5e9',
   },
@@ -122,7 +133,7 @@ const styles = StyleSheet.create({
     bottom: 8,
     left: 8,
     backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: 7.5,
+    borderRadius: 14,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
