@@ -16,7 +16,7 @@ import { useTaskStore } from '../../store/taskStore';
 import { useProjectRefreshStore } from '../../store/projectRefreshStore';
 import { fetchMyTrees, fetchTreesByProject, fetchAllTrees, fetchAllProjects, backfillProjectTreeIds } from '../../services/treeService';
 import { fetchAgentTasks, startTask } from '../../services/taskService';
-import { loadLocalTasks } from '../../services/localTaskService';
+import { clearLocalTasks } from '../../services/localTaskService';
 import { fetchAuditsForTrees, getAuditStatus, getDueLabel, getLatestAudit, ensureAuditTaskForTree } from '../../services/auditService';
 import { Task, Project, TreeRecord } from '../../types';
 import { displayTreeId, parseTreeMeta, resolveTreeId } from '../../utils/treeId';
@@ -35,6 +35,22 @@ const TABS: { key: TaskTab; label: string; color: string }[] = [
   { key: 'rejected', label: 'Rejected', color: '#ef4444' },
 ];
 
+function localDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function localDateKeyFromValue(value?: string | null) {
+  if (!value) return null;
+  const dateOnly = value.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (dateOnly && value.length === 10) return dateOnly[1];
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return localDateKey(parsed);
+}
+
 export default function TaskScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute();
@@ -47,6 +63,7 @@ export default function TaskScreen() {
   const setTrees = useTreeStore((s) => s.setTrees);
   const tasks = useTaskStore((s) => s.tasks) ?? [];
   const setTasks = useTaskStore((s) => s.setTasks);
+  const setActiveTaskId = useTaskStore((s) => s.setActiveTaskId);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<TaskTab>('assigned');
   const [allProjects, setAllProjects] = useState<Project[]>([]);
@@ -70,12 +87,11 @@ export default function TaskScreen() {
   // Filter tasks by selected date
   const filterByDate = (taskList: Task[]) => {
     if (selectedDate === 'all') return taskList;
-    const dateStr = selectedDate === 'today' ? new Date().toISOString().split('T')[0] : selectedDate;
+    const dateStr = selectedDate === 'today' ? localDateKey(new Date()) : selectedDate;
     return taskList.filter((t) => {
       // Due audit tasks belong in TODAY's active queue
       if (t.task_type === 'audit' && selectedDate === 'today') return true;
-      if (!t.created_at) return false;
-      return t.created_at.split('T')[0] === dateStr;
+      return localDateKeyFromValue(t.created_at) === dateStr;
     });
   };
 
@@ -96,10 +112,10 @@ export default function TaskScreen() {
     // Fetch trees for active project (or all trees), so audits for any project tree can be monitored
     const treePromise = pid ? fetchTreesByProject(pid) : fetchAllTrees();
 
-    const [treesRes, tasksRes, localTasks] = await Promise.all([
+    const [treesRes, tasksRes] = await Promise.all([
       treePromise,
       fetchAgentTasks(userId),
-      loadLocalTasks(),
+      clearLocalTasks(),
     ]);
     if (seq !== loadSeqRef.current) return;
     let myTrees = treesRes.data ?? [];
@@ -114,9 +130,9 @@ export default function TaskScreen() {
     const visibleTrees = pid ? myTrees.filter((t) => t.project_id === pid) : myTrees;
     setTrees(visibleTrees);
 
-    // Filter DB + local tasks by active project if selected
-    const combinedTasks: Task[] = [...(tasksRes.data ?? []), ...localTasks];
-    const visibleTasks = pid ? combinedTasks.filter((t) => t.project_id === pid) : combinedTasks;
+    // Only database tasks are shown. Demo and phone-saved tasks are excluded.
+    const dbTasks = (tasksRes.data ?? []).filter((task) => !task.id.startsWith('local_'));
+    const visibleTasks = pid ? dbTasks.filter((t) => t.project_id === pid) : dbTasks;
     setTasks(visibleTasks);
 
     // Check if active project has remaining geofencing setup
@@ -180,8 +196,8 @@ export default function TaskScreen() {
   // Instantly reload whenever the active project changes (refreshKey incremented
   // by setActiveProjectId in authStore — fires even when this screen is not focused)
   useEffect(() => {
-    if (refreshKey > 0) loadTasks();
-  }, [refreshKey]);
+    loadTasks();
+  }, [refreshKey, activeProjectId, loadTasks]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -190,6 +206,7 @@ export default function TaskScreen() {
   };
 
   const handleStartTask = async (task: Task) => {
+    setActiveTaskId(task.id);
     if (!task.started_at) {
       await startTask(task.id);
       setTasks(tasks.map((t) => (t.id === task.id ? { ...t, started_at: new Date().toISOString(), status: 'in_progress' } : t)));
@@ -201,11 +218,21 @@ export default function TaskScreen() {
     navigation.getParent()?.navigate('Map');
   };
 
-  const getTodayDate = () => {
-    const now = new Date();
-    const options: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
-    return now.toLocaleDateString('en-IN', options);
-  };
+  const headerDateParts = useMemo(() => {
+    const selected =
+      selectedDate === 'all' || selectedDate === 'today'
+        ? new Date()
+        : new Date(`${selectedDate}T00:00:00`);
+    const safe = Number.isNaN(selected.getTime()) ? new Date() : selected;
+    return {
+      primary: safe.toLocaleDateString('en-IN', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+      }),
+      year: String(safe.getFullYear()),
+    };
+  }, [selectedDate]);
 
   // Ensure trees are filtered by active project
   const projectTrees = useMemo(() => {
@@ -215,7 +242,9 @@ export default function TaskScreen() {
 
   // assigned + in_progress both show in the Assigned tab
   const assignedTasks = tasks.filter((t) => t.status === 'assigned' || t.status === 'in_progress');
-  const rejectedTasks = tasks.filter((t) => t.status === 'rejected');
+  const rejectedTasks = tasks
+    .filter((t) => t.status === 'rejected')
+    .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 
   // Auto-assigned audit tasks for any tree whose audit time is NOW
   const assignedItems = useMemo(() => {
@@ -241,7 +270,7 @@ export default function TaskScreen() {
           const taskTitle = `Audit Round #${auditStatus.currentRound} — ${t.species || 'Tree'} (${resolvedId})`;
           const dueLabel = getDueLabel(auditStatus);
 
-          list.unshift({
+          list.push({
             id: `audit-${t.id}-${auditStatus.currentRound}`,
             name: taskTitle,
             title: taskTitle,
@@ -268,7 +297,11 @@ export default function TaskScreen() {
       }
     });
 
-    return list;
+    const byNewest = (a: Task, b: Task) =>
+      new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    const planting = list.filter((item) => item.task_type !== 'audit' && !item.audit_round).sort(byNewest);
+    const audits = list.filter((item) => item.task_type === 'audit' || !!item.audit_round).sort(byNewest);
+    return [...planting, ...audits];
   }, [assignedTasks, projectTrees, auditsByTree, treeIds, userId]);
 
   // Approved Tasks + Approved Trees (locked or approved status)
@@ -316,7 +349,9 @@ export default function TaskScreen() {
       }
     });
 
-    return list;
+    return list.sort(
+      (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+    );
   }, [tasks, projectTrees]);
 
   // Completed Tasks (pending review) + Completed Trees (pending review)
@@ -387,25 +422,74 @@ export default function TaskScreen() {
     });
   }, [tasks, projectTrees, auditsByTree]);
 
-  // Tab counts
-  const assignedCount = assignedItems.length;
-  const completedCount = completedItems.length;
-  const approvedCount = approvedItems.length;
-  const rejectedCount = rejectedTasks.length;
+  // One count per tree. A later audit of a tree that is already counted is not another tree.
+  const isAuditItem = (item: Task) =>
+    item.task_type === 'audit' || !!item.audit_round || String(item.id).startsWith('audit-');
+  const treeCounts = useMemo(() => {
+    const statusByTree = new Map<string, 'assigned' | 'completed' | 'approved' | 'rejected'>();
+    const knownTreeIds = new Set(projectTrees.map((tree) => tree.id));
+
+    projectTrees.forEach((tree) => {
+      const linked = tasks.find(
+        (task) =>
+          !isAuditItem(task) &&
+          (task.tree_id === tree.id || task.tree_record_id === tree.id || task.id === tree.id)
+      );
+      if (tree.locked || linked?.status === 'approved') statusByTree.set(tree.id, 'approved');
+      else if (linked?.status === 'rejected') statusByTree.set(tree.id, 'rejected');
+      else if (linked?.status === 'assigned' || linked?.status === 'in_progress') statusByTree.set(tree.id, 'assigned');
+      else statusByTree.set(tree.id, 'completed');
+    });
+
+    tasks.forEach((task) => {
+      if (isAuditItem(task)) return;
+      const key = task.tree_record_id || task.tree_id || task.id;
+      if (!key || knownTreeIds.has(key) || (task.tree_id && knownTreeIds.has(task.tree_id))) return;
+      if (task.status === 'approved') statusByTree.set(key, 'approved');
+      else if (task.status === 'rejected') statusByTree.set(key, 'rejected');
+      else if (task.status === 'completed') statusByTree.set(key, 'completed');
+      else if (task.status === 'assigned' || task.status === 'in_progress') statusByTree.set(key, 'assigned');
+    });
+
+    let assigned = 0;
+    let completed = 0;
+    let approved = 0;
+    let rejected = 0;
+    statusByTree.forEach((status) => {
+      if (status === 'assigned') assigned += 1;
+      else if (status === 'completed') completed += 1;
+      else if (status === 'approved') approved += 1;
+      else rejected += 1;
+    });
+    return { assigned, completed, approved, rejected };
+  }, [tasks, projectTrees]);
+
+  const todayKey = localDateKey(new Date());
+  const completedTodayCount = tasks.filter((item) => {
+    if (item.status !== 'completed' && item.status !== 'approved' && item.status !== 'rejected') return false;
+    return localDateKeyFromValue(item.completed_at || item.created_at) === todayKey;
+  }).length;
+  const assignedCount = completedTodayCount;
+  const assignedTotal = assignedItems.length;
+  const completedCount = treeCounts.completed;
+  const approvedCount = treeCounts.approved;
+  const rejectedCount = treeCounts.rejected;
   const reviewedCount = approvedCount + rejectedCount;
-  const totalTasks = assignedCount + completedCount + approvedCount + rejectedCount;
 
   // Date selector — pull dates from active tasks and trees so every tab's date filter works
   const dates = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString().split('T')[0];
+    const todayStr = localDateKey(today);
     const dateSet = new Set<string>();
+    dateSet.add(todayStr);
     tasks.forEach((t) => {
-      if (t.created_at) dateSet.add(t.created_at.split('T')[0]);
+      const key = localDateKeyFromValue(t.created_at);
+      if (key) dateSet.add(key);
     });
     projectTrees.forEach((t) => {
-      if (t.submitted_at) dateSet.add(t.submitted_at.split('T')[0]);
+      const key = localDateKeyFromValue(t.submitted_at);
+      if (key) dateSet.add(key);
     });
     const sorted = Array.from(dateSet).sort((a, b) => b.localeCompare(a));
     return sorted.map((dateStr) => {
@@ -481,7 +565,7 @@ export default function TaskScreen() {
     };
 
     const handleUpdate = () => {
-      navigation.navigate('EditTree', {
+      navigation.navigate('TreeDetail', {
         treeId: targetId,
         taskId: task.id,
         rejectionNotes: task.review_notes || null,
@@ -495,7 +579,7 @@ export default function TaskScreen() {
         task={isCompletedAudit ? { ...task, task_type: 'audit' } : task}
         status={isApproved && !isAuditTask ? 'approved' : task.status}
         audits={treeAudits}
-        displayId={projectTreeId}
+        displayId={isAssigned && !isAuditTask ? (task.task_code || undefined) : projectTreeId}
         showSurveyor={false}
         onPress={isAssigned && !isAuditTask ? undefined : handlePress}
         onAction={
@@ -557,29 +641,21 @@ export default function TaskScreen() {
       <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={[s.header, { paddingTop: insets.top + 8 }]}>
           <View style={s.headerRow}>
             <View style={s.headerLeft}>
-              <Text style={s.headerDate}>{getTodayDate()}</Text>
+              <Text style={s.headerDate}>{headerDateParts.primary}</Text>
+              <Text style={s.headerYear}>{headerDateParts.year}</Text>
               <Text style={s.headerSub} numberOfLines={1}>{activeProject?.name ?? 'No project selected'}</Text>
             </View>
             <View style={s.headerDivider} />
-            {activeProject ? (
-              <TouchableOpacity
-                style={s.headerLocation}
-                onPress={() => handleOpenMap(activeProject.name)}
-                activeOpacity={0.7}
-              >
-                <View style={s.headerLocationImage}>
-                  <Ionicons name="map" size={22} color="#fff" />
-                </View>
-                <Text style={s.headerLocationLabel}>OPEN MAP</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={s.headerLocation}>
-                <View style={s.headerLocationImage}>
-                  <Ionicons name="location-outline" size={22} color="#fff" />
-                </View>
-                <Text style={s.headerLocationLabel}>LOCATION</Text>
+            <TouchableOpacity
+              style={s.headerLocation}
+              onPress={() => handleOpenMap(activeProject?.name ?? '')}
+              activeOpacity={0.7}
+            >
+              <View style={s.headerLocationImage}>
+                <Ionicons name="map" size={22} color="#fff" />
               </View>
-            )}
+              <Text style={s.headerLocationLabel}>OPEN MAP</Text>
+            </TouchableOpacity>
           </View>
         </LinearGradient>
 
@@ -593,23 +669,17 @@ export default function TaskScreen() {
           <View style={s.tabsRow}>
             {TABS.map((tab) => {
               const active = activeTab === tab.key;
-              let count: number;
-              let denominator: number;
-              if (tab.key === 'assigned') {
-                count = totalTasks - completedCount;
-                denominator = totalTasks;
-              } else if (tab.key === 'completed') {
-                count = reviewedCount;
-                denominator = completedCount;
-              } else if (tab.key === 'approved') {
-                count = approvedCount;
-                denominator = totalTasks;
-              } else {
-                count = rejectedCount;
-                denominator = completedCount;
-              }
-
-              const pct = denominator > 0 ? (count / denominator) * 100 : 0;
+              const projectTotal = projectTrees.length;
+              const count =
+                tab.key === 'assigned'
+                  ? assignedItems.length
+                  : tab.key === 'completed'
+                  ? completedItems.length
+                  : tab.key === 'approved'
+                  ? approvedItems.length
+                  : rejectedTasks.length;
+              const denominator = projectTotal;
+              const pct = denominator > 0 ? Math.min(100, (count / denominator) * 100) : 0;
               return (
                 <TouchableOpacity
                   key={tab.key}
@@ -704,7 +774,7 @@ export default function TaskScreen() {
                   </View>
                 </TouchableOpacity>
               )}
-              {renderTaskList(filterByDate(assignedItems))}
+              {renderTaskList(assignedItems)}
             </>
           )}
           {activeTab === 'completed' && renderTaskList(filterByDate(completedItems))}
@@ -732,6 +802,7 @@ const s = StyleSheet.create({
   },
   headerLeft: { flex: 1 },
   headerDate: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  headerYear: { fontSize: 18, fontWeight: '800', color: '#fff', marginTop: -1 },
   headerSub: { fontSize: 13, fontWeight: '600', color: '#cde8d3', marginTop: 2 },
   headerDivider: {
     width: 1,

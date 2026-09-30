@@ -1,6 +1,17 @@
 import { supabase } from './supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TreeRecord, TreeRecordInsert, ApiResponse, Project, User } from '../types';
+import {
+  buildProjectTreeId,
+  makeProjectPrefix,
+  nextProjectSequence,
+  resolveTreeId,
+} from '../utils/treeId';
+import {
+  getPendingMonitoringRecordsForTree,
+  mergeMonitoringRecords,
+  sortMonitoringRows,
+} from './localMonitoringService';
 
 // ─── Transform raw Supabase row into TreeRecord with joined project_name ───────
 function mapTreeRecord(raw: any): TreeRecord {
@@ -51,6 +62,7 @@ export async function insertTreeRecord(
     'event_type', 'quantity', 'dbh_cm', 'height_m', 'wood_density',
     'crown_diameter_m', 'tree_condition', 'multi_stem', 'age_years',
     'land_type', 'surveyor', 'survey_date', 'tree_id', 'scientific_name',
+    'photo_urls',
   ];
 
   const isMissingColumn = (msg: string) => msg.includes('column') && msg.includes('of') && msg.includes('schema cache');
@@ -75,7 +87,8 @@ export async function insertTreeRecord(
   // If missing columns, save extra data as ##META## JSON in notes
   if (error && isMissingColumn(error.message)) {
     console.warn(
-      '[TreeApp] tree_records missing columns — run supabase/migrations/001_add_tree_columns.sql. Saving extra data in notes.'
+      '[TreeApp] tree_records missing columns — run supabase/migrations/001_add_tree_columns.sql ' +
+        '(npm run db:migrate). Saving extra data in notes.'
     );
     const meta: Record<string, any> = {};
     NEW_COLUMNS.forEach((col) => {
@@ -134,6 +147,207 @@ export async function fetchMyTrees(
 
   const trees = await attachProjectNames((data ?? []).map(mapTreeRecord));
   return { data: trees, error: null };
+}
+
+/** True when a Supabase error means a table or column is not in this database yet. */
+export function isMissingSchemaError(
+  error: { message?: string; code?: string } | null | undefined
+): boolean {
+  if (!error) return false;
+  const code = String(error.code ?? '');
+  const message = String(error.message ?? '').toLowerCase();
+  return (
+    code === '42P01' ||
+    code === '42703' ||
+    code === 'PGRST204' ||
+    code === 'PGRST205' ||
+    message.includes('does not exist') ||
+    message.includes('schema cache') ||
+    message.includes('could not find the')
+  );
+}
+
+function missingColumnName(message?: string | null): string | null {
+  const text = String(message ?? '');
+  return (
+    text.match(/column\s+(?:\w+\.)?"?([A-Za-z_][\w]*)"?\s+does not exist/i)?.[1] ??
+    text.match(/could not find the '([^']+)' column/i)?.[1] ??
+    null
+  );
+}
+
+/** Assign ARAV-001 style IDs to trees that were saved without one. */
+export async function ensureProjectTreeId(tree: TreeRecord): Promise<string | null> {
+  const existing = resolveTreeId(tree);
+  if (existing) return existing;
+  if (!tree?.id) return null;
+
+  let projectName = tree.project_name ?? null;
+  if (!projectName && tree.project_id) {
+    const { data } = await supabase
+      .from('projects')
+      .select('name')
+      .eq('id', tree.project_id)
+      .maybeSingle();
+    projectName = data?.name ?? null;
+  }
+
+  const prefix = makeProjectPrefix(projectName);
+  const { data: siblings } = tree.project_id
+    ? await supabase.from('tree_records').select('tree_id').eq('project_id', tree.project_id)
+    : { data: [] as Array<{ tree_id?: string | null }> };
+  const treeId = buildProjectTreeId(prefix, nextProjectSequence(siblings ?? [], prefix));
+
+  const { error } = await supabase.from('tree_records').update({ tree_id: treeId }).eq('id', tree.id);
+  if (error) {
+    console.warn('[treeService] ensureProjectTreeId:', error.message);
+    return null;
+  }
+  return treeId;
+}
+
+/** Fill missing project tree IDs. Returns the same trees with IDs applied. */
+export async function backfillProjectTreeIds(trees: TreeRecord[]): Promise<TreeRecord[]> {
+  const next = (trees ?? []).map((tree) => ({ ...tree }));
+  for (let i = 0; i < next.length; i++) {
+    if (resolveTreeId(next[i])) continue;
+    const assigned = await ensureProjectTreeId(next[i]);
+    if (assigned) next[i] = { ...next[i], tree_id: assigned };
+  }
+  return next;
+}
+
+/** Monitoring rows for one tree, including audits still waiting on this phone. */
+export async function fetchTreeMonitoringRecords(treeId: string): Promise<ApiResponse<any[]>> {
+  const { data, error } = await supabase
+    .from('tree_monitoring_records')
+    .select('*')
+    .eq('tree_record_id', treeId)
+    .order('monitoring_round', { ascending: true });
+
+  let rows: any[] = error ? [] : (data ?? []);
+  try {
+    const local = await getPendingMonitoringRecordsForTree(treeId);
+    rows = sortMonitoringRows(mergeMonitoringRecords(rows, local));
+  } catch (err) {
+    console.warn('[treeService] local monitoring merge:', err);
+  }
+
+  if (error && !isMissingSchemaError(error)) {
+    return { data: rows, error: error.message };
+  }
+  return { data: rows, error: null };
+}
+
+/** Save one audit row, dropping columns this database does not have yet. */
+export async function insertMonitoringRecord(
+  record: Record<string, any>
+): Promise<ApiResponse<any>> {
+  const payload = { ...record };
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const { data, error } = await supabase
+      .from('tree_monitoring_records')
+      .insert(payload)
+      .select('*')
+      .maybeSingle();
+    if (!error) return { data, error: null };
+
+    const column = missingColumnName(error.message);
+    if (!column || !(column in payload)) {
+      return { data: null, error: error.message };
+    }
+    delete payload[column];
+  }
+  return { data: null, error: 'Could not save the monitoring record.' };
+}
+
+// ─── Missing-schema helpers for tree_records writes ──────────────────────────
+// The live database may not have run supabase/migrations/001_add_tree_columns.sql
+// yet (apply with `npm run db:migrate`). Rather than failing the whole save,
+// drop the one column PostgREST complained about and try again — the same
+// strategy insertMonitoringRecord() already uses for audit rows.
+const MIGRATION_HINT =
+  'run supabase/migrations/001_add_tree_columns.sql (npm run db:migrate)';
+
+/** Update a tree, retrying without any column this database does not have yet. */
+async function updateTreeColumns(
+  treeId: string,
+  updates: Partial<TreeRecordInsert>,
+  select: string = '*, projects(name)'
+): Promise<{ data: any; error: any }> {
+  const payload: Record<string, any> = { ...updates };
+  let lastError: any = null;
+
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const { data, error } = await supabase
+      .from('tree_records')
+      .update(payload)
+      .eq('id', treeId)
+      .select(select)
+      .single();
+
+    if (!error) return { data, error: null };
+
+    const column = missingColumnName(error.message);
+    if (!column || !(column in payload)) return { data: null, error };
+
+    console.warn(
+      `[TreeApp] tree_records.${column} missing — ${MIGRATION_HINT}. Saving without it.`
+    );
+    delete payload[column];
+    lastError = error;
+  }
+  return { data: null, error: lastError };
+}
+
+/** Read the locked flag, tolerating a database that has no `locked` column yet. */
+async function readLockedFlag(
+  treeId: string
+): Promise<{ locked: boolean; error: any }> {
+  const { data, error } = await supabase
+    .from('tree_records')
+    .select('locked')
+    .eq('id', treeId)
+    .single();
+
+  if (!error) return { locked: !!data?.locked, error: null };
+
+  // No `locked` column means nothing in this database can be locked yet.
+  if (isMissingSchemaError(error)) {
+    console.warn(
+      `[TreeApp] tree_records.locked missing — ${MIGRATION_HINT}. Skipping the lock check.`
+    );
+    return { locked: false, error: null };
+  }
+  return { locked: false, error };
+}
+
+/** Copy the latest audit measurements onto the tree, even when the row is locked. */
+export async function updateTreeFromMonitoring(
+  treeId: string,
+  updates: Partial<TreeRecordInsert>
+): Promise<ApiResponse<TreeRecord>> {
+  const { data, error } = await updateTreeColumns(treeId, updates);
+
+  if (error) return { data: null, error: error.message };
+  return { data: await attachProjectName(mapTreeRecord(data)), error: null };
+}
+
+/** Save an edited baseline tree and mark its task ready for review. */
+export async function updateBaselineTree(
+  treeId: string,
+  updates: Partial<TreeRecordInsert>,
+  taskId?: string
+): Promise<ApiResponse<TreeRecord>> {
+  const result = await updateTree(treeId, updates);
+  if (!result.error && taskId) {
+    const { error } = await supabase
+      .from('tasks')
+      .update({ status: 'completed', completed_at: new Date().toISOString() })
+      .eq('id', taskId);
+    if (error) console.warn('[treeService] updateBaselineTree task:', error.message);
+  }
+  return result;
 }
 
 // ─── Fetch trees by project ──────────────────────────────────────────────────
@@ -421,27 +635,21 @@ export async function updateTree(
   treeId: string,
   updates: Partial<TreeRecordInsert>
 ): Promise<ApiResponse<TreeRecord>> {
-  // First check if the tree is locked
-  const { data: existing, error: fetchError } = await supabase
-    .from('tree_records')
-    .select('locked')
-    .eq('id', treeId)
-    .single();
+  // First check if the tree is locked. Even if the DB has an RLS policy, this
+  // client-side check prevents wasted network calls and gives the user
+  // immediate feedback. A database without the `locked` column cannot lock
+  // anything, so readLockedFlag() skips the check there.
+  const lock = await readLockedFlag(treeId);
 
-  if (fetchError) {
-    return { data: null, error: fetchError.message };
+  if (lock.error) {
+    return { data: null, error: lock.error.message };
   }
 
-  if (existing?.locked) {
+  if (lock.locked) {
     return { data: null, error: 'This tree record is locked and cannot be modified.' };
   }
 
-  const { data, error } = await supabase
-    .from('tree_records')
-    .update(updates)
-    .eq('id', treeId)
-    .select('*, projects(name)')
-    .single();
+  const { data, error } = await updateTreeColumns(treeId, updates);
 
   if (error) {
     return { data: null, error: error.message };
@@ -452,17 +660,13 @@ export async function updateTree(
 
 // ─── Delete a tree record (blocked if locked) ────────────────────────────────
 export async function deleteTree(treeId: string): Promise<ApiResponse<null>> {
-  const { data: existing, error: fetchError } = await supabase
-    .from('tree_records')
-    .select('locked')
-    .eq('id', treeId)
-    .single();
+  const lock = await readLockedFlag(treeId);
 
-  if (fetchError) {
-    return { data: null, error: fetchError.message };
+  if (lock.error) {
+    return { data: null, error: lock.error.message };
   }
 
-  if (existing?.locked) {
+  if (lock.locked) {
     return { data: null, error: 'This tree record is locked and cannot be deleted.' };
   }
 

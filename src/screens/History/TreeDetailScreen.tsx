@@ -52,7 +52,7 @@ export default function TreeDetailScreen() {
   const route = useRoute<Route>();
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const { treeId, asAuditProfile } = route.params;
+  const { treeId, asAuditProfile, rejectionNotes } = route.params;
 
   const [tree, setTree] = useState<TreeRecord | null>(null);
   const [task, setTask] = useState<Task | null>(null);
@@ -273,7 +273,8 @@ export default function TreeDetailScreen() {
 
   // Approval status & modes
   const isApproved = Boolean(tree.locked || task?.status === 'approved');
-  const isRejected = Boolean(task?.status === 'rejected');
+  const rejectionReason = rejectionNotes || task?.review_notes || null;
+  const isRejected = Boolean(task?.status === 'rejected' || rejectionReason);
   const isPending = !isApproved && !isRejected;
   const hasAudits = audits.length > 0;
   const showAuditProfile = hasAudits || Boolean(asAuditProfile);
@@ -354,12 +355,12 @@ export default function TreeDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Rejection Notice Banner if rejected */}
-        {isRejected && task?.review_notes ? (
+        {isRejected && rejectionReason ? (
           <View style={styles.rejectionNoticeCard}>
             <Ionicons name="alert-circle" size={20} color="#ef4444" />
             <View style={{ flex: 1 }}>
               <Text style={styles.rejectionNoticeTitle}>Rejection Reason:</Text>
-              <Text style={styles.rejectionNoticeBody}>{task.review_notes}</Text>
+              <Text style={styles.rejectionNoticeBody}>{rejectionReason}</Text>
             </View>
           </View>
         ) : null}
@@ -880,7 +881,7 @@ export default function TreeDetailScreen() {
               navigation.navigate('EditTree', {
                 treeId: tree.id,
                 taskId: task?.id || null,
-                rejectionNotes: task?.review_notes || null,
+                rejectionNotes: rejectionReason,
               })
             }
           >

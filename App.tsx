@@ -5,7 +5,8 @@ import { NavigationContainer, getFocusedRouteNameFromRoute } from '@react-naviga
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import { StyleSheet, View, ActivityIndicator, Text, Image, AppState } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { supabase } from './src/services/supabase';
@@ -119,9 +120,41 @@ function SwipeTabBar({
 
 function MainTabs() {
   const insets = useSafeAreaInsets();
+  const tabStateRef = useRef<BottomTabBarProps['state'] | null>(null);
+  const tabNavRef = useRef<BottomTabBarProps['navigation'] | null>(null);
+
+  const onTabSwipe = (event: { nativeEvent: { state: number; translationX: number; velocityX: number } }) => {
+    if (event.nativeEvent.state !== State.END) return;
+    const tabState = tabStateRef.current;
+    const tabNavigation = tabNavRef.current;
+    if (!tabState || !tabNavigation || shouldHideTabBar(tabState)) return;
+    const { translationX, velocityX } = event.nativeEvent;
+    const nextIndex =
+      translationX < -56 || velocityX < -650
+        ? tabState.index + 1
+        : translationX > 56 || velocityX > 650
+          ? tabState.index - 1
+          : tabState.index;
+    const route = tabState.routes[nextIndex];
+    if (!route || nextIndex === tabState.index) return;
+    tabNavigation.navigate(route.name);
+  };
+
   return (
+    <PanGestureHandler
+      activeOffsetX={[-28, 28]}
+      failOffsetY={[-16, 16]}
+      onHandlerStateChange={onTabSwipe}
+    >
+    <View style={{ flex: 1 }}>
     <Tab.Navigator
+      tabBar={(props) => {
+        tabStateRef.current = props.state;
+        tabNavRef.current = props.navigation;
+        return shouldHideTabBar(props.state) ? null : <FloatingTabBar {...props} />;
+      }}
       screenOptions={({ route }) => ({
+        animation: 'shift',
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
           if (route.name === 'Home') iconName = focused ? 'home' : 'home-outline';
@@ -185,11 +218,12 @@ function MainTabs() {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ headerShown: false, title: 'DASHBOARD' }} />
-      <Tab.Screen name="Map" component={TreeMapScreen} options={{ headerShown: false, title: 'MAP' }} />
       <Tab.Screen name="Task" component={TaskScreen} options={{ headerShown: false, title: 'TASKS' }} />
-      <Tab.Screen name="History" component={HistoryNavigator} options={{ headerShown: false, title: 'HISTORY' }} />
+      <Tab.Screen name="Search" component={HistoryNavigator} options={{ headerShown: false, title: 'SEARCH' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false, title: 'PROFILE' }} />
     </Tab.Navigator>
+    </View>
+    </PanGestureHandler>
   );
 }
 

@@ -83,25 +83,40 @@ export async function startTask(taskId: string) {
  * Called automatically when a field user submits a tree capture linked to this task.
  * The task then goes into the partner/admin review queue.
  */
+function missingColumnName(message?: string | null): string | null {
+  const text = String(message ?? '');
+  return (
+    text.match(/column\s+(?:\w+\.)?"?([A-Za-z_][\w]*)"?\s+does not exist/i)?.[1] ??
+    text.match(/could not find the '([^']+)' column/i)?.[1] ??
+    null
+  );
+}
+
 export async function completeTask(taskId: string, treeId?: string, location?: string) {
   const updates: Record<string, any> = {
     status: 'completed',
     completed_at: new Date().toISOString(),
   };
-  if (treeId) updates.tree_id = treeId;
+  if (treeId) {
+    updates.tree_id = treeId;
+    updates.tree_record_id = treeId;
+  }
   if (location) updates.location = location;
 
-  const { error } = await supabase
-    .from('tasks')
-    .update(updates)
-    .eq('id', taskId);
+  // Status must land even when the live tasks table is missing the extra columns.
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const { error } = await supabase.from('tasks').update(updates).eq('id', taskId);
+    if (!error) return { error: null };
 
-  if (error) {
-    console.error('[taskService] completeTask error:', error.message);
-    return { error: error.message };
+    const column = missingColumnName(error.message);
+    if (!column || !(column in updates) || column === 'status' || column === 'completed_at') {
+      console.error('[taskService] completeTask error:', error.message);
+      return { error: error.message };
+    }
+    delete updates[column];
   }
 
-  return { error: null };
+  return { error: 'Could not mark the task completed.' };
 }
 
 /**

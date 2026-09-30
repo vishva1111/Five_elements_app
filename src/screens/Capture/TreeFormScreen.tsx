@@ -12,17 +12,17 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
-  Modal,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   CaptureStackParamList,
   TreeFormData,
   TREE_SPECIES,
-  EVENT_TYPES,
+  getSpeciesDefault,
   TREE_CONDITION_OPTIONS,
   LAND_TYPE_OPTIONS,
   TreeCondition,
@@ -36,15 +36,19 @@ import { Project } from '../../types';
 import { uploadTreePhoto } from '../../services/storageService';
 import { completeTask } from '../../services/taskService';
 import { useTaskStore } from '../../store/taskStore';
-import MapPreview from '../../components/MapPreview';
+import { createTreeIdentity } from '../../utils/treeId';
 
 type Nav = NativeStackNavigationProp<CaptureStackParamList, 'TreeForm'>;
 type Route = RouteProp<CaptureStackParamList, 'TreeForm'>;
 
+const SLOT_LABELS = ['Front', 'Side', 'Close-up'];
+
 export default function TreeFormScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const { photoUri, coords } = route.params;
+  const insets = useSafeAreaInsets();
+  const { photoUris, coords } = route.params;
+  const photos = (photoUris ?? []).filter((uri): uri is string => Boolean(uri));
   const { user, activeProjectId, setUserCredits } = useAuthStore();
   const trees = useTreeStore((s) => s.trees) ?? [];
   const addTree = useTreeStore((s) => s.addTree);
@@ -73,12 +77,13 @@ export default function TreeFormScreen() {
   });
   const [showSpeciesPicker, setShowSpeciesPicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [showNoteHelper, setShowNoteHelper] = useState(false);
+  const recordIdRef = useRef('');
 
-  // Auto-generate TreeID on mount
+  // The tree ID is the 8-character record code shown beside the tree name.
   useEffect(() => {
-    const seq = String(Date.now()).slice(-4).padStart(4, '0');
-    setForm((f) => ({ ...f, tree_id: `TREE-${seq}` }));
+    const identity = createTreeIdentity();
+    recordIdRef.current = identity.id;
+    setForm((f) => ({ ...f, tree_id: identity.code }));
   }, []);
 
   // Refs used to keep fields visible above the keyboard while typing
@@ -202,18 +207,29 @@ export default function TreeFormScreen() {
       return;
     }
     if (!user) return;
+    if (photos.length === 0) {
+      Alert.alert('Required', 'The tree photos are missing. Please capture them again.');
+      return;
+    }
 
     setSubmitting(true);
     try {
-      // 1. Upload photo
-      const photoUrl = await uploadTreePhoto(photoUri, user.id);
-      if (!photoUrl) throw new Error('Photo upload failed');
+      // 1. Upload every captured photo. The first URL stays the primary photo.
+      const uploadedUrls: string[] = [];
+      for (const uri of photos) {
+        const url = await uploadTreePhoto(uri, user.id);
+        if (!url) throw new Error('Photo upload failed. Check your connection and try again.');
+        uploadedUrls.push(url);
+      }
+      const photoUrl = uploadedUrls[0];
 
       // 2. Insert tree record with all fields
       const { data, error } = await insertTreeRecord({
+        id: recordIdRef.current || undefined,
         user_id: user.id,
         project_id: form.project_id || undefined,
         photo_url: photoUrl,
+        photo_urls: uploadedUrls,
         latitude: coords.latitude,
         longitude: coords.longitude,
         species: form.species.trim(),
@@ -265,7 +281,7 @@ export default function TreeFormScreen() {
               (t) => t.status === 'assigned' && (t.tree_id === data.id || t.tree_id === form.tree_id || !t.tree_id)
             );
 
-        if (matchingTask && matchingTask.status === 'assigned') {
+        if (matchingTask && (matchingTask.status === 'assigned' || matchingTask.status === 'in_progress')) {
           // Use the coords already captured for this tree — exact and no extra GPS round-trip.
           const location = `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`;
           await completeTask(matchingTask.id, data.id, location);
@@ -300,16 +316,17 @@ export default function TreeFormScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {/* Header with credits on the right */}
-      <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <View style={styles.headerTextCol}>
-          <Text style={styles.headerTitle}>Field capture</Text>
-          <Text style={styles.headerProjectName} numberOfLines={1}>
-            {selectedProject?.name ?? 'All Projects'}
-          </Text>
-        </View>
+      <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={[styles.header, { paddingTop: insets.top + 10 }]}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.7}>
+            <Ionicons name="arrow-back" size={22} color="#fff" />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>FIELD CAPTURE</Text>
+            <Text style={styles.headerSub} numberOfLines={1}>
+              {selectedProject?.name ?? 'No project selected'}
+            </Text>
+          </View>
         <View
           style={[
             styles.headerCredits,
@@ -330,11 +347,13 @@ export default function TreeFormScreen() {
             {user?.credits ?? 0}
           </Text>
         </View>
+        </View>
       </LinearGradient>
 
       <ScrollView
         ref={scrollRef}
         style={styles.scrollContent}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         onScroll={(e: any) => {
@@ -344,18 +363,31 @@ export default function TreeFormScreen() {
       >
         {/* Photo Preview */}
         <View style={styles.photoSection}>
-          <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
+          <View style={styles.photoGalleryRow}>
+            {SLOT_LABELS.map((label, slot) => {
+              const uri = photos[slot];
+              return (
+                <View key={label} style={styles.photoThumbWrap}>
+                  {uri ? (
+                    <Image source={{ uri }} style={styles.photoThumb} resizeMode="cover" />
+                  ) : (
+                    <View style={styles.photoEmpty}>
+                      <Ionicons name="camera" size={22} color="#fff" />
+                    </View>
+                  )}
+                  <View style={styles.photoThumbBadge}>
+                    <Text style={styles.photoThumbBadgeText}>{uri ? label : 'Empty'}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
           <View style={styles.photoOverlay}>
-            <View style={styles.photoBadge}>
+            <View style={styles.photoCountBadge}>
               <Ionicons name="camera" size={14} color="#fff" />
-              <Text style={styles.photoBadgeText}>Captured</Text>
+              <Text style={styles.photoBadgeText}>{photos.length}/3 Photos</Text>
             </View>
           </View>
-        </View>
-
-        {/* Map Preview */}
-        <View style={styles.mapSection}>
-          <MapPreview coords={coords} height={120} />
         </View>
 
         {/* Form */}
@@ -364,7 +396,11 @@ export default function TreeFormScreen() {
           {/* ─── SECTION: Tree Identity ─── */}
           <View style={styles.sectionHeader}>
             <Ionicons name="finger-print" size={16} color="#1a5c2a" />
-            <Text style={styles.sectionTitle}>Tree Identity</Text>
+            <Text style={[styles.sectionTitle, styles.sectionTitleGrow]}>Tree Identity</Text>
+            <View style={styles.plantingTag}>
+              <Ionicons name="leaf" size={12} color="#1a5c2a" />
+              <Text style={styles.plantingTagText}>{form.event_type}</Text>
+            </View>
           </View>
 
           {/* Tree ID — auto-generated */}
@@ -402,13 +438,19 @@ export default function TreeFormScreen() {
                       key={sp}
                       style={[styles.speciesItem, form.species === sp && styles.speciesItemActive]}
                       onPress={() => {
-                        setForm({ ...form, species: sp });
+                        const match = getSpeciesDefault(sp);
+                        setForm({
+                          ...form,
+                          species: sp,
+                          scientific_name: match?.scientific ?? '',
+                        });
                         setShowSpeciesPicker(false);
                       }}
                     >
                       <Text style={[styles.speciesItemText, form.species === sp && styles.speciesItemTextActive]}>
                         {sp}
                       </Text>
+                      <Text style={styles.speciesValueText}>{getSpeciesDefault(sp)?.value}</Text>
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
@@ -416,17 +458,14 @@ export default function TreeFormScreen() {
             )}
           </View>
 
-          {/* Scientific Name */}
+          {/* Scientific Name — filled from the selected common name */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>SCIENTIFIC NAME <Text style={styles.optional}>· optional</Text></Text>
-            <TextInput
-              style={styles.textInput}
-              value={form.scientific_name}
-              onChangeText={(t) => setForm({ ...form, scientific_name: t })}
-              placeholder="e.g. Azadirachta indica"
-              placeholderTextColor="#aaa"
-              onFocus={handleInputFocus}
-            />
+            <Text style={styles.fieldLabel}>SCIENTIFIC NAME</Text>
+            <View style={styles.readOnlyField}>
+              <Text style={[styles.readOnlyText, !form.scientific_name && styles.speciesPlaceholder]}>
+                {form.scientific_name || 'Select a common name'}
+              </Text>
+            </View>
           </View>
 
           {/* ─── SECTION: Location ─── */}
@@ -435,14 +474,18 @@ export default function TreeFormScreen() {
             <Text style={styles.sectionTitle}>Location</Text>
           </View>
 
-          {/* Lat / Long — read-only from GPS */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>LAT / LONG</Text>
-            <View style={styles.readOnlyField}>
-              <Text style={styles.readOnlyText}>
-                {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
-              </Text>
-              <Ionicons name="checkmark-circle" size={14} color="#22c55e" />
+          <View style={styles.measureGrid}>
+            <View style={styles.measureCell}>
+              <Text style={styles.fieldLabel}>LAT</Text>
+              <View style={styles.readOnlyField}>
+                <Text style={styles.readOnlyText}>{coords.latitude.toFixed(6)}</Text>
+              </View>
+            </View>
+            <View style={styles.measureCell}>
+              <Text style={styles.fieldLabel}>LONG</Text>
+              <View style={styles.readOnlyField}>
+                <Text style={styles.readOnlyText}>{coords.longitude.toFixed(6)}</Text>
+              </View>
             </View>
           </View>
 
@@ -531,26 +574,28 @@ export default function TreeFormScreen() {
           {/* Tree Condition */}
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>CONDITION</Text>
-            <View style={styles.healthRow}>
-              {TREE_CONDITION_OPTIONS.map((opt) => (
+            <View style={styles.conditionGrid}>
+              {TREE_CONDITION_OPTIONS.map((opt) => {
+                const selected = form.tree_condition === opt.label;
+                const icon = opt.label === 'Healthy' ? 'leaf' : opt.label === 'Stressed' ? 'alert-circle' : opt.label === 'Diseased' ? 'medkit' : 'close-circle';
+                return (
                 <TouchableOpacity
                   key={opt.label}
                   style={[
-                    styles.healthBtn,
-                    styles.healthBtnCompact,
-                    { borderColor: opt.color },
-                    form.tree_condition === opt.label && { backgroundColor: opt.color },
+                    styles.conditionCard,
+                    { borderColor: selected ? opt.color : '#E4EDE6' },
+                    selected && { backgroundColor: opt.color },
                   ]}
                   onPress={() => setForm({ ...form, tree_condition: opt.label })}
                 >
-                  <Text style={[
-                    styles.healthBtnText,
-                    { color: form.tree_condition === opt.label ? '#fff' : opt.color },
-                  ]}>
-                    {opt.label}
-                  </Text>
+                  <View style={[styles.conditionIcon, { backgroundColor: selected ? 'rgba(255,255,255,0.22)' : `${opt.color}1A` }]}>
+                    <Ionicons name={icon} size={16} color={selected ? '#fff' : opt.color} />
+                  </View>
+                  <Text style={[styles.conditionLabel, selected && styles.conditionLabelActive]}>{opt.label}</Text>
+                  <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={selected ? '#fff' : '#C5D0C8'} />
                 </TouchableOpacity>
-              ))}
+                );
+              })}
             </View>
           </View>
 
@@ -586,32 +631,10 @@ export default function TreeFormScreen() {
             </View>
           </View>
 
-          {/* Event Type */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>EVENT TYPE</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.eventTypeScroll}
-            >
-              {EVENT_TYPES.map((type) => (
-                <TouchableOpacity
-                  key={type}
-                  style={[styles.eventTypeBtn, form.event_type === type && styles.eventTypeBtnActive]}
-                  onPress={() => setForm({ ...form, event_type: type })}
-                >
-                  <Text style={[styles.eventTypeText, form.event_type === type && styles.eventTypeTextActive]}>
-                    {type}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
           {/* Surveyor + Date in one row */}
           <View style={styles.measureGrid}>
             <View style={styles.measureCell}>
-              <Text style={styles.fieldLabel}>SURVEYOR</Text>
+              <Text style={styles.fieldLabel}>FIELD SURVEYOR</Text>
               <View style={styles.readOnlyField}>
                 <Text style={styles.readOnlyText}>{form.surveyor || '—'}</Text>
               </View>
@@ -627,86 +650,17 @@ export default function TreeFormScreen() {
           {/* Notes */}
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>NOTE <Text style={styles.optional}>· optional</Text></Text>
-            <TouchableOpacity
-              style={styles.notesInput}
-              onPress={() => { Keyboard.dismiss(); setShowNoteHelper(true); }}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.notesInputText, !form.notes && styles.speciesPlaceholder]}>
-                {form.notes || 'Tap to add a note...'}
-              </Text>
-              <Ionicons name="pencil" size={14} color="#888" />
-            </TouchableOpacity>
+            <TextInput
+              style={[styles.textInput, styles.notesField]}
+              value={form.notes}
+              onChangeText={(t) => setForm({ ...form, notes: t })}
+              multiline
+              placeholder="Tap to add a note..."
+              placeholderTextColor="#aaa"
+              textAlignVertical="top"
+              onFocus={handleInputFocus}
+            />
           </View>
-
-          {/* Note Helper Modal */}
-          <Modal
-            visible={showNoteHelper}
-            transparent
-            animationType="slide"
-            onRequestClose={() => setShowNoteHelper(false)}
-          >
-            <View style={styles.modalBackdrop}>
-              <TouchableOpacity
-                style={styles.modalBackdropTouch}
-                activeOpacity={1}
-                onPress={() => setShowNoteHelper(false)}
-              />
-              <View style={styles.noteModalSheet}>
-                <View style={styles.noteModalHeader}>
-                  <Text style={styles.noteModalTitle}>Add Note</Text>
-                  <TouchableOpacity onPress={() => setShowNoteHelper(false)}>
-                    <Ionicons name="close" size={22} color="#333" />
-                  </TouchableOpacity>
-                </View>
-
-                <TextInput
-                  style={styles.noteModalInput}
-                  value={form.notes}
-                  onChangeText={(t) => setForm({ ...form, notes: t })}
-                  multiline
-                  numberOfLines={4}
-                  placeholder="Type your note here..."
-                  placeholderTextColor="#aaa"
-                  textAlignVertical="top"
-                  autoFocus
-                />
-
-                <Text style={styles.noteSuggestionLabel}>Quick suggestions:</Text>
-                <View style={styles.noteSuggestionChips}>
-                  {[
-                    'Tree near water source',
-                    'Needs pruning',
-                    'Pest damage visible',
-                    'Good canopy cover',
-                    'New sapling',
-                    'Marked for removal',
-                    'Fence nearby',
-                    'Irrigation required',
-                  ].map((s) => (
-                    <TouchableOpacity
-                      key={s}
-                      style={styles.noteChip}
-                      onPress={() => {
-                        const sep = form.notes.trim() ? '\n' : '';
-                        setForm({ ...form, notes: form.notes + sep + s });
-                      }}
-                    >
-                      <Text style={styles.noteChipText}>{s}</Text>
-                      <Ionicons name="add-circle" size={14} color="#1a5c2a" />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <TouchableOpacity
-                  style={styles.noteDoneBtn}
-                  onPress={() => setShowNoteHelper(false)}
-                >
-                  <Text style={styles.noteDoneBtnText}>Done</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Modal>
 
           {/* Low Accuracy Warning */}
           {coords && coords.accuracy && coords.accuracy > 50 && (
@@ -717,22 +671,20 @@ export default function TreeFormScreen() {
               </Text>
             </View>
           )}
+
+          <TouchableOpacity
+            style={[styles.captureSaveBtn, (submitting || (user?.credits ?? 0) <= 0) && { opacity: 0.6 }]}
+            onPress={handleSubmit}
+            disabled={submitting || (user?.credits ?? 0) <= 0}
+          >
+            {submitting ? (
+              <Text style={styles.captureSaveBtnText}>Submitting...</Text>
+            ) : (
+              <Text style={styles.captureSaveBtnText}>Save capture</Text>
+            )}
+          </TouchableOpacity>
         </View>
       </ScrollView>
-
-      {/* Save Button */}
-      <View style={styles.saveSection}>
-        <TouchableOpacity
-          style={[styles.saveBtn, submitting && styles.saveBtnDisabled]}
-          onPress={handleSubmit}
-          disabled={submitting || (user?.credits ?? 0) <= 0}
-        >
-          <Ionicons name="checkmark-circle" size={20} color="#112121" />
-          <Text style={styles.saveBtnText}>
-            {submitting ? 'Submitting...' : 'Save capture'}
-          </Text>
-        </TouchableOpacity>
-      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -740,35 +692,43 @@ export default function TreeFormScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f0f4f1',
   },
   // Header
   header: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 48,
-    paddingBottom: 14,
-    paddingHorizontal: 14,
+    justifyContent: 'space-between',
   },
   backBtn: {
-    width: 44,
-    height: 44,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTextCol: {
+  headerCenter: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    marginLeft: 10,
+    marginRight: 10,
   },
   headerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
     color: '#fff',
-    fontSize: 19,
-    fontWeight: '700',
-    textTransform: 'uppercase',
   },
-  headerProjectName: {
+  headerSub: {
     color: '#cde8d3',
-    fontSize: 12,
+    fontSize: 11,
+    fontWeight: '700',
     marginTop: 2,
   },
   headerCredits: {
@@ -799,27 +759,31 @@ const styles = StyleSheet.create({
   },
   // Photo Section
   photoSection: {
-    height: 200,
     backgroundColor: '#0D1A17',
     position: 'relative',
   },
-  photo: {
-    width: '100%',
-    height: '100%',
-  },
+  photoGalleryRow: { flexDirection: 'row', height: 160 },
+  photoThumbWrap: { flex: 1, borderRightWidth: 1, borderRightColor: 'rgba(0,0,0,0.3)' },
+  photoThumb: { width: '100%', height: '100%' },
+  photoEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#163126' },
+  photoThumbBadge: { position: 'absolute', bottom: 4, left: 4, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6 },
+  photoThumbBadgeText: { color: '#fff', fontSize: 9, fontWeight: '700' },
+  photoCountBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14 },
+  sectionTitleGrow: { flex: 1 },
+  plantingTag: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: '#E5F6EA', borderWidth: 1, borderColor: '#B7E0C2' },
+  plantingTagText: { fontSize: 12, fontWeight: '700', color: '#1a5c2a' },
+  notesField: { minHeight: 96, textAlignVertical: 'top' },
+  conditionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  conditionCard: { flexBasis: '48%', flexGrow: 1, minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 14, borderWidth: 1.5, backgroundColor: '#fff' },
+  conditionIcon: { width: 28, height: 28, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  conditionLabel: { flex: 1, fontSize: 13, fontWeight: '700', color: '#1a1a1a' },
+  conditionLabelActive: { color: '#fff' },
+  captureSaveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a5c2a', borderRadius: 14, paddingVertical: 14, marginTop: 8 },
+  captureSaveBtnText: { fontSize: 15, fontWeight: '800', color: '#fff' },
   photoOverlay: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-  },
-  photoBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 7.5,
+    top: 8,
+    right: 8,
   },
   photoBadgeText: {
     color: '#fff',
@@ -884,7 +848,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     backgroundColor: '#F5F5F5',
-    borderRadius: 7.5,
+    borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderWidth: 1,
@@ -896,10 +860,16 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     flex: 1,
   },
+  speciesValueText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+    marginLeft: 8,
+  },
   // Text input
   textInput: {
     backgroundColor: '#fff',
-    borderRadius: 7.5,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: '#D4E8D0',
     paddingHorizontal: 14,
@@ -925,7 +895,7 @@ const styles = StyleSheet.create({
   },
   measureInput: {
     backgroundColor: '#fff',
-    borderRadius: 7.5,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: '#D4E8D0',
     paddingHorizontal: 6,
@@ -943,7 +913,7 @@ const styles = StyleSheet.create({
   eventTypeBtn: {
     height: 44,
     paddingHorizontal: 18,
-    borderRadius: 7.5,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: '#AACBA7',
     backgroundColor: '#fff',
@@ -971,7 +941,7 @@ const styles = StyleSheet.create({
   multiStemBtn: {
     flex: 1,
     height: 40,
-    borderRadius: 7.5,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: '#D4E8D0',
     backgroundColor: '#fff',
@@ -1075,6 +1045,9 @@ const styles = StyleSheet.create({
     flexGrow: 0,
   },
   speciesItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,

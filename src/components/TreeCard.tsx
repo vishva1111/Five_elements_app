@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { TreeRecord, Task, TreeCondition } from '../types';
-import { displayTreeId, resolveTreeId } from '../utils/treeId';
+import { isAutoTreeId, resolveTreeId, shortRecordCode } from '../utils/treeId';
 import { getAuditStatus, getDueLabel, AuditStatus } from '../services/auditService';
 
 export interface TreeCardProps {
@@ -99,45 +99,37 @@ export default function TreeCard({
   const isCompleted = effectiveStatus === 'completed';
   const isApproved = effectiveStatus === 'approved';
 
-  // Resolved ID: displayIdProp -> treeId from tree -> task ID snippet
-  const resolvedId =
-    displayIdProp ||
-    (tree ? resolveTreeId(tree) || displayTreeId(tree) : null) ||
-    (task?.task_code) ||
-    (task?.id ? task.id.slice(0, 8).toUpperCase() : 'TREE');
+  // The code beside the tree name is the ID. A generated TREE-#### value is not shown.
+  const storedId = tree ? resolveTreeId(tree) : '';
+  const nameCode =
+    shortRecordCode(tree?.id) ||
+    shortRecordCode(task?.tree_id) ||
+    shortRecordCode(task?.id);
+  const taskCode = task?.task_code?.trim() || '';
+  const isAssignedCard = effectiveStatus === 'assigned' || effectiveStatus === 'in_progress';
+  const resolvedId = isAssignedCard
+    ? taskCode || (task?.id ? task.id.slice(0, 8).toUpperCase() : '—')
+    : (displayIdProp && !isAutoTreeId(displayIdProp) ? displayIdProp : '') ||
+      (storedId && !isAutoTreeId(storedId) ? storedId : '') ||
+      nameCode ||
+      '—';
 
-  // Title: clean species / tree name (e.g. "Neem (B4D3AE5B)")
+  // Title is the species only. The record code belongs in the ID line, not beside the name.
   const title = useMemo(() => {
-    const rawName = task?.name;
-    const species = tree?.species || '';
-    const cleanSpecies = species.trim() && species !== 'Tree Capture' ? species.trim() : '';
-
-    // Extract short hex code from tree.id or task
-    const uuidStr = (tree?.id || task?.tree_id || task?.id || '').replace(/-/g, '');
-    const shortHex = uuidStr ? uuidStr.slice(0, 8).toUpperCase() : '';
-
-    if (cleanSpecies) {
-      if (cleanSpecies.includes('(') && cleanSpecies.includes(')')) {
-        return cleanSpecies;
-      }
-      const match = rawName?.match(/\(([A-Fa-f0-9]{4,36})\)/);
-      if (match) {
-        return `${cleanSpecies} (${match[1]})`;
-      }
-      if (shortHex) {
-        return `${cleanSpecies} (${shortHex})`;
-      }
-      return cleanSpecies;
+    const species = (tree?.species || '').trim();
+    if (species && species !== 'Tree Capture') {
+      return species.replace(/\s*\([A-Fa-f0-9]{4,36}\)\s*$/, '').trim() || species;
     }
 
+    const rawName = (task?.name || '').trim();
     if (rawName) {
       const parts = rawName.split(/ — | - | · /);
-      const mainPart = parts.length > 1 ? parts[parts.length - 1].trim() : rawName.trim();
-      return mainPart;
+      const mainPart = parts.length > 1 ? parts[parts.length - 1].trim() : rawName;
+      return mainPart.replace(/\s*\([A-Fa-f0-9]{4,36}\)\s*$/, '').trim() || 'Tree';
     }
 
-    return shortHex ? `Tree (${shortHex})` : 'Tree';
-  }, [task?.name, task?.tree_id, task?.id, tree?.species, tree?.id]);
+    return 'Tree';
+  }, [task?.name, tree?.species]);
 
   // Photo URL resolution
   const photoUrl = task?.photo_url || tree?.photo_url;
@@ -817,5 +809,15 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 7,
     paddingHorizontal: 12,
+  },
+  rejectedActionBtn: {
+    backgroundColor: '#dc2626',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
   },
 });

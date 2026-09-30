@@ -16,7 +16,8 @@ import { useTreeStore } from '../../store/treeStore';
 import { useProjectRefreshStore } from '../../store/projectRefreshStore';
 import { fetchMyTrees, fetchAllProjects, fetchTreesByProject, fetchAllTrees } from '../../services/treeService';
 import { fetchAgentTasks } from '../../services/taskService';
-import { loadLocalTasks } from '../../services/localTaskService';
+import { fetchAuditsForTrees, getAuditStatus, getLatestAudit } from '../../services/auditService';
+import { clearLocalTasks } from '../../services/localTaskService';
 import { supabase } from '../../services/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ProjectSelector from '../../components/ProjectSelector';
@@ -67,6 +68,88 @@ export const computeTreeStats = (trees: TreeRecord[]) => {
   };
 };
 
+const APPROVED_TREE_STATS_KEY = '@treeapp_approved_tree_stats_v1';
+
+const isAuditTask = (task: Pick<Task, 'id' | 'task_type' | 'audit_round'>) =>
+  task.task_type === 'audit' || !!task.audit_round || String(task.id).startsWith('audit-');
+
+/** A tree counts once: locked, or its planting task is approved. Audits do not add another tree. */
+const isApprovedProjectTree = (tree: TreeRecord, tasks: Task[]) => {
+  if (tree.locked) return true;
+  return tasks.some((task) => {
+    if (isAuditTask(task) || task.status !== 'approved') return false;
+    return (
+      task.tree_id === tree.id ||
+      task.tree_record_id === tree.id ||
+      task.id === tree.id ||
+      (!!tree.tree_id && task.tree_id === tree.tree_id)
+    );
+  });
+};
+
+/** Healthy / Sick / Dead follow the newest audit. No audit yet uses the approved tree itself. */
+const treeWithLatestAuditCondition = (tree: TreeRecord, audits: any[] | undefined): TreeRecord => {
+  const latest = getLatestAudit(audits);
+  if (!latest) return tree;
+  const survival = String(latest.survival_status || '').toLowerCase();
+  if (survival === 'dead' || String(latest.health_status || '').toLowerCase() === 'dead') {
+    return { ...tree, health_status: 'dead', tree_condition: 'Dead' };
+  }
+  return {
+    ...tree,
+    health_status: (latest.health_status || tree.health_status) as TreeRecord['health_status'],
+    tree_condition: (latest.tree_condition || tree.tree_condition) as TreeRecord['tree_condition'],
+  };
+};
+
+export const computeApprovedTreeStats = (
+  trees: TreeRecord[],
+  tasks: Task[],
+  auditsByTree: Record<string, any[]> = {}
+) => {
+  const approved = trees.filter((tree) => isApprovedProjectTree(tree, tasks));
+  return computeTreeStats(
+    approved.map((tree) => treeWithLatestAuditCondition(tree, auditsByTree[tree.id]))
+  );
+};
+
+async function fetchTasksForTreeStats(projectId: string | null, userId?: string): Promise<Task[]> {
+  const columnLists = [
+    'id, status, tree_id, tree_record_id, task_type, audit_round, project_id',
+    'id, status, tree_id, project_id',
+  ];
+  for (const columns of columnLists) {
+    let query = supabase.from('tasks').select(columns);
+    if (projectId) query = query.eq('project_id', projectId);
+    const { data, error } = await query;
+    if (!error && data) return data as unknown as Task[];
+  }
+  if (!userId) return [];
+  const { data } = await fetchAgentTasks(userId);
+  const rows = data ?? [];
+  return projectId ? rows.filter((task) => task.project_id === projectId) : rows;
+}
+
+function buildApprovedStatsMap(
+  allTrees: TreeRecord[],
+  tasks: Task[],
+  auditsByTree: Record<string, any[]>
+) {
+  const map: Record<string, { total: number; healthy: number; sick: number; dead: number }> = {};
+  map['__all__'] = computeApprovedTreeStats(allTrees, tasks, auditsByTree);
+  const grouped = new Map<string, TreeRecord[]>();
+  allTrees.forEach((tree) => {
+    const pid = tree.project_id || 'unassigned';
+    const list = grouped.get(pid);
+    if (list) list.push(tree);
+    else grouped.set(pid, [tree]);
+  });
+  grouped.forEach((group, pid) => {
+    map[pid] = computeApprovedTreeStats(group, tasks, auditsByTree);
+  });
+  return map;
+}
+
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
@@ -92,48 +175,37 @@ export default function HomeScreen() {
   projectStatsMapRef.current = projectStatsMap;
   const promptedProjectsRef = useRef<Set<string>>(new Set());
   const loadSeqRef = useRef(0);
+  const taskSeqRef = useRef(0);
 
   const firstName = (user?.full_name?.trim()?.split(' ')[0] || '').replace(/[.!]$/, '');
   const greetingName = firstName || 'there';
 
-  const buildStatsMap = useCallback((allTrees: TreeRecord[]) => {
-    const map: Record<string, { total: number; healthy: number; sick: number; dead: number }> = {};
-    map['__all__'] = computeTreeStats(allTrees);
-    allTrees.forEach((t) => {
-      const pid = t.project_id || 'unassigned';
-      if (!map[pid]) {
-        map[pid] = { total: 0, healthy: 0, sick: 0, dead: 0 };
-      }
-      map[pid].total++;
-      const cat = classifyTree(t);
-      map[pid][cat]++;
-    });
-    return map;
-  }, []);
-
   const preCacheAllProjects = useCallback(async () => {
     try {
       const { data: all } = await fetchAllTrees();
-      if (all && all.length > 0) {
-        const map = buildStatsMap(all);
+      if (all) {
+        const uid = userId || useAuthStore.getState().user?.id;
+        const tasks = await fetchTasksForTreeStats(null, uid);
+        const audits = all.length > 0 ? await fetchAuditsForTrees(all.map((tree) => tree.id)) : {};
+        const map = buildApprovedStatsMap(all, tasks, audits);
         setProjectStatsMap(map);
         projectStatsMapRef.current = map;
-        AsyncStorage.setItem('@treeapp_all_project_stats_map', JSON.stringify(map)).catch(() => {});
+        AsyncStorage.setItem(APPROVED_TREE_STATS_KEY, JSON.stringify(map)).catch(() => {});
 
-        const key = activeProjectId || '__all__';
+        const key = useAuthStore.getState().activeProjectId || '__all__';
         if (map[key]) {
           setStats(map[key]);
         }
       }
     } catch {}
-  }, [activeProjectId, buildStatsMap]);
+  }, [userId]);
 
   // ─── Instant local cache for immediate display (<10ms) ─────────────────────
   useEffect(() => {
     let cancelled = false;
 
     // 1. Read persistent all-projects stats map from AsyncStorage (0ms startup)
-    AsyncStorage.getItem('@treeapp_all_project_stats_map').then((raw) => {
+    AsyncStorage.getItem(APPROVED_TREE_STATS_KEY).then((raw) => {
       if (!cancelled && raw) {
         try {
           const map = JSON.parse(raw);
@@ -155,8 +227,9 @@ export default function HomeScreen() {
       const match = activeProjectId
         ? memoryTrees.filter((t) => t.project_id === activeProjectId)
         : memoryTrees;
-      if (match.length > 0) {
-        setStats(computeTreeStats(match));
+      const approved = match.filter((tree) => tree.locked);
+      if (approved.length > 0) {
+        setStats(computeTreeStats(approved));
       }
     }
 
@@ -217,7 +290,13 @@ export default function HomeScreen() {
       if (seq !== loadSeqRef.current) return;
 
       setTrees(visibleTrees);
-      const computedStats = computeTreeStats(visibleTrees);
+      const tasks = await fetchTasksForTreeStats(activeProjectId, userId);
+      const audits = visibleTrees.length > 0
+        ? await fetchAuditsForTrees(visibleTrees.map((tree) => tree.id))
+        : {};
+      if (seq !== loadSeqRef.current) return;
+
+      const computedStats = computeApprovedTreeStats(visibleTrees, tasks, audits);
       setStats(computedStats);
 
       // Keep projectStatsMap updated
@@ -225,7 +304,7 @@ export default function HomeScreen() {
       const updatedMap = { ...projectStatsMapRef.current, [key]: computedStats };
       setProjectStatsMap(updatedMap);
       projectStatsMapRef.current = updatedMap;
-      AsyncStorage.setItem('@treeapp_all_project_stats_map', JSON.stringify(updatedMap)).catch(() => {});
+      AsyncStorage.setItem(APPROVED_TREE_STATS_KEY, JSON.stringify(updatedMap)).catch(() => {});
     } catch (e) {
       console.warn('[HomeScreen] Error loading trees:', e);
     }
@@ -233,19 +312,20 @@ export default function HomeScreen() {
 
   const loadTasks = useCallback(async () => {
     if (!userId) return;
-    const seq = ++loadSeqRef.current;
+    const seq = ++taskSeqRef.current;
 
     try {
-      const [agentTasksRes, localTasks, projectTreesRes] = await Promise.all([
+      const [agentTasksRes, , projectTreesRes] = await Promise.all([
         fetchAgentTasks(userId),
-        loadLocalTasks(),
+        clearLocalTasks(),
         activeProjectId ? fetchTreesByProject(activeProjectId) : fetchAllTrees(),
       ]);
+      const auditsByTree = await fetchAuditsForTrees((projectTreesRes.data ?? []).map((tree) => tree.id));
 
-      if (seq !== loadSeqRef.current) return;
+      if (seq !== taskSeqRef.current) return;
 
-      const dbTasks = agentTasksRes.data ?? [];
-      let visibleTasks: Task[] = [...dbTasks, ...localTasks];
+      const dbTasks = (agentTasksRes.data ?? []).filter((task) => !task.id.startsWith('local_'));
+      let visibleTasks: Task[] = dbTasks;
       let visibleTrees = projectTreesRes.data ?? [];
 
       if (activeProjectId) {
@@ -253,14 +333,68 @@ export default function HomeScreen() {
         visibleTrees = visibleTrees.filter((t) => t.project_id === activeProjectId);
       }
 
-      const treeCaptures = visibleTrees.length;
-      const dbCompleted = visibleTasks.filter((t) => t.status === 'completed').length;
+      const isAuditTask = (task: Task) =>
+        task.task_type === 'audit' || !!task.audit_round || String(task.id).startsWith('audit-');
+      const statusByTree = new Map<string, 'assigned' | 'completed' | 'approved' | 'rejected'>();
+      const knownTreeIds = new Set(visibleTrees.map((tree) => tree.id));
+
+      visibleTrees.forEach((tree) => {
+        const linked = visibleTasks.find(
+          (task) =>
+            !isAuditTask(task) &&
+            (task.tree_id === tree.id || task.tree_record_id === tree.id || task.id === tree.id)
+        );
+        if (tree.locked || linked?.status === 'approved') statusByTree.set(tree.id, 'approved');
+        else if (linked?.status === 'rejected') statusByTree.set(tree.id, 'rejected');
+        else if (linked?.status === 'assigned' || linked?.status === 'in_progress') statusByTree.set(tree.id, 'assigned');
+        else statusByTree.set(tree.id, 'completed');
+      });
+
+      visibleTasks.forEach((task) => {
+        if (isAuditTask(task)) return;
+        const key = task.tree_record_id || task.tree_id || task.id;
+        if (!key || knownTreeIds.has(key) || (task.tree_id && knownTreeIds.has(task.tree_id))) return;
+        if (task.status === 'approved') statusByTree.set(key, 'approved');
+        else if (task.status === 'rejected') statusByTree.set(key, 'rejected');
+        else if (task.status === 'completed') statusByTree.set(key, 'completed');
+        else if (task.status === 'assigned' || task.status === 'in_progress') statusByTree.set(key, 'assigned');
+      });
+
+      let assigned = 0;
+      let completed = 0;
+      let rejected = 0;
+      statusByTree.forEach((status) => {
+        if (status === 'assigned') assigned += 1;
+        else if (status === 'completed') completed += 1;
+        else if (status === 'rejected') rejected += 1;
+      });
+
+      const pendingAuditKeys = new Set<string>();
+      visibleTasks.forEach((task) => {
+        if (!isAuditTask(task)) return;
+        if (task.status !== 'assigned' && task.status !== 'in_progress') return;
+        const treeKey = task.tree_record_id || task.tree_id || task.id;
+        pendingAuditKeys.add(`${treeKey}_${task.audit_round || 1}`);
+      });
+      visibleTrees.forEach((tree) => {
+        const auditStatus = getAuditStatus(tree, auditsByTree[tree.id] || []);
+        if (!auditStatus.allCompleted && (auditStatus.isDue || auditStatus.isOverdue)) {
+          const alreadyAssigned = visibleTasks.some((task) => {
+            if (!isAuditTask(task)) return false;
+            const sameTree =
+              task.tree_record_id === tree.id || task.tree_id === tree.id || task.id === tree.id;
+            return sameTree && (task.status === 'assigned' || task.status === 'in_progress');
+          });
+          if (!alreadyAssigned) pendingAuditKeys.add(`${tree.id}_${auditStatus.currentRound}`);
+        }
+      });
+      assigned += pendingAuditKeys.size;
 
       setTaskStats({
-        total: visibleTasks.length + treeCaptures,
-        assigned: visibleTasks.filter((t) => t.status === 'assigned' || t.status === 'in_progress').length,
-        rejected: visibleTasks.filter((t) => t.status === 'rejected').length,
-        completed: dbCompleted + treeCaptures,
+        total: assigned,
+        assigned,
+        rejected,
+        completed,
       });
     } catch (e) {
       console.warn('[HomeScreen] Error loading tasks:', e);
@@ -291,6 +425,28 @@ export default function HomeScreen() {
           event: '*',
           schema: 'public',
           table: 'tree_records',
+        },
+        () => {
+          loadTrees();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks',
+        },
+        () => {
+          loadTrees();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tree_monitoring_records',
         },
         () => {
           loadTrees();
@@ -485,22 +641,6 @@ export default function HomeScreen() {
           <View style={styles.taskStatsRow}>
             <TouchableOpacity
               style={styles.taskStatCard}
-              onPress={() => navigation.navigate('Task', { tab: 'assigned' })}
-              activeOpacity={0.7}
-            >
-              <GradientProgress
-                size={64}
-                progress={100}
-                strokeWidth={5}
-                colors={buildProgressPalette(['#f97316', '#f59e0b', '#fbbf24', '#fde047'], allProjects.length)}
-                trackColor="#FFF3E0"
-              >
-                <Text style={styles.taskStatNumber}>{taskStats.total}</Text>
-              </GradientProgress>
-              <Text style={styles.taskStatLabel}>Total Tasks</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.taskStatCard}
               onPress={() => navigation.navigate('ProjectSelect')}
               activeOpacity={0.7}
             >
@@ -514,6 +654,22 @@ export default function HomeScreen() {
                 <Text style={styles.taskStatNumber}>{allProjects.length}</Text>
               </GradientProgress>
               <Text style={styles.taskStatLabel}>Projects</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.taskStatCard}
+              onPress={() => navigation.navigate('Task', { tab: 'assigned' })}
+              activeOpacity={0.7}
+            >
+              <GradientProgress
+                size={64}
+                progress={100}
+                strokeWidth={5}
+                colors={buildProgressPalette(['#f97316', '#f59e0b', '#fbbf24', '#fde047'], allProjects.length)}
+                trackColor="#FFF3E0"
+              >
+                <Text style={styles.taskStatNumber}>{taskStats.total}</Text>
+              </GradientProgress>
+              <Text style={styles.taskStatLabel}>Total Tasks</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.taskStatsRow}>

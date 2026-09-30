@@ -6,7 +6,7 @@ export interface User {
   full_name?: string;
   role: 'admin' | 'field_user' | 'partner';
   avatar_url?: string;
-  created_at: string;
+  created_at: string; 
   credits: number;
 }
 
@@ -23,6 +23,7 @@ export interface TreeRecord {
   user_id: string;
   project_id?: string;
   photo_url: string;
+  photo_urls?: string[] | null;
   latitude: number;
   longitude: number;
   species: string;
@@ -50,10 +51,12 @@ export interface TreeRecord {
 }
 
 export interface TreeRecordInsert {
+  id?: string;
   user_id: string;
   tree_id?: string;
   project_id?: string;
   photo_url: string;
+  photo_urls?: string[] | null;
   latitude: number;
   longitude: number;
   species: string;
@@ -132,6 +135,11 @@ export interface Task {
   tree_condition?: string;
   tree_condition_color?: string;
   surveyor?: string;
+  // Audit follow-ups of a tree that is already counted. These are not new trees.
+  task_type?: string | null;
+  audit_round?: number | null;
+  tree_record_id?: string | null;
+  title?: string;
 }
 
 // ─── Task Store Types ──────────────────────────────────────────────────────────
@@ -157,14 +165,14 @@ export type RootStackParamList = {
 
 export type CaptureStackParamList = {
   CaptureCamera: undefined;
-  MapPicker: { photoUri: string; initialCoords?: Coordinates };
-  TreeForm: { photoUri: string; coords: Coordinates };
+  MapPicker: { photoUris: string[]; initialCoords?: Coordinates };
+  TreeForm: { photoUris: string[]; coords: Coordinates };
   SubmitSuccess: { treeId: string };
 };
 
 export type HistoryStackParamList = {
   HistoryList: undefined;
-  TreeDetail: { treeId: string };
+  TreeDetail: { treeId: string; taskId?: string | null; rejectionNotes?: string | null; asAuditProfile?: boolean };
 };
 
 // ─── Store Types ───────────────────────────────────────────────────────────────
@@ -237,24 +245,48 @@ export interface TreeFormData {
   survey_date: string;
 }
 
-export const TREE_SPECIES = [
-  'Teak (Sagwan)',
-  'Neem',
-  'Peepal',
-  'Banyan (Vad)',
-  'Mango (Keri)',
-  'Coconut (Nariyal)',
-  'Bamboo (Vans)',
-  'Eucalyptus',
-  'Acacia',
-  'Gulmohar',
-  'Ashoka',
-  'Jamun',
-  'Amla (Awla)',
-  'Arjun',
-  'Sheesham (Dalbergia)',
-  'Other',
-] as const;
+export interface SpeciesDefault {
+  common: string;
+  scientific: string;
+  value: number;
+}
+
+/** Common name, scientific name, and default number from the species defaults sheet. */
+export const SPECIES_DEFAULTS: SpeciesDefault[] = [
+  { common: 'Neem', scientific: 'Azadirachta indica', value: 15 },
+  { common: 'Mango', scientific: 'Mangifera indica', value: 15 },
+  { common: 'Teak', scientific: 'Tectona grandis', value: 7 },
+  { common: 'Eucalyptus', scientific: 'Eucalyptus spp.', value: 30 },
+  { common: 'Banyan', scientific: 'Ficus benghalensis', value: 100 },
+  { common: 'Peepal', scientific: 'Ficus religiosa', value: 50 },
+  { common: 'Ashoka', scientific: 'Saraca asoca', value: 12 },
+  { common: 'Gulmohar', scientific: 'Delonix regia', value: 15 },
+  { common: 'Indian Rosewood', scientific: 'Dalbergia sissoo', value: 18 },
+  { common: 'Cashew', scientific: 'Anacardium occidentale', value: 12 },
+  { common: 'Tamarind', scientific: 'Tamarindus indica', value: 15 },
+  { common: 'Jamun', scientific: 'Syzygium cumini', value: 15 },
+  { common: 'Pongamia', scientific: 'Pongamia pinnata', value: 12 },
+  { common: 'Babul / Acacia', scientific: 'Acacia nilotica', value: 15 },
+  { common: 'Prosopis', scientific: 'Prosopis juliflora', value: 18 },
+  { common: 'Rain Tree', scientific: 'Albizia saman', value: 25 },
+  { common: 'Ash', scientific: 'Fraxinus spp.', value: 18 },
+  { common: 'Oak', scientific: 'Quercus spp.', value: 25 },
+  { common: 'Maple', scientific: 'Acer spp.', value: 20 },
+  { common: 'Pine', scientific: 'Pinus spp.', value: 18 },
+  { common: 'Spruce', scientific: 'Picea spp.', value: 25 },
+  { common: 'Douglas fir', scientific: 'Pseudotsuga menziesii', value: 30 },
+  { common: 'Mahogany', scientific: 'Swietenia macrophylla', value: 20 },
+  { common: 'Bamboo (stand)', scientific: 'Bambusoideae', value: 25 },
+  { common: 'Mangrove (average)', scientific: 'Rhizophora spp.', value: 10 },
+];
+
+export const TREE_SPECIES = SPECIES_DEFAULTS.map((item) => item.common);
+
+export function getSpeciesDefault(commonName?: string | null): SpeciesDefault | undefined {
+  const key = commonName?.trim().toLowerCase();
+  if (!key) return undefined;
+  return SPECIES_DEFAULTS.find((item) => item.common.toLowerCase() === key);
+}
 
 export const HEALTH_STATUS_OPTIONS: { label: string; value: HealthStatus; color: string }[] = [
   { label: 'Healthy', value: 'healthy', color: '#22c55e' },
@@ -278,6 +310,26 @@ export const LAND_TYPE_OPTIONS: LandType[] = [
   'Forest',
   'Other',
 ];
+
+export interface MonitoringRound {
+  round: number;
+  label: string;
+  subtitle: string;
+  color: string;
+  icon: string;
+}
+
+/** Four sequential field audits, one every three months. */
+export const MONITORING_ROUNDS: MonitoringRound[] = [
+  { round: 1, label: 'Audit 1', subtitle: 'Survival check · 3 months', color: '#16a34a', icon: 'leaf' },
+  { round: 2, label: 'Audit 2', subtitle: 'Growth check · 6 months', color: '#0ea5e9', icon: 'trending-up' },
+  { round: 3, label: 'Audit 3', subtitle: 'Health check · 9 months', color: '#d97706', icon: 'pulse' },
+  { round: 4, label: 'Audit 4', subtitle: 'Final check · 12 months', color: '#7c3aed', icon: 'checkmark-done' },
+];
+
+export function getMonitoringRoundInfo(round: number | null | undefined): MonitoringRound {
+  return MONITORING_ROUNDS.find((item) => item.round === Number(round)) ?? MONITORING_ROUNDS[0];
+}
 
 // ─── Geofence Types ──────────────────────────────────────────────────────────
 

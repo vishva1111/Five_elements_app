@@ -8,12 +8,18 @@ export async function uploadTreePhoto(
   userId: string
 ): Promise<string | null> {
   try {
+    if (!uri || typeof uri !== 'string') {
+      throw new Error('No photo file to upload.');
+    }
+
     const fileName = `${userId}/${Date.now()}.jpg`;
+    const readableUri = await readablePhotoUri(uri);
 
     // Read file as base64 string (React Native compatible)
-    const base64 = await FileSystem.readAsStringAsync(uri, {
+    const base64 = await FileSystem.readAsStringAsync(readableUri, {
       encoding: 'base64' as any,
     });
+    if (!base64) throw new Error('The photo file was empty.');
 
     // Decode base64 to ArrayBuffer using base64-arraybuffer (no atob needed)
     const arrayBuffer = decode(base64);
@@ -40,6 +46,20 @@ export async function uploadTreePhoto(
     console.error('Photo upload error:', err?.message ?? JSON.stringify(err));
     return null;
   }
+}
+
+/** Camera photos on Android can be content:// URIs that must be copied first. */
+async function readablePhotoUri(uri: string): Promise<string> {
+  try {
+    const info = await FileSystem.getInfoAsync(uri);
+    if (info.exists) return uri;
+  } catch {
+    // Fall through and copy the URI into the app cache.
+  }
+
+  const dest = `${FileSystem.cacheDirectory}tree-photo-${Date.now()}.jpg`;
+  await FileSystem.copyAsync({ from: uri, to: dest });
+  return dest;
 }
 
 /**
