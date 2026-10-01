@@ -305,13 +305,32 @@ export default function TaskScreen() {
     return [...planting, ...audits];
   }, [assignedTasks]);
 
-  // Admin approval moves the same task card onto the Approved tab.
+  // Admin approval moves the same task card onto the Approved tab. When the card
+  // came from a tree audit, the latest monitoring record (if any) supplies the
+  // tree condition, so an approved audit card shows the same condition chip and
+  // updated audit dots/round as the Completed tab.
   const approvedItems = useMemo(() => {
-    const list = projectTasks.filter((t) => t.status === 'approved');
+    const list = projectTasks
+      .filter((t) => t.status === 'approved')
+      .map((t) => {
+        // Monitoring rows can be keyed by the tree record id, the task's
+        // tree_record_id, or its tree_id — accept any so the audit is never missed.
+        const auditRows = [t.tree_record_id, t.tree_id, t.id]
+          .filter(Boolean)
+          .map((key) => auditsByTree[key as string])
+          .find((rows) => rows && rows.length > 0);
+        const latestAudit = getLatestAudit(auditRows || []);
+        if (!latestAudit) return t;
+        return {
+          ...t,
+          photo_url: latestAudit.photo_url || t.photo_url,
+          tree_condition: latestAudit.tree_condition || t.tree_condition,
+        };
+      });
     return list.sort(
       (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
     );
-  }, [projectTasks]);
+  }, [projectTasks, auditsByTree]);
 
   // A completed task stays here until an admin approves or rejects that card.
   const completedItems = useMemo(() => {
@@ -466,12 +485,18 @@ export default function TaskScreen() {
 
     const isAuditTask = (task.task_type === 'audit' || !!task.audit_round) && (task.status === 'assigned' || task.status === 'in_progress');
     const isCompletedAudit = task.status === 'completed' && (task.task_type === 'audit' || !!task.audit_round);
-    const targetId = treeRecord?.id || task.tree_id || task.id;
+    const targetId = treeRecord?.id || task.tree_record_id || task.tree_id || task.id;
     const projectTreeId = treeRecord ? treeIds[treeRecord.id] || resolveTreeId(treeRecord) || displayTreeId(treeRecord) : undefined;
     const isAssigned = task.status === 'assigned' || task.status === 'in_progress';
     const isRejected = task.status === 'rejected';
     const isApproved = task.status === 'approved';
-    const treeAudits = auditsByTree[targetId] || [];
+    // Audit rows may be keyed by the tree record id, the task's tree_record_id,
+    // or its tree_id — accept any of them so the card always finds its audits.
+    const treeAudits =
+      [treeRecord?.id, task.tree_record_id, task.tree_id, task.id]
+        .filter(Boolean)
+        .map((key) => auditsByTree[key as string])
+        .find((rows) => rows && rows.length > 0) || [];
 
     const handleStartAudit = () => {
       navigation.navigate('EditTree', {

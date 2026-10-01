@@ -134,14 +134,16 @@ export default function TreeCard({
   // Photo URL resolution
   const photoUrl = task?.photo_url || tree?.photo_url;
 
-  // Condition is an audit result. It stays hidden until Audit 1 is completed.
+  // Condition is an audit result: it is shown only once the tree has actually
+  // been audited (at least one monitoring round exists). On an approved card the
+  // latest audit's condition wins, so the card updates only when the approved
+  // tree was audited — an un-audited approved tree keeps its card unchanged.
   const hasCompletedAudit = (auditsProp ?? []).some(
     (audit) => Number(audit?.monitoring_round) >= 1
   );
   const recordedCondition = task?.tree_condition || tree?.tree_condition;
-  const condition = hasCompletedAudit && recordedCondition
-    ? recordedCondition as TreeCondition
-    : null;
+  const condition =
+    hasCompletedAudit && recordedCondition ? (recordedCondition as TreeCondition) : null;
   const conditionColor = condition ? CONDITION_COLORS[condition] || '#16a34a' : '#16a34a';
 
   // Audit round
@@ -399,6 +401,11 @@ export default function TreeCard({
                     );
                   })}
                 </View>
+                {computedAuditStatus.completedCount > 0 ? (
+                  <View style={styles.auditCountDot}>
+                    <Text style={styles.auditCountText}>{computedAuditStatus.completedCount}</Text>
+                  </View>
+                ) : null}
                 <Text style={[styles.auditProgressText, { color: mainColor }]} numberOfLines={1}>
                   {computedAuditStatus.allCompleted ? (
                     <Text style={{ color: '#16a34a', fontWeight: '700' }}>All 4 Audits Completed ✓</Text>
@@ -785,6 +792,21 @@ const styles = StyleSheet.create({
   },
   auditProgressText: {
     fontSize: 9.5,
+  },
+  // Audit count dot — number of completed audits, shown only after the first audit.
+  auditCountDot: {
+    minWidth: 15,
+    height: 15,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    backgroundColor: '#16a34a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  auditCountText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '800',
   },
   dateRow: {
     flexDirection: 'row',

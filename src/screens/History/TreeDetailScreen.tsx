@@ -545,69 +545,67 @@ export default function TreeDetailScreen() {
               </Text>
             </View>
           ) : null}
-          <View
-            style={[
-              styles.landTypeRow,
-              {
-                backgroundColor: isUpdated
-                  ? '#fff7ed'
-                  : isRejected
-                  ? '#fef2f2'
-                  : isApproved
-                  ? '#f3e8ff'
-                  : task?.status === 'completed'
-                  ? '#ecfdf5'
-                  : '#eff6ff',
-                borderColor: isUpdated
-                  ? '#fdba74'
-                  : isRejected
-                  ? '#fecaca'
-                  : isApproved
-                  ? '#ddd6fe'
-                  : task?.status === 'completed'
-                  ? '#bbf7d0'
-                  : '#bfdbfe',
-              },
-            ]}
-          >
+          <View style={styles.infoBoxRow}>
+            {landType || tree.survey_date ? (
+              <View style={[styles.landTypeRow, styles.infoBoxHalf]}>
+                <View style={styles.landTypeIconBox}>
+                  <Ionicons name="map-outline" size={16} color="#15803d" />
+                </View>
+                <View style={styles.landTypeBody}>
+                  <Text style={styles.landTypeLabel}>LAND TYPE</Text>
+                  <Text style={styles.landTypeValue} numberOfLines={1}>
+                    {landType || 'Not recorded'}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
             <View
               style={[
-                styles.landTypeIconBox,
+                styles.landTypeRow,
+                styles.infoBoxHalf,
                 {
                   backgroundColor: isUpdated
-                    ? '#ffedd5'
+                    ? '#fff7ed'
                     : isRejected
-                    ? '#fee2e2'
+                    ? '#fef2f2'
                     : isApproved
-                    ? '#ede9fe'
+                    ? '#f3e8ff'
                     : task?.status === 'completed'
-                    ? '#dcfce7'
-                    : '#dbeafe',
+                    ? '#ecfdf5'
+                    : '#eff6ff',
+                  borderColor: isUpdated
+                    ? '#fdba74'
+                    : isRejected
+                    ? '#fecaca'
+                    : isApproved
+                    ? '#ddd6fe'
+                    : task?.status === 'completed'
+                    ? '#bbf7d0'
+                    : '#bfdbfe',
                 },
               ]}
             >
-              <Ionicons
-                name="calendar-outline"
-                size={16}
-                color={
-                  isUpdated
-                    ? '#ea580c'
-                    : isRejected
-                    ? '#dc2626'
-                    : isApproved
-                    ? '#7c3aed'
-                    : task?.status === 'completed'
-                    ? '#15803d'
-                    : '#2563eb'
-                }
-              />
-            </View>
-            <View style={styles.landTypeBody}>
-              <Text
+              <View
                 style={[
-                  styles.landTypeLabel,
+                  styles.landTypeIconBox,
                   {
-                    color: isUpdated
+                    backgroundColor: isUpdated
+                      ? '#ffedd5'
+                      : isRejected
+                      ? '#fee2e2'
+                      : isApproved
+                      ? '#ede9fe'
+                      : task?.status === 'completed'
+                      ? '#dcfce7'
+                      : '#dbeafe',
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="calendar-outline"
+                  size={16}
+                  color={
+                    isUpdated
                       ? '#ea580c'
                       : isRejected
                       ? '#dc2626'
@@ -615,58 +613,55 @@ export default function TreeDetailScreen() {
                       ? '#7c3aed'
                       : task?.status === 'completed'
                       ? '#15803d'
-                      : '#2563eb',
-                  },
-                ]}
-              >
-                {hasAudits
-                  ? `AUDIT ${latestAudit?.monitoring_round || 1} DATE`
-                  : isUpdated
-                  ? 'UPDATED DATE'
-                  : isRejected
-                  ? 'REJECTED DATE'
-                  : isApproved
-                  ? 'APPROVED DATE'
-                  : task?.status === 'completed'
-                  ? 'COMPLETED DATE'
-                  : 'ASSIGNED DATE'}
-              </Text>
-              <Text style={styles.landTypeValue} numberOfLines={1}>
-                {formatDateFriendly(
-                  hasAudits
-                    ? activeInspectorAudit?.survey_date || activeInspectorAudit?.submitted_at
-                    : isUpdated
-                    ? task?.completed_at || task?.reviewed_at
-                    : isRejected || isApproved
-                    ? task?.reviewed_at || task?.completed_at
-                    : task?.status === 'completed'
-                    ? task?.completed_at || tree.survey_date || tree.submitted_at
-                    : task?.created_at || tree.survey_date || tree.submitted_at
-                ) || '—'}
-              </Text>
-            </View>
-          </View>
-          {landType || tree.survey_date ? (
-            <View style={styles.landTypeRow}>
-              <View style={styles.landTypeIconBox}>
-                <Ionicons name="map-outline" size={16} color="#15803d" />
+                      : '#2563eb'
+                  }
+                />
               </View>
               <View style={styles.landTypeBody}>
-                <Text style={styles.landTypeLabel}>LAND TYPE</Text>
+                <Text
+                  style={[
+                    styles.landTypeLabel,
+                    {
+                      color: isUpdated
+                        ? '#ea580c'
+                        : isRejected
+                        ? '#dc2626'
+                        : isApproved
+                        ? '#7c3aed'
+                        : task?.status === 'completed'
+                        ? '#15803d'
+                        : '#2563eb',
+                    },
+                  ]}
+                >
+                  {hasAudits
+                    ? `AUDIT ${latestAudit?.monitoring_round || 1} DATE`
+                    : isUpdated
+                    ? 'UPDATED DATE'
+                    : isRejected
+                    ? 'REJECTED DATE'
+                    : isApproved
+                    ? 'APPROVED DATE'
+                    : task?.status === 'completed'
+                    ? 'COMPLETED DATE'
+                    : 'ASSIGNED DATE'}
+                </Text>
                 <Text style={styles.landTypeValue} numberOfLines={1}>
-                  {landType || 'Not recorded'}
+                  {formatDateFriendly(
+                    hasAudits
+                      ? activeInspectorAudit?.survey_date || activeInspectorAudit?.submitted_at
+                      : isUpdated
+                      ? task?.completed_at || task?.reviewed_at
+                      : isRejected || isApproved
+                      ? task?.reviewed_at || task?.completed_at
+                      : task?.status === 'completed'
+                      ? task?.completed_at || tree.survey_date || tree.submitted_at
+                      : task?.created_at || tree.survey_date || tree.submitted_at
+                  ) || '—'}
                 </Text>
               </View>
-              {tree.survey_date ? (
-                <View style={styles.surveyDateChip}>
-                  <Ionicons name="calendar-outline" size={11} color="#15803d" />
-                  <Text style={styles.surveyDateText} numberOfLines={1}>
-                    {tree.survey_date}
-                  </Text>
-                </View>
-              ) : null}
             </View>
-          ) : null}
+          </View>
 
           {/* Divider */}
           {hasAudits ? <View style={styles.speciesGrowthDivider} /> : null}
@@ -1473,6 +1468,13 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   landTypeValue: { fontSize: 14, fontWeight: '800', color: '#123F24', marginTop: 2 },
+  // Two info boxes (Land Type · Date) sharing one line, half width each.
+  infoBoxRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 10,
+  },
+  infoBoxHalf: { flex: 1 },
   surveyDateChip: {
     flexDirection: 'row',
     alignItems: 'center',
