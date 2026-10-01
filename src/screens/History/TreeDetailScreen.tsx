@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -41,13 +41,6 @@ const PHOTO_ANGLES = [
 type Route = RouteProp<HistoryStackParamList, 'TreeDetail'>;
 type Nav = NativeStackNavigationProp<HistoryStackParamList, 'TreeDetail'>;
 
-const CONDITION_THEMES: Record<string, { color: string; bg: string; text: string; icon: string }> = {
-  Healthy: { color: '#16a34a', bg: '#dcfce7', text: '#15803d', icon: 'checkmark-circle' },
-  Stressed: { color: '#d97706', bg: '#fef3c7', text: '#b45309', icon: 'warning' },
-  Diseased: { color: '#dc2626', bg: '#fee2e2', text: '#b91c1c', icon: 'alert-circle' },
-  Dead: { color: '#4b5563', bg: '#f3f4f6', text: '#374151', icon: 'close-circle' },
-};
-
 export default function TreeDetailScreen() {
   const route = useRoute<Route>();
   const navigation = useNavigation<any>();
@@ -69,9 +62,68 @@ export default function TreeDetailScreen() {
   // Collapsible baseline details
   const [baselineExpanded, setBaselineExpanded] = useState(false);
 
-  // Active photo index within the displayed photos pager
+  // Active photo index within the sliding photo pager
   const [activePhotoIdx, setActivePhotoIdx] = useState(0);
   const photoScrollRef = useRef<ScrollView>(null);
+
+  // ── Multi-photo support ────────────────────────────────────────────────────
+  // Derived BEFORE the loading / not-found early returns below. Hooks must run
+  // in the same order on every render, so the effects that follow must never be
+  // skipped on the first (loading) render — otherwise React throws
+  // "Rendered more hooks than during the previous render".
+  const latestAudit = getLatestAudit(audits);
+
+  // Planting photos: photo_urls first, then the ##META## copy inside notes
+  // (records saved before the photo_urls column existed), then photo_url.
+  const metaPhotoUrls: unknown = tree ? parseTreeMeta(tree.notes)?.photo_urls : null;
+  const plantingPhotos: string[] = !tree
+    ? []
+    : tree.photo_urls && tree.photo_urls.length > 0
+    ? tree.photo_urls
+    : Array.isArray(metaPhotoUrls) && metaPhotoUrls.length > 0
+    ? metaPhotoUrls.filter((u: unknown): u is string => typeof u === 'string' && !!u)
+    : tree.photo_url
+    ? [tree.photo_url]
+    : [];
+
+  // Audit photos for the currently selected/latest audit
+  const activeInspectorAudit =
+    selectedAuditRound !== null
+      ? audits.find((a) => Number(a.monitoring_round) === selectedAuditRound) ?? latestAudit
+      : latestAudit;
+
+  const auditPhotos: string[] = activeInspectorAudit
+    ? (activeInspectorAudit.photo_urls && activeInspectorAudit.photo_urls.length > 0
+        ? activeInspectorAudit.photo_urls
+        : activeInspectorAudit.photo_url
+        ? [activeInspectorAudit.photo_url]
+        : [])
+    : [];
+
+  // Has updated photo (any audit photo)
+  const hasAuditPhoto = auditPhotos.length > 0;
+
+  // Currently displayed photos array based on tab selection
+  const displayedPhotos: string[] =
+    photoView === 'planting' || !hasAuditPhoto
+      ? plantingPhotos
+      : auditPhotos;
+
+  // Keep the sliding pager in step with the photo set it is showing. Switching
+  // the Audit/Planting set or inspecting another audit round swaps the array,
+  // so the counter and the scroll offset must go back to the first photo
+  // instead of pointing at an index that no longer exists.
+  useEffect(() => {
+    setActivePhotoIdx(0);
+    photoScrollRef.current?.scrollTo({ x: 0, animated: false });
+  }, [photoView, selectedAuditRound]);
+
+  // Data reloads can shrink the set (3 photos -> 1). Clamp so the N/3 counter
+  // and the highlighted angle tab can never fall outside the array.
+  useEffect(() => {
+    const maxIdx = Math.max(0, displayedPhotos.length - 1);
+    setActivePhotoIdx((idx) => (idx > maxIdx ? maxIdx : idx));
+  }, [displayedPhotos.length]);
 
   const loadTreeData = useCallback(async () => {
     try {
@@ -243,15 +295,11 @@ export default function TreeDetailScreen() {
   const surveyName = task?.name || (surveyor ? `Survey by ${surveyor}` : tree.project_name);
 
   const auditStatus = getAuditStatus(tree, audits);
-  const latestAudit = getLatestAudit(audits);
 
   // Active measurements: latest audit overrides baseline
   const activeDbh = latestAudit?.dbh_cm ?? dbhCm;
   const activeHeight = latestAudit?.height_m ?? heightM;
   const activeCrown = latestAudit?.crown_diameter_m ?? crownDiam;
-  const activeCondition = latestAudit?.tree_condition ?? treeCondition ?? 'Healthy';
-  const conditionTheme = CONDITION_THEMES[activeCondition] ?? CONDITION_THEMES.Healthy;
-  const activeSurvival = (latestAudit?.survival_status ?? 'alive').toUpperCase();
 
   // Growth calculation compared to planting baseline
   const baselineDbhNum = dbhCm != null && !isNaN(Number(dbhCm)) ? Number(dbhCm) : null;
@@ -279,37 +327,8 @@ export default function TreeDetailScreen() {
   const hasAudits = audits.length > 0;
   const showAuditProfile = hasAudits || Boolean(asAuditProfile);
 
-  // ── Multi-photo support ────────────────────────────────────────────────────
-  // Planting photos: use photo_urls if available, else wrap single photo_url
-  const plantingPhotos: string[] = (tree.photo_urls && tree.photo_urls.length > 0)
-    ? tree.photo_urls
-    : (tree.photo_url ? [tree.photo_url] : []);
-
-  // Audit photos for the currently selected/latest audit
-  const activeInspectorAudit =
-    selectedAuditRound !== null
-      ? audits.find((a) => Number(a.monitoring_round) === selectedAuditRound) ?? latestAudit
-      : latestAudit;
-
-  const auditPhotos: string[] = activeInspectorAudit
-    ? (activeInspectorAudit.photo_urls && activeInspectorAudit.photo_urls.length > 0
-        ? activeInspectorAudit.photo_urls
-        : activeInspectorAudit.photo_url
-        ? [activeInspectorAudit.photo_url]
-        : [])
-    : [];
-
-  // Has updated photo (any audit photo)
-  const hasAuditPhoto = auditPhotos.length > 0;
-
-  // Currently displayed photos array based on tab selection
-  const displayedPhotos: string[] =
-    photoView === 'planting' || !hasAuditPhoto
-      ? plantingPhotos
-      : auditPhotos;
-
-  // Legacy single photo (first of displayed) for fullscreen & backwards compatibility
-  const displayedPhoto = displayedPhotos[0] ?? null;
+  // (Multi-photo derivation + pager-sync effects live above the loading /
+  // not-found early returns so the hook order never changes between renders.)
 
   return (
     <View style={styles.container}>
@@ -361,26 +380,28 @@ export default function TreeDetailScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.rejectionNoticeTitle}>Rejection Reason:</Text>
               <Text style={styles.rejectionNoticeBody}>{rejectionReason}</Text>
+              <Text style={styles.rejectionNoticeDate}>
+                Rejected date: {formatDateFriendly(task?.reviewed_at || task?.completed_at || task?.created_at)}
+              </Text>
             </View>
           </View>
         ) : null}
 
-        {/* ─── 2. HERO PHOTO STUDIO GALLERY (3 ANGLES + INTERACTIVE TABS) ─── */}
+        {/* ─── 2. HERO PHOTO SLIDER: SWIPE THROUGH THE 3 VIEWS ─── */}
         <View style={styles.photoContainer}>
-          {/* Multi-photo horizontal strip with ref for smooth scrolling */}
-          <ScrollView
-            ref={photoScrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            style={styles.photoStrip}
-            onMomentumScrollEnd={(e) => {
-              const idx = Math.round(e.nativeEvent.contentOffset.x / PHOTO_PAGE_W);
-              setActivePhotoIdx(Math.max(0, Math.min(idx, displayedPhotos.length - 1)));
-            }}
-          >
-            {displayedPhotos.length > 0 ? (
-              displayedPhotos.map((uri, idx) => (
+          {displayedPhotos.length > 0 ? (
+            <ScrollView
+              ref={photoScrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              style={styles.photoStrip}
+              onMomentumScrollEnd={(e) => {
+                const idx = Math.round(e.nativeEvent.contentOffset.x / PHOTO_PAGE_W);
+                setActivePhotoIdx(Math.max(0, Math.min(idx, displayedPhotos.length - 1)));
+              }}
+            >
+              {displayedPhotos.map((uri, idx) => (
                 <TouchableOpacity
                   key={`${photoView}-${idx}`}
                   activeOpacity={0.95}
@@ -389,79 +410,69 @@ export default function TreeDetailScreen() {
                 >
                   <Image source={{ uri }} style={styles.heroPhoto as any} resizeMode="cover" />
                 </TouchableOpacity>
-              ))
-            ) : (
-              <View style={styles.photoPage}>
-                <View style={[styles.heroPhoto as any, styles.emptyPhotoWrap]}>
-                  <Ionicons name="leaf-outline" size={48} color="#15803d" />
-                  <Text style={styles.emptyPhotoText}>No Photo Recorded</Text>
-                </View>
-              </View>
-            )}
-          </ScrollView>
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={styles.emptyPhotoWrap}>
+              <Ionicons name="leaf-outline" size={48} color="#15803d" />
+              <Text style={styles.emptyPhotoText}>No Photo Recorded</Text>
+            </View>
+          )}
 
-          {/* Top Floating Glass Header: ALIVE on Left, 1/3 Counter on Right */}
+          {/* Top Floating Glass Header: photo-set toggle left, N/3 counter right */}
           <View style={styles.photoTopRow}>
-            {hasAuditPhoto ? (
-              <View style={styles.photoTogglePill}>
-                <TouchableOpacity
-                  style={[styles.toggleBtn, photoView === 'audit' && styles.toggleBtnActive]}
-                  onPress={() => {
-                    setPhotoView('audit');
-                    setActivePhotoIdx(0);
-                    photoScrollRef.current?.scrollTo({ x: 0, animated: true });
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="sparkles" size={11} color={photoView === 'audit' ? '#fff' : 'rgba(255,255,255,0.7)'} />
-                  <Text style={[styles.toggleText, photoView === 'audit' && styles.toggleTextActive]}>
-                    Audit {latestAudit?.monitoring_round}
-                  </Text>
-                </TouchableOpacity>
+            <View>
+              {hasAuditPhoto ? (
+                <View style={styles.photoTogglePill}>
+                  <TouchableOpacity
+                    style={[styles.toggleBtn, photoView === 'audit' && styles.toggleBtnActive]}
+                    onPress={() => {
+                      setPhotoView('audit');
+                      setActivePhotoIdx(0);
+                      photoScrollRef.current?.scrollTo({ x: 0, animated: true });
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="sparkles" size={11} color={photoView === 'audit' ? '#fff' : 'rgba(255,255,255,0.7)'} />
+                    <Text style={[styles.toggleText, photoView === 'audit' && styles.toggleTextActive]}>
+                      Audit {latestAudit?.monitoring_round}
+                    </Text>
+                  </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[styles.toggleBtn, photoView === 'planting' && styles.toggleBtnActive]}
-                  onPress={() => {
-                    setPhotoView('planting');
-                    setActivePhotoIdx(0);
-                    photoScrollRef.current?.scrollTo({ x: 0, animated: true });
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="leaf" size={11} color={photoView === 'planting' ? '#fff' : 'rgba(255,255,255,0.7)'} />
-                  <Text style={[styles.toggleText, photoView === 'planting' && styles.toggleTextActive]}>
-                    Planting
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.vitalityCapsule}>
-                <View style={[styles.vitalityDot, { backgroundColor: conditionTheme.color }]} />
-                <Text style={styles.vitalityStatusText}>{activeSurvival}</Text>
-                <Text style={styles.vitalityDivider}>·</Text>
-                <Text style={[styles.vitalityConditionText, { color: conditionTheme.color }]}>
-                  {activeCondition}
-                </Text>
-              </View>
-            )}
+                  <TouchableOpacity
+                    style={[styles.toggleBtn, photoView === 'planting' && styles.toggleBtnActive]}
+                    onPress={() => {
+                      setPhotoView('planting');
+                      setActivePhotoIdx(0);
+                      photoScrollRef.current?.scrollTo({ x: 0, animated: true });
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="leaf" size={11} color={photoView === 'planting' ? '#fff' : 'rgba(255,255,255,0.7)'} />
+                    <Text style={[styles.toggleText, photoView === 'planting' && styles.toggleTextActive]}>
+                      Planting
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </View>
 
-            {/* Right: ONLY 1/3 Photo Counter Pill */}
-            {displayedPhotos.length > 1 && (
+            {displayedPhotos.length > 1 ? (
               <View style={styles.photoIndexPill}>
                 <Text style={styles.photoIndexText}>
                   {activePhotoIdx + 1}/{displayedPhotos.length}
                 </Text>
               </View>
-            )}
+            ) : null}
           </View>
 
-          {/* Bottom Floating Glass Card: 3 Photo Tabs Set Downside */}
-          <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.85)']}
-            style={styles.photoBottomGradient}
-            pointerEvents="box-none"
-          >
-            {displayedPhotos.length > 1 && (
+          {/* Bottom angle tabs: jump straight to Front / Side / Close-up */}
+          {displayedPhotos.length > 1 ? (
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.8)']}
+              style={styles.photoBottomGradient}
+              pointerEvents="box-none"
+            >
               <View style={styles.angleTabsRow}>
                 {displayedPhotos.map((_, idx) => {
                   const angleCfg = PHOTO_ANGLES[idx] || { short: `Photo ${idx + 1}`, icon: 'camera' };
@@ -478,7 +489,7 @@ export default function TreeDetailScreen() {
                     >
                       <Ionicons
                         name={angleCfg.icon as any}
-                        size={12}
+                        size={11}
                         color={isActive ? '#fff' : 'rgba(255,255,255,0.75)'}
                       />
                       <Text style={[styles.angleTabText, isActive && styles.angleTabTextActive]}>
@@ -488,8 +499,8 @@ export default function TreeDetailScreen() {
                   );
                 })}
               </View>
-            )}
-          </LinearGradient>
+            </LinearGradient>
+          ) : null}
         </View>
 
         {/* ─── 3. MERGED SPECIES & GROWTH VITALS CARD ─── */}
@@ -509,7 +520,7 @@ export default function TreeDetailScreen() {
               <Text style={styles.identityStampId}>{displayId}</Text>
             </View>
           </View>
-          {surveyName ? (
+          {surveyor || surveyName ? (
             <View style={styles.surveyorStrip}>
               <Ionicons name="person" size={14} color="#123f24" />
               <Text style={styles.surveyorStripText} numberOfLines={1}>
@@ -517,12 +528,33 @@ export default function TreeDetailScreen() {
               </Text>
             </View>
           ) : null}
+          {landType || tree.survey_date ? (
+            <View style={styles.landTypeRow}>
+              <View style={styles.landTypeIconBox}>
+                <Ionicons name="map-outline" size={16} color="#15803d" />
+              </View>
+              <View style={styles.landTypeBody}>
+                <Text style={styles.landTypeLabel}>LAND TYPE</Text>
+                <Text style={styles.landTypeValue} numberOfLines={1}>
+                  {landType || 'Not recorded'}
+                </Text>
+              </View>
+              {tree.survey_date ? (
+                <View style={styles.surveyDateChip}>
+                  <Ionicons name="calendar-outline" size={11} color="#15803d" />
+                  <Text style={styles.surveyDateText} numberOfLines={1}>
+                    {tree.survey_date}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
 
           {/* Divider */}
-          <View style={styles.speciesGrowthDivider} />
+          {hasAudits ? <View style={styles.speciesGrowthDivider} /> : null}
 
           {/* 3 Metric Pills */}
-          <View style={styles.growthGrid}>
+          {hasAudits ? <View style={styles.growthGrid}>
             {/* Trunk Diameter (DBH) */}
             <View style={styles.growthCard}>
               <View style={styles.growthCardTop}>
@@ -612,7 +644,7 @@ export default function TreeDetailScreen() {
                 <Text style={styles.growthTagSpreadText}>Spread</Text>
               </View>
             </View>
-          </View>
+          </View> : null}
         </View>
 
         {/* ─── 5. INTERACTIVE 4-STEP AUDIT JOURNEY (POST-AUDIT MODE ONLY) ─── */}
@@ -765,7 +797,7 @@ export default function TreeDetailScreen() {
         ) : null}
 
         {/* ─── 6. PLANTING BASELINE & SPECS (CLEAN EXPANDABLE ACCORDION) ─── */}
-        <View style={styles.accordionCard}>
+        {hasAudits ? <View style={styles.accordionCard}>
           <TouchableOpacity
             style={styles.accordionHeader}
             onPress={() => setBaselineExpanded(!baselineExpanded)}
@@ -814,7 +846,7 @@ export default function TreeDetailScreen() {
               </View>
             </View>
           )}
-        </View>
+        </View> : null}
 
         {/* ─── 7. LOCATION & MAP CARD ─── */}
         <View style={styles.locationCard}>
@@ -873,30 +905,31 @@ export default function TreeDetailScreen() {
       {/* ─── 8. BOTTOM ACTION BUTTON (APPROVAL & AUDIT AWARE) ─── */}
       {!showAuditProfile ? (
         !isApproved ? (
-          // Pre-Audit, Unapproved or Rejected: Field Worker can edit the tree
-          <TouchableOpacity
-            style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}
-            activeOpacity={0.85}
-            onPress={() =>
-              navigation.navigate('EditTree', {
-                treeId: tree.id,
-                taskId: task?.id || null,
-                rejectionNotes: rejectionReason,
-              })
-            }
-          >
-            <LinearGradient
-              colors={isRejected ? ['#dc2626', '#ef4444'] : ['#1a5c2a', '#226934']}
-              style={styles.fabGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
+          // The "Edit Tree Details" button was removed for pending submissions.
+          // A rejected submission keeps a single path to fix and resubmit.
+          isRejected ? (
+            <TouchableOpacity
+              style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}
+              activeOpacity={0.85}
+              onPress={() =>
+                navigation.navigate('EditTree', {
+                  treeId: tree.id,
+                  taskId: task?.id || null,
+                  rejectionNotes: rejectionReason,
+                })
+              }
             >
-              <Ionicons name={isRejected ? 'refresh-circle-outline' : 'create-outline'} size={18} color="#fff" />
-              <Text style={styles.fabText}>
-                {isRejected ? 'Update Rejected Tree' : 'Edit Tree Details'}
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
+              <LinearGradient
+                colors={['#dc2626', '#ef4444']}
+                style={styles.fabGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Ionicons name="refresh-circle-outline" size={18} color="#fff" />
+                <Text style={styles.fabText}>Update Rejected Tree</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          ) : null
         ) : !auditStatus.isDue ? (
           // Pre-Audit, Approved, but audit is NOT due yet (remaining time ticking)
           <TouchableOpacity
@@ -929,10 +962,9 @@ export default function TreeDetailScreen() {
             style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}
             activeOpacity={0.85}
             onPress={() =>
-              navigation.navigate('UpdateTree', {
+              navigation.navigate('EditTree', {
                 treeId: tree.id,
-                treeIdDisplay: liveTreeId,
-                currentRound: 1,
+                auditRound: 1,
               })
             }
           >
@@ -997,10 +1029,9 @@ export default function TreeDetailScreen() {
           style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}
           activeOpacity={0.85}
           onPress={() =>
-            navigation.navigate('UpdateTree', {
+            navigation.navigate('EditTree', {
               treeId: tree.id,
-              treeIdDisplay: liveTreeId,
-              currentRound: auditStatus.currentRound,
+              auditRound: auditStatus.currentRound,
             })
           }
         >
@@ -1122,6 +1153,7 @@ const styles = StyleSheet.create({
   },
   rejectionNoticeTitle: { fontSize: 12, fontWeight: '800', color: '#ef4444' },
   rejectionNoticeBody: { fontSize: 12, color: '#991b1b', lineHeight: 16, marginTop: 2 },
+  rejectionNoticeDate: { fontSize: 11, color: '#b91c1c', fontWeight: '700', marginTop: 4 },
 
   scroll: { flex: 1 },
   scrollContent: { padding: 14, gap: 14, paddingBottom: 20 },
@@ -1149,6 +1181,7 @@ const styles = StyleSheet.create({
   },
   heroPhoto: { width: '100%', height: 260 },
   emptyPhotoWrap: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#e8f5e9',
@@ -1173,17 +1206,18 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   photoIndexPill: {
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
   },
   photoIndexText: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
+    letterSpacing: 0.3,
   },
   photoTogglePill: {
     flexDirection: 'row',
@@ -1236,24 +1270,23 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     paddingTop: 36,
-    paddingBottom: 14,
+    paddingBottom: 12,
     paddingHorizontal: 12,
     alignItems: 'center',
-    justifyContent: 'center',
   },
   angleTabsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
   },
   angleTabBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     backgroundColor: 'rgba(0,0,0,0.65)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.25)',
@@ -1277,37 +1310,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
 
-  // Bottom Vitality & Date Row
-  photoBottomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  vitalityCapsule: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    gap: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  vitalityDot: { width: 7, height: 7, borderRadius: 4 },
-  vitalityStatusText: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  vitalityDivider: { color: 'rgba(255,255,255,0.4)', fontSize: 11 },
-  vitalityConditionText: { fontSize: 11, fontWeight: '800' },
-  photoDateText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '600',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-
   // Merged Species & Growth Card
   speciesGrowthCard: {
     backgroundColor: '#fff',
@@ -1319,7 +1321,7 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     borderWidth: 1,
     borderColor: '#e8efe8',
-    gap: 12,
+    gap: 8,
   },
   speciesGrowthDivider: {
     height: 1,
@@ -1356,16 +1358,56 @@ const styles = StyleSheet.create({
   identityStampLabel: { fontSize: 11, fontWeight: '800', color: '#1a5c2a' },
   identityStampId: { fontSize: 13, fontWeight: '900', color: '#123f24', marginTop: 2 },
   surveyorStrip: {
-    marginTop: 12,
+    // Spacing comes from the card's `gap` — no extra margin on top of it.
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     backgroundColor: '#EAF6EE',
     borderRadius: 14,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
   surveyorStripText: { flex: 1, color: '#123f24', fontSize: 13, fontWeight: '700' },
+  landTypeRow: {
+    // Spacing comes from the card's `gap` — no extra margin on top of it.
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  landTypeIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  landTypeBody: { flex: 1 },
+  landTypeLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#16A34A',
+    letterSpacing: 1,
+  },
+  landTypeValue: { fontSize: 14, fontWeight: '800', color: '#123F24', marginTop: 2 },
+  surveyDateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#fff',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  surveyDateText: { fontSize: 10, fontWeight: '700', color: '#15803D' },
   eventChipRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   eventChip: {
     flexDirection: 'row',

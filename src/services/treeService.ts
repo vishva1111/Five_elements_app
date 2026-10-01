@@ -5,6 +5,7 @@ import {
   buildProjectTreeId,
   makeProjectPrefix,
   nextProjectSequence,
+  parseTreeMeta,
   resolveTreeId,
 } from '../utils/treeId';
 import {
@@ -16,10 +17,25 @@ import {
 // ─── Transform raw Supabase row into TreeRecord with joined project_name ───────
 function mapTreeRecord(raw: any): TreeRecord {
   if (!raw) return null as any;
-  return {
+  const tree: TreeRecord = {
     ...raw,
     project_name: raw.projects?.name ?? raw.project_name,
   };
+
+  // Records saved before the photo_urls column existed in this database keep
+  // the 3-photo array inside the notes ##META## blob (insertTreeRecord stashes
+  // it there when PostgREST rejects the unknown column). Surface it here so
+  // every screen — especially the tree details slider — shows all 3 photos.
+  if (!Array.isArray(tree.photo_urls) || tree.photo_urls.length === 0) {
+    const metaUrls = parseTreeMeta(raw.notes)?.photo_urls;
+    if (Array.isArray(metaUrls) && metaUrls.length > 0) {
+      tree.photo_urls = metaUrls.filter(
+        (u: unknown): u is string => typeof u === 'string' && !!u
+      );
+    }
+  }
+
+  return tree;
 }
 
 // ─── Fetch missing project names in one batched query ──────────────────────────
@@ -272,21 +288,39 @@ const MIGRATION_HINT =
 /** Update a tree, retrying without any column this database does not have yet. */
 async function updateTreeColumns(
   treeId: string,
-  updates: Partial<TreeRecordInsert>,
-  select: string = '*, projects(name)'
+  updates: Partial<TreeRecordInsert>
 ): Promise<{ data: any; error: any }> {
   const payload: Record<string, any> = { ...updates };
   let lastError: any = null;
+  const selects = ['*, projects(name)', '*'];
 
   for (let attempt = 0; attempt < 8; attempt++) {
-    const { data, error } = await supabase
-      .from('tree_records')
-      .update(payload)
-      .eq('id', treeId)
-      .select(select)
-      .single();
+    if (Object.keys(payload).length === 0) {
+      const current = await supabase.from('tree_records').select('*').eq('id', treeId).maybeSingle();
+      if (!current.error && !current.data) {
+        return { data: null, error: { message: 'The tree record was not found, so it was not updated.' } };
+      }
+      return { data: current.data, error: current.error };
+    }
 
-    if (!error) return { data, error: null };
+    let saved: { data: any; error: any } | null = null;
+    for (const select of selects) {
+      const result = await supabase
+        .from('tree_records')
+        .update(payload)
+        .eq('id', treeId)
+        .select(select)
+        .maybeSingle();
+      if (!result.error && result.data) return { data: result.data, error: null };
+      if (!result.error && !result.data) {
+        return { data: null, error: { message: 'The tree record was not updated. It may be locked or unavailable.' } };
+      }
+      saved = result;
+      if (!isMissingSchemaError(result.error)) break;
+    }
+
+    const error = saved?.error;
+    if (!error) return { data: saved?.data ?? null, error: null };
 
     const column = missingColumnName(error.message);
     if (!column || !(column in payload)) return { data: null, error };

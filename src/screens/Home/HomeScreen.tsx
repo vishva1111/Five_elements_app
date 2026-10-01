@@ -16,7 +16,7 @@ import { useTreeStore } from '../../store/treeStore';
 import { useProjectRefreshStore } from '../../store/projectRefreshStore';
 import { fetchMyTrees, fetchAllProjects, fetchTreesByProject, fetchAllTrees } from '../../services/treeService';
 import { fetchAgentTasks } from '../../services/taskService';
-import { fetchAuditsForTrees, getAuditStatus, getLatestAudit } from '../../services/auditService';
+import { fetchAuditsForTrees, getLatestAudit } from '../../services/auditService';
 import { clearLocalTasks } from '../../services/localTaskService';
 import { supabase } from '../../services/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -158,7 +158,6 @@ export default function HomeScreen() {
   const activeProjectId = useAuthStore((s) => s.activeProjectId);
   const setActiveProjectId = useAuthStore((s) => s.setActiveProjectId);
   const assignedProjects = useAuthStore((s) => s.assignedProjects) ?? [];
-  const refreshCredits = useAuthStore((s) => s.refreshCredits);
   const refreshKey = useProjectRefreshStore((s) => s.refreshKey);
   const trees = useTreeStore((s) => s.trees) ?? [];
   const setTrees = useTreeStore((s) => s.setTrees);
@@ -376,18 +375,6 @@ export default function HomeScreen() {
         const treeKey = task.tree_record_id || task.tree_id || task.id;
         pendingAuditKeys.add(`${treeKey}_${task.audit_round || 1}`);
       });
-      visibleTrees.forEach((tree) => {
-        const auditStatus = getAuditStatus(tree, auditsByTree[tree.id] || []);
-        if (!auditStatus.allCompleted && (auditStatus.isDue || auditStatus.isOverdue)) {
-          const alreadyAssigned = visibleTasks.some((task) => {
-            if (!isAuditTask(task)) return false;
-            const sameTree =
-              task.tree_record_id === tree.id || task.tree_id === tree.id || task.id === tree.id;
-            return sameTree && (task.status === 'assigned' || task.status === 'in_progress');
-          });
-          if (!alreadyAssigned) pendingAuditKeys.add(`${tree.id}_${auditStatus.currentRound}`);
-        }
-      });
       assigned += pendingAuditKeys.size;
 
       setTaskStats({
@@ -461,11 +448,10 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      refreshCredits();
       loadTrees();
       loadTasks();
       loadGeofence();
-    }, [loadTrees, loadTasks, loadGeofence, refreshCredits])
+    }, [loadTrees, loadTasks, loadGeofence])
   );
 
   const handleSelectProject = (projectId: string | null) => {
@@ -475,7 +461,6 @@ export default function HomeScreen() {
       setStats(targetStats); // 0ms instant display!
     }
     setActiveProjectId(projectId);
-    refreshCredits();
   };
 
   // Instantly reload when the active project changes

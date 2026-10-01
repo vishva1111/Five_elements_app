@@ -26,7 +26,7 @@ export interface TreeRecord {
   photo_urls?: string[] | null;
   latitude: number;
   longitude: number;
-  species: string;
+  species?: string;
   scientific_name?: string;
   health_status: HealthStatus;
   notes?: string;
@@ -59,7 +59,7 @@ export interface TreeRecordInsert {
   photo_urls?: string[] | null;
   latitude: number;
   longitude: number;
-  species: string;
+  species?: string;
   scientific_name?: string;
   health_status: HealthStatus;
   notes?: string;
@@ -225,7 +225,7 @@ export const EVENT_TYPES: EventType[] = [
 ];
 
 export interface TreeFormData {
-  species: string;
+  species?: string;
   scientific_name: string;
   health_status: HealthStatus;
   notes: string;
@@ -319,12 +319,12 @@ export interface MonitoringRound {
   icon: string;
 }
 
-/** Four sequential field audits, one every three months. */
+/** TESTING: four sequential field audits, one every 30 minutes. */
 export const MONITORING_ROUNDS: MonitoringRound[] = [
-  { round: 1, label: 'Audit 1', subtitle: 'Survival check · 3 months', color: '#16a34a', icon: 'leaf' },
-  { round: 2, label: 'Audit 2', subtitle: 'Growth check · 6 months', color: '#0ea5e9', icon: 'trending-up' },
-  { round: 3, label: 'Audit 3', subtitle: 'Health check · 9 months', color: '#d97706', icon: 'pulse' },
-  { round: 4, label: 'Audit 4', subtitle: 'Final check · 12 months', color: '#7c3aed', icon: 'checkmark-done' },
+  { round: 1, label: 'Audit 1', subtitle: 'Survival check · 30 min', color: '#16a34a', icon: 'leaf' },
+  { round: 2, label: 'Audit 2', subtitle: 'Growth check · 60 min', color: '#0ea5e9', icon: 'trending-up' },
+  { round: 3, label: 'Audit 3', subtitle: 'Health check · 90 min', color: '#d97706', icon: 'pulse' },
+  { round: 4, label: 'Audit 4', subtitle: 'Final check · 120 min', color: '#7c3aed', icon: 'checkmark-done' },
 ];
 
 export function getMonitoringRoundInfo(round: number | null | undefined): MonitoringRound {

@@ -4,21 +4,21 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="notification,alert box design.">
+    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="web data working with fix or upadte design.">
       <change beforePath="$PROJECT_DIR$/.expo/dev/logs/start.log" beforeDir="false" afterPath="$PROJECT_DIR$/.expo/dev/logs/start.log" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/App.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/package-lock.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/components/TreeCard.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/TreeCard.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/Capture/SubmitSuccessScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/SubmitSuccessScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/Capture/TreeFormScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/TreeFormScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/Home/HomeScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Home/HomeScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/Profile/ProfileScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Profile/ProfileScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/services/storageService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/storageService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/taskService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/taskService.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/services/treeService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/treeService.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/types/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/types/index.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tsconfig.json" beforeDir="false" afterPath="$PROJECT_DIR$/tsconfig.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -61,29 +61,29 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "AnalyzeApkAction.lastApkPath": "D:/5eliment/app/treeapp",
-    "Lightbuild Test.run.executor": "Run",
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "Notification.DisplayName-DoNotAsk-vcs.project.update.finished": "",
-    "Notification.DoNotAsk-vcs.project.update.finished": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
-    "RunOnceActivity.cidr.known.project.marker": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "RunOnceActivity.readMode.enableVisualFormatting": "true",
-    "cf.first.check.clang-format": "false",
-    "cidr.known.project.marker": "true",
-    "dart.analysis.tool.window.visible": "false",
-    "deletionFromPopupRequiresConfirmation": "false",
-    "git-widget-placeholder": "deep__updates",
-    "git.auto.fetch.suggestion.counter": "3",
-    "kotlin-language-version-configured": "true",
-    "settings.editor.selected.configurable": "preferences.pluginManager",
-    "show.migrate.to.gradle.popup": "false"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;AnalyzeApkAction.lastApkPath&quot;: &quot;D:/5eliment/app/treeapp&quot;,
+    &quot;Lightbuild Test.run.executor&quot;: &quot;Run&quot;,
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;Notification.DisplayName-DoNotAsk-vcs.project.update.finished&quot;: &quot;&quot;,
+    &quot;Notification.DoNotAsk-vcs.project.update.finished&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.readMode.enableVisualFormatting&quot;: &quot;true&quot;,
+    &quot;cf.first.check.clang-format&quot;: &quot;false&quot;,
+    &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
+    &quot;dart.analysis.tool.window.visible&quot;: &quot;false&quot;,
+    &quot;deletionFromPopupRequiresConfirmation&quot;: &quot;false&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;deep__updates&quot;,
+    &quot;git.auto.fetch.suggestion.counter&quot;: &quot;3&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;show.migrate.to.gradle.popup&quot;: &quot;false&quot;
   }
-}]]></component>
+}</component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
       <changelist id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="" />
@@ -364,7 +364,15 @@
       <option name="project" value="LOCAL" />
       <updated>1790670888307</updated>
     </task>
-    <option name="localTasksCounter" value="35" />
+    <task id="LOCAL-00035" summary="web data working with fix or upadte design.">
+      <option name="closed" value="true" />
+      <created>1790763834618</created>
+      <option name="number" value="00035" />
+      <option name="presentableId" value="LOCAL-00035" />
+      <option name="project" value="LOCAL" />
+      <updated>1790763834618</updated>
+    </task>
+    <option name="localTasksCounter" value="36" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -391,7 +399,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="add task page and chnage design." />
     <MESSAGE value="add 4 tabs in task page." />
     <MESSAGE value="4 tabs calculation with date" />
     <MESSAGE value="dashbord design update 2" />
@@ -416,6 +423,7 @@
     <MESSAGE value="design chnage." />
     <MESSAGE value="task card design update." />
     <MESSAGE value="notification,alert box design." />
-    <option name="LAST_COMMIT_MESSAGE" value="notification,alert box design." />
+    <MESSAGE value="web data working with fix or upadte design." />
+    <option name="LAST_COMMIT_MESSAGE" value="web data working with fix or upadte design." />
   </component>
 </project>

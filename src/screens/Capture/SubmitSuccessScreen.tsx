@@ -2,12 +2,9 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuthStore } from '../../store/authStore';
 
 export default function SubmitSuccessScreen() {
   const navigation = useNavigation<any>();
-  const { user } = useAuthStore();
-  const remainingCredits = user?.credits ?? 0;
 
   return (
     <View style={styles.container}>
@@ -20,21 +17,6 @@ export default function SubmitSuccessScreen() {
         <Text style={styles.subtitle}>
           Your tree record has been saved and synced with the admin panel in real-time.
         </Text>
-
-        {/* Updated credit balance — shown immediately after the 1-credit deduction */}
-        <View style={styles.creditCard}>
-          <View style={styles.creditRow}>
-            <View style={styles.creditIconWrap}>
-              <Ionicons name="wallet-outline" size={22} color="#1a5c2a" />
-            </View>
-            <View style={styles.creditInfo}>
-              <Text style={styles.creditLabel}>🌳 −1 credit used for this tree</Text>
-              <Text style={styles.creditValue}>
-                Remaining Credits: <Text style={styles.creditNumber}>{remainingCredits}</Text>
-              </Text>
-            </View>
-          </View>
-        </View>
 
         <View style={styles.infoBox}>
           <Text style={styles.infoItem}>✅ Photo uploaded to cloud</Text>

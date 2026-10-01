@@ -134,9 +134,15 @@ export default function TreeCard({
   // Photo URL resolution
   const photoUrl = task?.photo_url || tree?.photo_url;
 
-  // Condition resolution
-  const condition = (task?.tree_condition || tree?.tree_condition || 'Healthy') as TreeCondition;
-  const conditionColor = CONDITION_COLORS[condition] || '#16a34a';
+  // Condition is an audit result. It stays hidden until Audit 1 is completed.
+  const hasCompletedAudit = (auditsProp ?? []).some(
+    (audit) => Number(audit?.monitoring_round) >= 1
+  );
+  const recordedCondition = task?.tree_condition || tree?.tree_condition;
+  const condition = hasCompletedAudit && recordedCondition
+    ? recordedCondition as TreeCondition
+    : null;
+  const conditionColor = condition ? CONDITION_COLORS[condition] || '#16a34a' : '#16a34a';
 
   // Audit round
   const auditRound = auditRoundProp ?? task?.audit_round;
@@ -150,13 +156,14 @@ export default function TreeCard({
 
   // Surveyor
   const surveyor = task?.surveyor || tree?.surveyor;
+  const landType = tree?.land_type;
 
-  // Date
+  // Date — prefer the field-capture date over the later task completion time.
   const rawDate =
-    (effectiveStatus === 'completed' && task?.completed_at) ||
-    task?.created_at ||
+    tree?.survey_date ||
     tree?.submitted_at ||
-    tree?.survey_date;
+    (effectiveStatus === 'completed' && task?.completed_at) ||
+    task?.created_at;
   const dateStr = formatDateCustom(rawDate);
 
   const isAudit = task?.task_type === 'audit' || !!task?.audit_round || actionVariant === 'audit';
@@ -270,17 +277,17 @@ export default function TreeCard({
             </View>
           ) : null}
 
-          {/* Row 3: Badges Row (Condition + Location) */}
-          {(!isAssigned || isAudit) && (
+          {/* Row 3: Badges Row (Location stays in its original place) */}
+          {(!isAssigned || isAudit) ? (
             <View style={styles.badgesRow}>
-              {condition ? (
+              {condition && !isCompleted ? (
                 <View style={styles.conditionBadge}>
                   <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
                   <Text style={[styles.conditionText, { color: conditionColor }]}>{condition}</Text>
                 </View>
               ) : null}
 
-              {lat != null && lng != null ? (
+              {lat != null && lng != null && !isCompleted ? (
                 <TouchableOpacity
                   style={styles.locationLink}
                   onPress={(e) => {
@@ -290,22 +297,24 @@ export default function TreeCard({
                     }
                   }}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open location"
                 >
                   <Ionicons name="location-outline" size={12} color="#15803d" />
                   <Text style={styles.locationText}>Location</Text>
                 </TouchableOpacity>
               ) : null}
 
-              {showSurveyor && surveyor ? (
+              {showSurveyor && (surveyor || landType) ? (
                 <View style={styles.surveyorRow}>
                   <Ionicons name="person-outline" size={10} color="#888" />
                   <Text style={styles.surveyorText} numberOfLines={1}>
-                    {surveyor}
+                    {[surveyor, landType].filter(Boolean).join(' · ')}
                   </Text>
                 </View>
               ) : null}
             </View>
-          )}
+          ) : null}
 
           {/* Row 4: Audit Progress (4 Dots + Overdue/Due Status) */}
           {((!isAssigned && effectiveStatus === 'approved') || isCompletedAudit || (isAssigned && isAudit)) && computedAuditStatus ? (() => {
@@ -386,6 +395,20 @@ export default function TreeCard({
             </View>
           ) : null}
         </View>
+        {isCompleted && lat != null && lng != null && onLocationPress ? (
+          <TouchableOpacity
+            style={styles.locationSideBtn}
+            onPress={(e) => {
+              e.stopPropagation();
+              onLocationPress();
+            }}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Open location"
+          >
+            <Ionicons name="location" size={16} color="#15803d" />
+          </TouchableOpacity>
+        ) : null}
         {isAssigned && !isAudit && onAction ? (
           <TouchableOpacity
             style={styles.plantingBtn}
@@ -711,6 +734,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#15803d',
     fontWeight: '700',
+  },
+  locationSideBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginLeft: 8,
+    backgroundColor: '#e8f5e9',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
   },
   surveyorRow: {
     flexDirection: 'row',

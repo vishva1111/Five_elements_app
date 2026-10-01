@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
-import { StyleSheet, View, ActivityIndicator, Text, Image, AppState } from 'react-native';
+import { Animated, Easing, StyleSheet, View, ActivityIndicator, Text, Image, AppState, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -31,7 +31,6 @@ import SubmitSuccessScreen from './src/screens/Capture/SubmitSuccessScreen';
 
 import HistoryScreen from './src/screens/History/HistoryScreen';
 import TreeDetailScreen from './src/screens/History/TreeDetailScreen';
-import UpdateTreeScreen from './src/screens/History/UpdateTreeScreen';
 import EditTreeScreen from './src/screens/History/EditTreeScreen';
 import ProfileScreen from './src/screens/Profile/ProfileScreen';
 import TaskScreen from './src/screens/Task/TaskScreen';
@@ -77,7 +76,6 @@ function HistoryNavigator() {
     >
       <HistoryStack.Screen name="HistoryList" component={HistoryScreen} options={{ title: 'SEARCH', headerShown: false }} />
       <HistoryStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS', headerShown: false }} />
-      <HistoryStack.Screen name="UpdateTree" component={UpdateTreeScreen} options={{ title: 'AUDIT TREE', headerShown: false }} />
       <HistoryStack.Screen name="EditTree" component={EditTreeScreen} options={{ title: 'EDIT TREE', headerShown: false }} />
       <HistoryStack.Screen name="Map" component={TreeMapScreen} options={{ title: 'MAP', headerShown: false }} />
     </HistoryStack.Navigator>
@@ -87,7 +85,6 @@ function HistoryNavigator() {
 const HIDE_TAB_BAR_SCREENS = new Set([
   'TreeDetail',
   'Map',
-  'UpdateTree',
   'EditTree',
 ]);
 
@@ -120,6 +117,9 @@ function SwipeTabBar({
 
 function MainTabs() {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const slideX = useRef(new Animated.Value(0)).current;
+  const tabIndexRef = useRef(0);
   const tabStateRef = useRef<BottomTabBarProps['state'] | null>(null);
   const tabNavRef = useRef<BottomTabBarProps['navigation'] | null>(null);
 
@@ -146,15 +146,25 @@ function MainTabs() {
       failOffsetY={[-16, 16]}
       onHandlerStateChange={onTabSwipe}
     >
-    <View style={{ flex: 1 }}>
+    <Animated.View style={{ flex: 1, transform: [{ translateX: slideX }] }}>
     <Tab.Navigator
       tabBar={(props) => {
         tabStateRef.current = props.state;
         tabNavRef.current = props.navigation;
+        if (props.state.index !== tabIndexRef.current) {
+          const direction = props.state.index > tabIndexRef.current ? 1 : -1;
+          tabIndexRef.current = props.state.index;
+          slideX.setValue(direction * Math.min(width * 0.18, 72));
+          Animated.timing(slideX, {
+            toValue: 0,
+            duration: 180,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }).start();
+        }
         return shouldHideTabBar(props.state) ? null : <FloatingTabBar {...props} />;
       }}
       screenOptions={({ route }) => ({
-        animation: 'shift',
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
           if (route.name === 'Home') iconName = focused ? 'home' : 'home-outline';
@@ -222,7 +232,7 @@ function MainTabs() {
       <Tab.Screen name="Search" component={HistoryNavigator} options={{ headerShown: false, title: 'SEARCH' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false, title: 'PROFILE' }} />
     </Tab.Navigator>
-    </View>
+    </Animated.View>
     </PanGestureHandler>
   );
 }
@@ -387,7 +397,6 @@ export default function App() {
                   <RootStack.Screen name="Notifications" component={NotificationHistoryScreen} options={{ headerShown: false }} />
                   <RootStack.Screen name="Capture" component={CaptureNavigator} />
                   <RootStack.Screen name="TreeDetail" component={TreeDetailScreen} options={{ title: 'TREE DETAILS' }} />
-                  <RootStack.Screen name="UpdateTree" component={UpdateTreeScreen} options={{ title: 'AUDIT TREE', headerShown: false }} />
                   <RootStack.Screen name="EditTree" component={EditTreeScreen} options={{ title: 'EDIT TREE', headerShown: false }} />
                   <RootStack.Screen name="Map" component={TreeMapScreen} options={{ title: 'MAP', headerShown: false }} />
                 </>

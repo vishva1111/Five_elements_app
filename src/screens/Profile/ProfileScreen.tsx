@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { fetchUserProjects } from '../../services/treeService';
@@ -21,7 +20,7 @@ const { width: SCREEN_W } = Dimensions.get('window');
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { user, activeProjectId, signOut, refreshCredits, assignedProjects } = useAuthStore();
+  const { user, activeProjectId, signOut, assignedProjects } = useAuthStore();
   const trees = useTreeStore((s) => s.trees) ?? [];
   const [allProjects, setAllProjects] = useState<Project[]>([]);
 
@@ -34,9 +33,6 @@ export default function ProfileScreen() {
     })();
     return () => { active = false; };
   }, []);
-
-  useFocusEffect(useCallback(() => { refreshCredits(); }, []));
-  useEffect(() => { refreshCredits(); }, [activeProjectId]);
 
   const activeTrees = trees.filter((t) => activeProjectId ? t.project_id === activeProjectId : true);
   const stats = {

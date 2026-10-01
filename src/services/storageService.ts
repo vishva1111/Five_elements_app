@@ -1,5 +1,6 @@
 
 import * as FileSystem from 'expo-file-system/legacy';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { decode } from 'base64-arraybuffer';
 import { supabase, TREE_PHOTOS_BUCKET } from './supabase';
 
@@ -12,40 +13,59 @@ export async function uploadTreePhoto(
       throw new Error('No photo file to upload.');
     }
 
-    const fileName = `${userId}/${Date.now()}.jpg`;
     const readableUri = await readablePhotoUri(uri);
+    const uploadUri = await compressedPhotoUri(readableUri);
+    let lastError: unknown = null;
 
-    // Read file as base64 string (React Native compatible)
-    const base64 = await FileSystem.readAsStringAsync(readableUri, {
-      encoding: 'base64' as any,
-    });
-    if (!base64) throw new Error('The photo file was empty.');
-
-    // Decode base64 to ArrayBuffer using base64-arraybuffer (no atob needed)
-    const arrayBuffer = decode(base64);
-
-    const { data, error } = await supabase.storage
-      .from(TREE_PHOTOS_BUCKET)
-      .upload(fileName, arrayBuffer, {
-        contentType: 'image/jpeg',
-        upsert: false,
+    // Supabase storage can return a temporary HTTP 520. Retry a smaller JPEG.
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const fileName = `${userId}/${Date.now()}-${attempt}.jpg`;
+      const base64 = await FileSystem.readAsStringAsync(uploadUri, {
+        encoding: 'base64' as any,
       });
+      if (!base64) throw new Error('The photo file was empty.');
 
-    if (error) {
-      console.error('Supabase storage upload error:', JSON.stringify(error));
-      throw error;
+      const { data, error } = await supabase.storage
+        .from(TREE_PHOTOS_BUCKET)
+        .upload(fileName, decode(base64), {
+          contentType: 'image/jpeg',
+          upsert: false,
+        });
+
+      if (!error && data?.path) {
+        const { data: urlData } = supabase.storage
+          .from(TREE_PHOTOS_BUCKET)
+          .getPublicUrl(data.path);
+        return urlData.publicUrl;
+      }
+
+      lastError = error;
+      console.warn(`[TreeApp] Photo upload attempt ${attempt} failed:`, JSON.stringify(error));
+      await wait(700 * attempt);
     }
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from(TREE_PHOTOS_BUCKET)
-      .getPublicUrl(data.path);
-
-    return urlData.publicUrl;
+    throw lastError ?? new Error('Photo upload failed.');
   } catch (err: any) {
     console.error('Photo upload error:', err?.message ?? JSON.stringify(err));
     return null;
   }
+}
+
+async function compressedPhotoUri(uri: string): Promise<string> {
+  try {
+    const result = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 1600 } }],
+      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+    );
+    return result.uri || uri;
+  } catch {
+    return uri;
+  }
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** Camera photos on Android can be content:// URIs that must be copied first. */

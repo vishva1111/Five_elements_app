@@ -29,7 +29,8 @@
   "exclude": [
     "node_modules",
     "dist",
-    ".expo"
+    ".expo",
+    "src/screens/History/UpdateTreeScreen.tsx"
   ],
   "extends": "expo/tsconfig.base"
 }
