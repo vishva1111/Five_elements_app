@@ -18,8 +18,6 @@ import { fetchMyTrees, fetchTreesByProject, fetchAllTrees, fetchAllProjects, bac
 import { fetchAgentTasks, startTask } from '../../services/taskService';
 import { clearLocalTasks } from '../../services/localTaskService';
 import {
-  addMinutes,
-  AUDIT_INTERVAL_MINUTES,
   ensureAuditTaskForTree,
   fetchAuditsForTrees,
   getLatestAudit,
@@ -171,7 +169,6 @@ export default function TaskScreen() {
       if (seq !== loadSeqRef.current) return;
       if (audits) setAuditsByTree(audits);
 
-      const now = Date.now();
       let createdAny = false;
       for (const tree of visibleTrees) {
         if ((audits?.[tree.id] ?? []).length > 0) continue;
@@ -186,16 +183,16 @@ export default function TaskScreen() {
         const approvedAt =
           parseAuditDate(linked?.reviewed_at) ||
           parseAuditDate(linked?.completed_at) ||
-          parseAuditDate(tree.submitted_at);
-        if (!approvedAt) continue;
-        const dueDate = addMinutes(approvedAt, AUDIT_INTERVAL_MINUTES);
-        if (now < dueDate.getTime()) continue;
+          parseAuditDate(tree.submitted_at) ||
+          new Date();
+        // Testing: the remaining first audit is assigned as soon as the tree is approved.
+        const dueDate = approvedAt;
         const created = await ensureAuditTaskForTree({
           tree,
           round: 1,
           userId,
           dueDate,
-          isOverdue: now > dueDate.getTime(),
+          isOverdue: false,
         });
         if (created.task && !visibleTasks.some((task) => task.id === created.task.id)) {
           createdAny = true;
@@ -407,7 +404,7 @@ export default function TaskScreen() {
     const todayStr = localDateKey(today);
     const dateSet = new Set<string>();
     dateSet.add(todayStr);
-    tasks.forEach((t) => {
+    projectTasks.forEach((t) => {
       const isAssignedTask = t.status === 'assigned' || t.status === 'in_progress';
       const key = isAssignedTask
         ? localDateKeyFromValue(t.due_date) || localDateKeyFromValue(t.created_at)
@@ -434,7 +431,7 @@ export default function TaskScreen() {
         isToday: dateStr === todayStr,
       };
     });
-  }, [tasks, projectTrees]);
+  }, [projectTasks, projectTrees]);
 
   const activeProject = allProjects.find((p) => p.id === activeProjectId);
 
@@ -509,7 +506,7 @@ export default function TaskScreen() {
       <TreeCard
         key={task.id}
         tree={treeRecord ? { ...treeRecord, locked: isApproved } : null}
-        task={isCompletedAudit ? { ...task, task_type: 'audit' } : task}
+        task={task}
         status={isApproved && !isAuditTask ? 'approved' : task.status}
         audits={treeAudits}
         displayId={isAssigned && !isAuditTask ? (task.task_code || undefined) : projectTreeId}
@@ -520,6 +517,8 @@ export default function TaskScreen() {
             ? handleStartAudit
             : isAssigned
             ? () => handleStartTask(task)
+            : isRejected
+            ? handleUpdate
             : undefined
         }
         actionLabel={

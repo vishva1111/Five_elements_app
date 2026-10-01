@@ -78,10 +78,10 @@ export default function TreeDetailScreen() {
   const metaPhotoUrls: unknown = tree ? parseTreeMeta(tree.notes)?.photo_urls : null;
   const plantingPhotos: string[] = !tree
     ? []
-    : tree.photo_urls && tree.photo_urls.length > 0
-    ? tree.photo_urls
     : Array.isArray(metaPhotoUrls) && metaPhotoUrls.length > 0
     ? metaPhotoUrls.filter((u: unknown): u is string => typeof u === 'string' && !!u)
+    : tree.photo_urls && tree.photo_urls.length > 0
+    ? tree.photo_urls
     : tree.photo_url
     ? [tree.photo_url]
     : [];
@@ -92,13 +92,14 @@ export default function TreeDetailScreen() {
       ? audits.find((a) => Number(a.monitoring_round) === selectedAuditRound) ?? latestAudit
       : latestAudit;
 
-  const auditPhotos: string[] = activeInspectorAudit
-    ? (activeInspectorAudit.photo_urls && activeInspectorAudit.photo_urls.length > 0
-        ? activeInspectorAudit.photo_urls
-        : activeInspectorAudit.photo_url
-        ? [activeInspectorAudit.photo_url]
-        : [])
-    : [];
+  const photosFromAudit = (audit: any): string[] => {
+    if (!audit) return [];
+    if (Array.isArray(audit.photo_urls) && audit.photo_urls.length > 0) {
+      return audit.photo_urls.filter((uri: unknown): uri is string => typeof uri === 'string' && !!uri);
+    }
+    return audit.photo_url ? [audit.photo_url] : [];
+  };
+  const auditPhotos: string[] = [...plantingPhotos, ...audits.flatMap(photosFromAudit)];
 
   // Has updated photo (any audit photo)
   const hasAuditPhoto = auditPhotos.length > 0;
@@ -300,6 +301,10 @@ export default function TreeDetailScreen() {
   const activeDbh = latestAudit?.dbh_cm ?? dbhCm;
   const activeHeight = latestAudit?.height_m ?? heightM;
   const activeCrown = latestAudit?.crown_diameter_m ?? crownDiam;
+  const activeDensity = latestAudit?.wood_density ?? woodDensity;
+  const activeMultiStem = latestAudit?.multi_stem ?? multiStem;
+  const activeAge = latestAudit?.age_years ?? ageYears;
+  const activeNotes = stripTreeMeta(latestAudit?.notes) || cleanNotes;
 
   // Growth calculation compared to planting baseline
   const baselineDbhNum = dbhCm != null && !isNaN(Number(dbhCm)) ? Number(dbhCm) : null;
@@ -520,19 +525,23 @@ export default function TreeDetailScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.identityKicker}>TREE IDENTITY</Text>
-              <Text style={styles.speciesTitle}>{tree.species}</Text>
+              <Text style={styles.speciesTitle}>
+                {(tree.species || '').replace(/\s*\([A-Fa-f0-9]{4,36}\)\s*$/, '').trim() || tree.species}
+              </Text>
               {scientificName ? <Text style={styles.speciesScientific}>{scientificName}</Text> : null}
             </View>
             <View style={styles.identityStamp}>
-              <Text style={styles.identityStampLabel}>{eventType || 'Planting'}</Text>
+              <Text style={styles.identityStampLabel}>
+                {hasAudits ? `Audit ${latestAudit?.monitoring_round || 1}` : eventType || 'Planting'}
+              </Text>
               <Text style={styles.identityStampId}>{displayId}</Text>
             </View>
           </View>
-          {surveyor || surveyName ? (
+          {latestAudit?.surveyor || surveyor || surveyName ? (
             <View style={styles.surveyorStrip}>
               <Ionicons name="person" size={14} color="#123f24" />
               <Text style={styles.surveyorStripText} numberOfLines={1}>
-                Field surveyor · {surveyor || surveyName}
+                Field surveyor · {latestAudit?.surveyor || surveyor || surveyName}
               </Text>
             </View>
           ) : null}
@@ -610,7 +619,9 @@ export default function TreeDetailScreen() {
                   },
                 ]}
               >
-                {isUpdated
+                {hasAudits
+                  ? `AUDIT ${latestAudit?.monitoring_round || 1} DATE`
+                  : isUpdated
                   ? 'UPDATED DATE'
                   : isRejected
                   ? 'REJECTED DATE'
@@ -622,7 +633,9 @@ export default function TreeDetailScreen() {
               </Text>
               <Text style={styles.landTypeValue} numberOfLines={1}>
                 {formatDateFriendly(
-                  isUpdated
+                  hasAudits
+                    ? activeInspectorAudit?.survey_date || activeInspectorAudit?.submitted_at
+                    : isUpdated
                     ? task?.completed_at || task?.reviewed_at
                     : isRejected || isApproved
                     ? task?.reviewed_at || task?.completed_at
@@ -632,14 +645,6 @@ export default function TreeDetailScreen() {
                 ) || '—'}
               </Text>
             </View>
-            {hasAudits ? (
-              <View style={styles.surveyDateChip}>
-                <Ionicons name="clipboard-outline" size={11} color="#15803d" />
-                <Text style={styles.surveyDateText} numberOfLines={1}>
-                  {formatDateFriendly(activeInspectorAudit?.survey_date ?? activeInspectorAudit?.submitted_at) || '—'}
-                </Text>
-              </View>
-            ) : null}
           </View>
           {landType || tree.survey_date ? (
             <View style={styles.landTypeRow}>
@@ -873,28 +878,6 @@ export default function TreeDetailScreen() {
                       </Text>
                     ) : null}
                   </View>
-
-                  {/* Audit photos (up to 3) */}
-                  {auditPhotos.length > 0 ? (
-                    <View style={styles.snapshotPhotosWrap}>
-                      {auditPhotos.map((uri, idx) => (
-                        <TouchableOpacity
-                          key={idx}
-                          onPress={() => setFullscreenPhoto(uri)}
-                          activeOpacity={0.8}
-                        >
-                          <Image
-                            source={{ uri }}
-                            style={[styles.snapshotThumb, idx > 0 && { marginTop: 4 }] as any}
-                            resizeMode="cover"
-                          />
-                          <View style={styles.snapshotThumbNumBadge}>
-                            <Text style={styles.snapshotThumbNumText}>{idx + 1}</Text>
-                          </View>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  ) : null}
                 </View>
 
                 {activeInspectorAudit.notes ? (
@@ -944,7 +927,7 @@ export default function TreeDetailScreen() {
                 </View>
                 <View style={styles.specCell}>
                   <Text style={styles.specLabel}>Wood Density</Text>
-                  <Text style={styles.specValue}>{woodDensity ?? '—'}</Text>
+                  <Text style={styles.specValue}>{activeDensity ?? '—'}</Text>
                 </View>
               </View>
 
@@ -975,11 +958,11 @@ export default function TreeDetailScreen() {
                     value={formatDateFriendly(activeInspectorAudit?.survey_date ?? activeInspectorAudit?.submitted_at)}
                   />
                 ) : null}
-                <SpecRow label="Form" value={multiStem ?? 'Single stem'} />
-                <SpecRow label="Tree Age at Planting" value={ageYears ? `${ageYears}y` : '—'} />
+                <SpecRow label="Form" value={activeMultiStem ?? 'Single stem'} />
+                <SpecRow label="Tree Age at Planting" value={activeAge ? `${activeAge}y` : '—'} />
                 <SpecRow label="Land / Soil Type" value={landType ?? '—'} />
-                <SpecRow label="Field Surveyor" value={surveyor ?? '—'} />
-                {cleanNotes ? <SpecRow label="Planting Notes" value={cleanNotes} /> : null}
+                <SpecRow label="Field Surveyor" value={latestAudit?.surveyor || surveyor || '—'} />
+                {activeNotes ? <SpecRow label="Audit Notes" value={activeNotes} /> : null}
               </View>
             </View>
           )}
@@ -1067,32 +1050,6 @@ export default function TreeDetailScreen() {
               </LinearGradient>
             </TouchableOpacity>
           ) : null
-        ) : !auditStatus.isDue ? (
-          // Pre-Audit, Approved, but audit is NOT due yet (remaining time ticking)
-          <TouchableOpacity
-            style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}
-            activeOpacity={0.8}
-            onPress={() =>
-              Alert.alert(
-                'Audit Not Available Yet',
-                `Audit 1 is not due yet (${getDueLabel(auditStatus)}). It will open when it becomes Audit Now.`
-              )
-            }
-          >
-            <View style={styles.allCompletedBar}>
-              <LinearGradient
-                colors={['#374151', '#4b5563']}
-                style={styles.fabGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                <Ionicons name="lock-closed" size={18} color="#9ca3af" />
-                <Text style={[styles.fabText, { color: '#d1d5db' }]}>
-                  Audit 1 ({getDueLabel(auditStatus)})
-                </Text>
-              </LinearGradient>
-            </View>
-          </TouchableOpacity>
         ) : (
           // Pre-Audit, Approved: Audit IS due -> Active Start Audit 1 button
           <TouchableOpacity
@@ -1133,33 +1090,6 @@ export default function TreeDetailScreen() {
             </LinearGradient>
           </View>
         </View>
-      ) : !auditStatus.isDue ? (
-        // Next round is not due. The assigned-audit card opens this profile, and
-        // the audit form stays locked until that round becomes Audit Now.
-        <TouchableOpacity
-          style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}
-          activeOpacity={0.8}
-          onPress={() =>
-            Alert.alert(
-              'Audit Not Available Yet',
-              `Audit ${auditStatus.currentRound} is not due yet (${getDueLabel(auditStatus)}). It will open when it becomes Audit Now.`
-            )
-          }
-        >
-          <View style={styles.allCompletedBar}>
-            <LinearGradient
-              colors={['#374151', '#4b5563']}
-              style={styles.fabGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            >
-              <Ionicons name="lock-closed" size={18} color="#9ca3af" />
-              <Text style={[styles.fabText, { color: '#d1d5db' }]}>
-                Audit {auditStatus.currentRound} ({getDueLabel(auditStatus)})
-              </Text>
-            </LinearGradient>
-          </View>
-        </TouchableOpacity>
       ) : (
         // Post-Audit, Next Round IS due -> Active Start Audit button
         <TouchableOpacity

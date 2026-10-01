@@ -268,6 +268,15 @@ export async function insertMonitoringRecord(
       .maybeSingle();
     if (!error) return { data, error: null };
 
+    const message = String(error.message ?? '');
+    const missingTable = isMissingSchemaError(error) && !missingColumnName(message);
+    const reloadCrash = /cannot read property ['"]reload['"]/i.test(message);
+    if (missingTable || reloadCrash) {
+      const { queueMonitoringRecord } = await import('./localMonitoringService');
+      const saved = await queueMonitoringRecord(payload as any);
+      return { data: saved, error: null };
+    }
+
     const column = missingColumnName(error.message);
     if (!column || !(column in payload)) {
       return { data: null, error: error.message };
