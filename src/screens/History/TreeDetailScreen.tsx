@@ -321,8 +321,11 @@ export default function TreeDetailScreen() {
 
   // Approval status & modes
   const isApproved = Boolean(tree.locked || task?.status === 'approved');
-  const rejectionReason = rejectionNotes || task?.review_notes || null;
-  const isRejected = Boolean(task?.status === 'rejected' || rejectionReason);
+  const rejectionReason = task?.status === 'rejected'
+    ? (rejectionNotes || task?.review_notes || null)
+    : null;
+  const isRejected = task?.status === 'rejected';
+  const isUpdated = task?.status === 'completed' && Boolean(task?.review_notes);
   const isPending = !isApproved && !isRejected;
   const hasAudits = audits.length > 0;
   const showAuditProfile = hasAudits || Boolean(asAuditProfile);
@@ -354,6 +357,11 @@ export default function TreeDetailScreen() {
           <View style={styles.approvedPill}>
             <Ionicons name="shield-checkmark" size={12} color="#fff" />
             <Text style={styles.approvedPillText}>APPROVED</Text>
+          </View>
+        ) : isUpdated ? (
+          <View style={styles.updatedPill}>
+            <Ionicons name="refresh" size={12} color="#fff" />
+            <Text style={styles.updatedPillText}>UPDATED</Text>
           </View>
         ) : isRejected ? (
           <View style={styles.rejectedPill}>
@@ -528,6 +536,111 @@ export default function TreeDetailScreen() {
               </Text>
             </View>
           ) : null}
+          <View
+            style={[
+              styles.landTypeRow,
+              {
+                backgroundColor: isUpdated
+                  ? '#fff7ed'
+                  : isRejected
+                  ? '#fef2f2'
+                  : isApproved
+                  ? '#f3e8ff'
+                  : task?.status === 'completed'
+                  ? '#ecfdf5'
+                  : '#eff6ff',
+                borderColor: isUpdated
+                  ? '#fdba74'
+                  : isRejected
+                  ? '#fecaca'
+                  : isApproved
+                  ? '#ddd6fe'
+                  : task?.status === 'completed'
+                  ? '#bbf7d0'
+                  : '#bfdbfe',
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.landTypeIconBox,
+                {
+                  backgroundColor: isUpdated
+                    ? '#ffedd5'
+                    : isRejected
+                    ? '#fee2e2'
+                    : isApproved
+                    ? '#ede9fe'
+                    : task?.status === 'completed'
+                    ? '#dcfce7'
+                    : '#dbeafe',
+                },
+              ]}
+            >
+              <Ionicons
+                name="calendar-outline"
+                size={16}
+                color={
+                  isUpdated
+                    ? '#ea580c'
+                    : isRejected
+                    ? '#dc2626'
+                    : isApproved
+                    ? '#7c3aed'
+                    : task?.status === 'completed'
+                    ? '#15803d'
+                    : '#2563eb'
+                }
+              />
+            </View>
+            <View style={styles.landTypeBody}>
+              <Text
+                style={[
+                  styles.landTypeLabel,
+                  {
+                    color: isUpdated
+                      ? '#ea580c'
+                      : isRejected
+                      ? '#dc2626'
+                      : isApproved
+                      ? '#7c3aed'
+                      : task?.status === 'completed'
+                      ? '#15803d'
+                      : '#2563eb',
+                  },
+                ]}
+              >
+                {isUpdated
+                  ? 'UPDATED DATE'
+                  : isRejected
+                  ? 'REJECTED DATE'
+                  : isApproved
+                  ? 'APPROVED DATE'
+                  : task?.status === 'completed'
+                  ? 'COMPLETED DATE'
+                  : 'ASSIGNED DATE'}
+              </Text>
+              <Text style={styles.landTypeValue} numberOfLines={1}>
+                {formatDateFriendly(
+                  isUpdated
+                    ? task?.completed_at || task?.reviewed_at
+                    : isRejected || isApproved
+                    ? task?.reviewed_at || task?.completed_at
+                    : task?.status === 'completed'
+                    ? task?.completed_at || tree.survey_date || tree.submitted_at
+                    : task?.created_at || tree.survey_date || tree.submitted_at
+                ) || '—'}
+              </Text>
+            </View>
+            {hasAudits ? (
+              <View style={styles.surveyDateChip}>
+                <Ionicons name="clipboard-outline" size={11} color="#15803d" />
+                <Text style={styles.surveyDateText} numberOfLines={1}>
+                  {formatDateFriendly(activeInspectorAudit?.survey_date ?? activeInspectorAudit?.submitted_at) || '—'}
+                </Text>
+              </View>
+            ) : null}
+          </View>
           {landType || tree.survey_date ? (
             <View style={styles.landTypeRow}>
               <View style={styles.landTypeIconBox}>
@@ -838,6 +951,30 @@ export default function TreeDetailScreen() {
               <View style={styles.specDetailsList}>
                 {tree.project_name ? <SpecRow label="Project Name" value={tree.project_name} /> : null}
                 <SpecRow label="Planting Date" value={plantingDateStr} />
+                <SpecRow
+                  label={
+                    isUpdated
+                      ? 'Updated Date'
+                      : isRejected
+                      ? 'Rejected Date'
+                      : isApproved
+                      ? 'Approved Date'
+                      : 'Assigned Date'
+                  }
+                  value={formatDateFriendly(
+                    isUpdated
+                      ? task?.completed_at || task?.reviewed_at
+                      : isRejected || isApproved
+                      ? task?.reviewed_at || task?.completed_at
+                      : task?.created_at || tree.submitted_at
+                  )}
+                />
+                {hasAudits ? (
+                  <SpecRow
+                    label="Audit Date"
+                    value={formatDateFriendly(activeInspectorAudit?.survey_date ?? activeInspectorAudit?.submitted_at)}
+                  />
+                ) : null}
                 <SpecRow label="Form" value={multiStem ?? 'Single stem'} />
                 <SpecRow label="Tree Age at Planting" value={ageYears ? `${ageYears}y` : '—'} />
                 <SpecRow label="Land / Soil Type" value={landType ?? '—'} />
@@ -926,7 +1063,7 @@ export default function TreeDetailScreen() {
                 end={{ x: 1, y: 0 }}
               >
                 <Ionicons name="refresh-circle-outline" size={18} color="#fff" />
-                <Text style={styles.fabText}>Update Rejected Tree</Text>
+                <Text style={styles.fabText}>Update Tree</Text>
               </LinearGradient>
             </TouchableOpacity>
           ) : null
@@ -1131,6 +1268,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   rejectedPillText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  updatedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ea580c',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  updatedPillText: { color: '#fff', fontSize: 10, fontWeight: '800' },
   pendingPill: {
     flexDirection: 'row',
     alignItems: 'center',

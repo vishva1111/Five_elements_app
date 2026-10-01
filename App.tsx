@@ -238,7 +238,7 @@ function MainTabs() {
 }
 
 // ─── Fetch full user data (profile + credits + projects) ──────────────────────
-async function loadUserData(userId: string, email: string) {
+async function loadUserData(userId: string, email: string, metadata?: any) {
   const { data: profile, error: profileError } = await fetchUserProfile(userId);
   // Fetch the user's trees — per-project credits are computed below
   const { data: userTrees } = await fetchMyTrees(userId);
@@ -285,7 +285,8 @@ async function loadUserData(userId: string, email: string) {
     userId,
     email,
     profileError ? null : profile,
-    remainingCredits
+    remainingCredits,
+    metadata
   );
 
   return { user, projects: assignedProjects, initialActiveProjectId };
@@ -326,7 +327,7 @@ export default function App() {
         if (loadedUserIdRef.current === s.user.id) return;
         loadedUserIdRef.current = s.user.id;
         // Fire and forget — a data-loading failure must NEVER log the user out
-        loadUserData(s.user.id, s.user.email ?? '')
+        loadUserData(s.user.id, s.user.email ?? '', s.user.user_metadata)
           .then(({ user, projects, initialActiveProjectId }) => {
             setUser(user);
             setWorkReportUser(user?.full_name || user?.email || 'Field user');

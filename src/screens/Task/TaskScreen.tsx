@@ -476,20 +476,24 @@ export default function TaskScreen() {
     const isApproved = task.status === 'approved';
     const treeAudits = auditsByTree[targetId] || [];
 
-    const handlePress = () => {
-      // Assigned audit cards open the audit tree profile. Other cards still
-      // open tree details. The audit form is only entered via "Audit Now".
-      navigation.navigate('TreeDetail', {
-        treeId: targetId,
-        asAuditProfile: isAuditTask,
-      });
-    };
-
     const handleStartAudit = () => {
       navigation.navigate('EditTree', {
         treeId: targetId,
         taskId: task.id,
         auditRound: task.audit_round || 1,
+      });
+    };
+
+    const handlePress = () => {
+      // Assigned audits go straight into the first audit form for testing.
+      // Planting cards and completed cards keep their existing pages.
+      if (isAuditTask) {
+        handleStartAudit();
+        return;
+      }
+      navigation.navigate('TreeDetail', {
+        treeId: targetId,
+        asAuditProfile: false,
       });
     };
 
@@ -516,8 +520,6 @@ export default function TaskScreen() {
             ? handleStartAudit
             : isAssigned
             ? () => handleStartTask(task)
-            : isRejected
-            ? handleUpdate
             : undefined
         }
         actionLabel={
@@ -525,8 +527,6 @@ export default function TaskScreen() {
             ? 'Audit Now'
             : isAssigned
             ? 'Planting'
-            : isRejected
-            ? 'Update Submission'
             : undefined
         }
         actionVariant={

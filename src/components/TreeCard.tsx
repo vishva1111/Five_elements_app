@@ -155,19 +155,40 @@ export default function TreeCard({
   const lng = task?.longitude ?? tree?.longitude;
 
   // Surveyor
-  const surveyor = task?.surveyor || tree?.surveyor;
+  const surveyor = tree?.surveyor || task?.surveyor;
   const landType = tree?.land_type;
-
-  // Date — prefer the field-capture date over the later task completion time.
-  const rawDate =
-    tree?.survey_date ||
-    tree?.submitted_at ||
-    (effectiveStatus === 'completed' && task?.completed_at) ||
-    task?.created_at;
-  const dateStr = formatDateCustom(rawDate);
 
   const isAudit = task?.task_type === 'audit' || !!task?.audit_round || actionVariant === 'audit';
   const isCompletedAudit = effectiveStatus === 'completed' && isAudit;
+  const isUpdatedCard = effectiveStatus === 'completed' && Boolean(task?.review_notes);
+  // Date follows the card status: assigned, completed, rejected, approved, or the audit date.
+  const rawDate = isAudit
+    ? tree?.survey_date || task?.completed_at || task?.due_date || task?.created_at
+    : effectiveStatus === 'approved'
+    ? task?.reviewed_at || task?.completed_at || tree?.survey_date
+    : effectiveStatus === 'rejected'
+    ? task?.reviewed_at || task?.completed_at || tree?.survey_date
+    : isUpdatedCard
+    ? task?.completed_at || task?.reviewed_at || tree?.survey_date
+    : effectiveStatus === 'completed'
+    ? task?.completed_at || tree?.survey_date || tree?.submitted_at
+    : task?.created_at || tree?.survey_date || tree?.submitted_at;
+  const dateStr = formatDateCustom(rawDate);
+  const dateLabel = isAudit
+    ? isCompletedAudit
+      ? 'Audited'
+      : 'Audit'
+    : effectiveStatus === 'approved'
+    ? 'Approved'
+    : effectiveStatus === 'rejected'
+    ? 'Rejected'
+    : isUpdatedCard
+    ? 'Updated'
+    : effectiveStatus === 'completed'
+    ? 'Completed'
+    : isAssigned
+    ? 'Assigned'
+    : '';
   const CardContainer = isAssigned && !onPress ? View : TouchableOpacity;
   const containerProps = isAssigned && !onPress ? {} : { onPress, activeOpacity: 0.82 };
 
@@ -244,19 +265,39 @@ export default function TreeCard({
                   styles.statusBadge,
                   {
                     backgroundColor:
-                      effectiveStatus === 'approved'
+                      effectiveStatus === 'completed' && task?.review_notes
+                        ? '#fff7ed'
+                        : effectiveStatus === 'approved'
                         ? '#f3e8ff'
                         : statusColor + '15',
                     borderColor:
-                      effectiveStatus === 'approved'
+                      effectiveStatus === 'completed' && task?.review_notes
+                        ? '#fdba74'
+                        : effectiveStatus === 'approved'
                         ? '#ddd6fe'
                         : statusColor + '30',
                   },
                 ]}
               >
-                <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-                <Text style={[styles.statusText, { color: statusColor }]}>
-                  {effectiveStatus.toUpperCase()}
+                <View
+                  style={[
+                    styles.statusDot,
+                    {
+                      backgroundColor:
+                        effectiveStatus === 'completed' && task?.review_notes ? '#ea580c' : statusColor,
+                    },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.statusText,
+                    {
+                      color:
+                        effectiveStatus === 'completed' && task?.review_notes ? '#ea580c' : statusColor,
+                    },
+                  ]}
+                >
+                  {effectiveStatus === 'completed' && task?.review_notes ? 'UPDATED' : effectiveStatus.toUpperCase()}
                 </Text>
               </View>
             )}
@@ -267,27 +308,17 @@ export default function TreeCard({
             {title}
           </Text>
 
-          {/* Rejection Notes Box if rejected */}
-          {isRejected && rejectionNotes ? (
-            <View style={styles.rejectionBox}>
-              <Ionicons name="alert-circle-outline" size={12} color="#ef4444" />
-              <Text style={styles.rejectionText} numberOfLines={2}>
-                {rejectionNotes}
-              </Text>
-            </View>
-          ) : null}
-
           {/* Row 3: Badges Row (Location stays in its original place) */}
           {(!isAssigned || isAudit) ? (
             <View style={styles.badgesRow}>
-              {condition && !isCompleted ? (
+              {condition ? (
                 <View style={styles.conditionBadge}>
                   <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
                   <Text style={[styles.conditionText, { color: conditionColor }]}>{condition}</Text>
                 </View>
               ) : null}
 
-              {lat != null && lng != null && !isCompleted ? (
+              {lat != null && lng != null ? (
                 <TouchableOpacity
                   style={styles.locationLink}
                   onPress={(e) => {
@@ -390,25 +421,11 @@ export default function TreeCard({
             <View style={[styles.dateRow, isAssigned && styles.assignedDateRow]}>
               <Ionicons name="calendar-outline" size={12} color="#6b7280" />
               <Text style={[styles.dateText, isAssigned && styles.assignedDateText]}>
-                {isAssigned ? `Assigned: ${dateStr}` : isCompletedAudit ? `Audited: ${dateStr}` : dateStr}
+                {dateLabel ? `${dateLabel}: ${dateStr}` : dateStr}
               </Text>
             </View>
           ) : null}
         </View>
-        {isCompleted && lat != null && lng != null && onLocationPress ? (
-          <TouchableOpacity
-            style={styles.locationSideBtn}
-            onPress={(e) => {
-              e.stopPropagation();
-              onLocationPress();
-            }}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Open location"
-          >
-            <Ionicons name="location" size={16} color="#15803d" />
-          </TouchableOpacity>
-        ) : null}
         {isAssigned && !isAudit && onAction ? (
           <TouchableOpacity
             style={styles.plantingBtn}
@@ -734,18 +751,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#15803d',
     fontWeight: '700',
-  },
-  locationSideBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginLeft: 8,
-    backgroundColor: '#e8f5e9',
-    borderWidth: 1,
-    borderColor: '#bbf7d0',
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
   },
   surveyorRow: {
     flexDirection: 'row',

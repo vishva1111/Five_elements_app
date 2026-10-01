@@ -4526,3 +4526,67 @@
 {"_e":"metro:bundling:progress","_t":1790843367542,"id":"3","progress":0.9934275564161829,"total":1519,"current":1514}
 {"_e":"metro:bundling:progress","_t":1790843367643,"id":"3","progress":0.999,"total":1520,"current":1520}
 {"_e":"metro:bundling:done","_t":1790843367792,"id":"3","total":1520,"ms":3345.9393}
+{"_e":"metro:bundling:started","_t":1790843571502,"id":"7","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1790843571504,"id":"7","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1790843571516,"id":"7","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1790843571623,"id":"7","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1790843572067,"id":"7","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1790843573678,"id":"7","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:done","_t":1790843573832,"id":"7","total":1,"ms":2328.1006}
+{"_e":"metro:client_log","_t":1790843599784,"level":"warn","data":["[TreeApp] tree_records.locked missing — run supabase/migrations/001_add_tree_columns.sql (npm run db:migrate). Skipping the lock check."]}
+{"_e":"metro:client_log","_t":1790843600330,"level":"warn","data":["[TreeApp] tree_records.photo_urls missing — run supabase/migrations/001_add_tree_columns.sql (npm run db:migrate). Saving without it."]}
+{"_e":"metro:client_log","_t":1790843694718,"level":"warn","data":["[TreeApp] tree_records.locked missing — run supabase/migrations/001_add_tree_columns.sql (npm run db:migrate). Skipping the lock check."]}
+{"_e":"metro:client_log","_t":1790843695173,"level":"warn","data":["[TreeApp] tree_records.photo_urls missing — run supabase/migrations/001_add_tree_columns.sql (npm run db:migrate). Saving without it."]}
+{"_e":"metro:bundling:started","_t":1790844531373,"id":"e","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1790844531374,"id":"e","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:done","_t":1790844531552,"id":"e","total":1,"ms":178.4314}
+{"_e":"metro:client_log","_t":1790844557977,"level":"warn","data":["[TreeApp] tree_records.locked missing — run supabase/migrations/001_add_tree_columns.sql (npm run db:migrate). Skipping the lock check."]}
+{"_e":"metro:client_log","_t":1790844558549,"level":"warn","data":["[TreeApp] tree_records.photo_urls missing — run supabase/migrations/001_add_tree_columns.sql (npm run db:migrate). Saving without it."]}
+{"_e":"root:init","_t":1790844945936,"format":"v0-jsonl","version":"57.0.27"}
+{"_e":"env:mode","_t":1790844945937,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1790844945944,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_MAPBOX_TOKEN":"","EXPO_PUBLIC_SUPABASE_ANON_KEY":"your_supabase_anon_key_here","EXPO_PUBLIC_SUPABASE_URL":"https://iauhmhkmreojmfahvxxh.supabase.co"}}
+{"_e":"devserver:start","_t":1790844946642,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1790844947217,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1790844947801,"plugins":[]}
+{"_e":"metro:instantiate","_t":1790844961709,"atlas":false,"workers":10,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1790845116773,"id":"4","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1790845116774,"id":"4","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:done","_t":1790845118206,"id":"4","total":1,"ms":1432.7104}
+{"_e":"metro:bundling:started","_t":1790845782408,"id":"7","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1790845782409,"id":"7","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:done","_t":1790845782580,"id":"7","total":1,"ms":171.2103}
+{"_e":"metro:client_log","_t":1790846106678,"level":"warn","data":["[TreeApp] tree_records.locked missing — run supabase/migrations/001_add_tree_columns.sql (npm run db:migrate). Skipping the lock check."]}
+{"_e":"metro:client_log","_t":1790846107698,"level":"warn","data":["[TreeApp] tree_records.photo_urls missing — run supabase/migrations/001_add_tree_columns.sql (npm run db:migrate). Saving without it."]}
+{"_e":"metro:bundling:started","_t":1790846451268,"id":"f","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1790846451268,"id":"f","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:done","_t":1790846451811,"id":"f","total":1,"ms":542.4504}
+{"_e":"root:init","_t":1790846503504,"format":"v0-jsonl","version":"57.0.27"}
+{"_e":"env:mode","_t":1790846503505,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1790846503510,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_MAPBOX_TOKEN":"","EXPO_PUBLIC_SUPABASE_ANON_KEY":"your_supabase_anon_key_here","EXPO_PUBLIC_SUPABASE_URL":"https://iauhmhkmreojmfahvxxh.supabase.co"}}
+{"_e":"devserver:start","_t":1790846504189,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1790846504749,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1790846505372,"plugins":[]}
+{"_e":"metro:instantiate","_t":1790846519466,"atlas":false,"workers":10,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1790846521405,"id":"3","platform":"android","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1790846521406,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1790846521410,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1790846521510,"id":"3","progress":0.09336419753086421,"total":108,"current":33}
+{"_e":"metro:bundling:progress","_t":1790846521610,"id":"3","progress":0.09336419753086421,"total":307,"current":47}
+{"_e":"metro:bundling:progress","_t":1790846521720,"id":"3","progress":0.09336419753086421,"total":362,"current":75}
+{"_e":"metro:bundling:progress","_t":1790846521820,"id":"3","progress":0.13109393579072534,"total":406,"current":147}
+{"_e":"metro:bundling:progress","_t":1790846521921,"id":"3","progress":0.15000790044481896,"total":457,"current":177}
+{"_e":"metro:bundling:progress","_t":1790846522021,"id":"3","progress":0.18489999999999998,"total":500,"current":215}
+{"_e":"metro:bundling:progress","_t":1790846522123,"id":"3","progress":0.21471461448940563,"total":587,"current":272}
+{"_e":"metro:bundling:progress","_t":1790846522223,"id":"3","progress":0.23758816828438564,"total":716,"current":349}
+{"_e":"metro:bundling:progress","_t":1790846522324,"id":"3","progress":0.27936769963087005,"total":753,"current":398}
+{"_e":"metro:bundling:progress","_t":1790846522423,"id":"3","progress":0.3207531277374722,"total":844,"current":478}
+{"_e":"metro:bundling:progress","_t":1790846522523,"id":"3","progress":0.35844827766780823,"total":927,"current":555}
+{"_e":"metro:bundling:progress","_t":1790846522623,"id":"3","progress":0.43870831415374356,"total":1004,"current":665}
+{"_e":"metro:bundling:progress","_t":1790846522723,"id":"3","progress":0.526551377535357,"total":1057,"current":767}
+{"_e":"metro:bundling:progress","_t":1790846522823,"id":"3","progress":0.6779374409262761,"total":1104,"current":909}
+{"_e":"metro:bundling:progress","_t":1790846522923,"id":"3","progress":0.7571068052957303,"total":1178,"current":1025}
+{"_e":"metro:bundling:progress","_t":1790846523023,"id":"3","progress":0.7746265652416202,"total":1243,"current":1094}
+{"_e":"metro:bundling:progress","_t":1790846523123,"id":"3","progress":0.7746265652416202,"total":1368,"current":1195}
+{"_e":"metro:bundling:progress","_t":1790846523223,"id":"3","progress":0.8810087990487515,"total":1450,"current":1361}
+{"_e":"metro:bundling:progress","_t":1790846523323,"id":"3","progress":0.933068301126023,"total":1498,"current":1447}
+{"_e":"metro:bundling:done","_t":1790846523481,"id":"3","total":1498,"ms":2075.6254}

@@ -627,12 +627,23 @@ export function buildUserFromProfile(
   userId: string,
   email: string,
   profile: any | null,
-  credits: number | null
+  credits: number | null,
+  metadata?: any
 ): User {
+  const fullName = [
+    profile?.display_name,
+    profile?.full_name,
+    profile?.name,
+    metadata?.full_name,
+    metadata?.name,
+    metadata?.display_name,
+  ]
+    .map((value) => String(value ?? '').trim())
+    .find(Boolean) || '';
   return {
     id: userId,
     email: profile?.email ?? email,
-    full_name: profile?.full_name ?? profile?.display_name ?? profile?.name ?? '',
+    full_name: fullName,
     role: profile?.role ?? 'field_user',
     avatar_url: profile?.avatar_url ?? profile?.avatar ?? '',
     created_at: profile?.created_at ?? new Date().toISOString(),
