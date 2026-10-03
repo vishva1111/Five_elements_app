@@ -234,27 +234,37 @@ export default function MapPickerScreen() {
         throw new Error('Location permission denied');
       }
 
-      // Fast-path: check last known position first
+      // Paint a recent cache immediately, then always replace it with a
+      // navigation-grade fix. The cache is never the saved point.
       let locationCoords: { latitude: number; longitude: number; accuracy?: number | null } | null = null;
       try {
-        const lastKnown = await Location.getLastKnownPositionAsync({});
-        if (lastKnown?.coords) {
-          locationCoords = lastKnown.coords;
+        const lastKnown = await Location.getLastKnownPositionAsync({
+          maxAge: 60000,
+          requiredAccuracy: 30,
+        });
+        if (lastKnown?.coords && mountedRef.current) {
+          const quick = lastKnown.coords;
+          setCoords({
+            latitude: quick.latitude,
+            longitude: quick.longitude,
+            accuracy: quick.accuracy ?? undefined,
+          });
+          setResultAccuracy(quick.accuracy ?? null);
+          moveMapTo(quick.latitude, quick.longitude);
         }
       } catch {}
 
-      if (!locationCoords) {
-        try {
-          const loc = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-          locationCoords = loc.coords;
-        } catch {
-          const low = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Low,
-          });
-          locationCoords = low.coords;
-        }
+      try {
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.BestForNavigation,
+          mayShowUserSettingsDialog: true,
+        });
+        locationCoords = loc.coords;
+      } catch {
+        const balanced = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        locationCoords = balanced.coords;
       }
 
       if (!mountedRef.current) return;

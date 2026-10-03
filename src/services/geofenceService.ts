@@ -139,9 +139,9 @@ async function startMonitor(zones: GeofenceZone[], callback: GeofenceCallback) {
 
   monitorSubscription = await Location.watchPositionAsync(
     {
-      accuracy: Location.Accuracy.Balanced,
-      distanceInterval: 5, // update every 5 meters
-      timeInterval: 3000,  // or every 3 seconds
+      accuracy: Location.Accuracy.BestForNavigation,
+      distanceInterval: 1,
+      timeInterval: 1000,
     },
     handlePositionUpdate
   );

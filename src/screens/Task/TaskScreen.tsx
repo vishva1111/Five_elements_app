@@ -86,9 +86,9 @@ export default function TaskScreen() {
 
   // Dashboard boxes can open this screen on a specific tab (e.g. Rejected/Completed).
   useEffect(() => {
-    const tab = (route.params as { tab?: TaskTab } | undefined)?.tab;
-    if (tab) setActiveTab(tab);
-  }, [route.params]);
+    const params = route.params as { tab?: TaskTab; at?: number } | undefined;
+    if (params?.tab) setActiveTab(params.tab);
+  }, [route.params, (route.params as { at?: number } | undefined)?.at]);
 
   // Assigned tree and audit tasks belong to their due date. Other tabs stay on
   // the day the work was reviewed or created.
@@ -243,13 +243,15 @@ export default function TaskScreen() {
         (payload) => {
           const next = payload.new as Partial<Task> | null;
           const status = next?.status;
-          if (status !== 'approved' && status !== 'rejected') return;
+          if (status !== 'approved' && status !== 'rejected' && status !== 'completed') return;
           setTasks(
             (useTaskStore.getState().tasks ?? []).map((task) =>
               task.id === next?.id ? { ...task, ...next, status } : task
             )
           );
-          setActiveTab(status);
+          // A finished audit lands on Completed. Only a reject opens its own tab.
+          if (status === 'rejected') setActiveTab('rejected');
+          else setActiveTab('completed');
         }
       )
       .subscribe();
@@ -282,7 +284,8 @@ export default function TaskScreen() {
       });
       if (!moved) return;
       setTasks(next);
-      setActiveTab(moved);
+      // A finished audit stays on Completed. A rejection still opens Rejected.
+      setActiveTab(moved === 'rejected' ? 'rejected' : 'completed');
     };
     const timer = setInterval(watchReview, 12000);
     return () => {
@@ -372,7 +375,7 @@ export default function TaskScreen() {
   // updated audit dots/round as the Completed tab.
   const approvedItems = useMemo(() => {
     const list = projectTasks
-      .filter((t) => t.status === 'approved')
+      .filter((t) => t.status === 'approved' && t.task_type !== 'audit' && !t.audit_round)
       .map((t) => {
         // Monitoring rows can be keyed by the tree record id, the task's
         // tree_record_id, or its tree_id — accept any so the audit is never missed.
@@ -399,12 +402,15 @@ export default function TaskScreen() {
     const seenIds = new Set<string>();
 
     projectTasks.forEach((t) => {
-      if (t.status !== 'completed') return;
+      const isFinishedAudit =
+        t.status === 'approved' && (t.task_type === 'audit' || !!t.audit_round);
+      if (t.status !== 'completed' && !isFinishedAudit) return;
       const treeId = t.tree_record_id || t.tree_id || t.id;
       const latestAudit = getLatestAudit(auditsByTree[treeId] || []);
       const latestAuditDate = latestAudit?.submitted_at || latestAudit?.survey_date || null;
         list.push({
           ...t,
+          status: 'completed',
           completed_at: latestAuditDate || t.completed_at || t.created_at,
           photo_url: latestAudit?.photo_url || t.photo_url,
           tree_condition: latestAudit?.tree_condition || t.tree_condition,

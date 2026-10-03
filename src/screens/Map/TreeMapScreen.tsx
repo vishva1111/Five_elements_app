@@ -23,6 +23,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTreeStore } from '../../store/treeStore';
 import { fetchTreesByProject, fetchAllProjects, lockTree, fetchTreeById } from '../../services/treeService';
+import { fetchAuditsForTrees, getLatestAudit } from '../../services/auditService';
 import { useAuthStore } from '../../store/authStore';
 import { useGeofencing } from '../../hooks/useGeofencing';
 import {
@@ -77,9 +78,9 @@ const NEAR_TREE_HIGHLIGHT_M = 10; // show/map-highlight the closest tree within 
 type NearTreeInfo = { id: string; label: string; distance: number; vibrating: boolean };
 
 // ─── GPS accuracy guard ──────────────────────────────────────────────────────
-const GPS_ACCURACY_MAX_M = 50; // ignore fixes worse than this while a good one exists
-const GPS_ACCURACY_GOOD_M = 25; // fixes at or better than this reset the guard window
-const GPS_GOOD_FIX_WINDOW_MS = 10000; // how long a good fix suppresses noisy jumps
+const GPS_ACCURACY_MAX_M = 20; // ignore fixes worse than this while a good one exists
+const GPS_ACCURACY_GOOD_M = 8; // fixes at or better than this reset the guard window
+const GPS_GOOD_FIX_WINDOW_MS = 8000; // how long a good fix suppresses noisy jumps
 
 // ─── Compass bearing & distance calculations for walking directions ───────────
 function calculateBearing(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -904,6 +905,7 @@ export default function TreeMapScreen() {
   const isAdmin = user?.role === 'admin';
 
   const [allTrees, setAllTrees] = useState<TreeRecord[]>([]);
+  const [auditsByTree, setAuditsByTree] = useState<Record<string, any[]>>({});
   const [projectName, setProjectName] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -1033,6 +1035,12 @@ export default function TreeMapScreen() {
 
       setAllTrees(combined);
       setTrees(combined);
+      try {
+        const audits = await fetchAuditsForTrees(combined.map((t: TreeRecord) => t.id).filter(Boolean));
+        setAuditsByTree(audits);
+      } catch {
+        setAuditsByTree({});
+      }
 
       // Load project land boundary geofence
       const { data: geofence } = await fetchProjectGeofence(activeProjectId);
@@ -1051,6 +1059,11 @@ export default function TreeMapScreen() {
             setAllTrees([singleTree]);
             setSelectedTree(singleTree);
             setShowDetails(true);
+            try {
+              setAuditsByTree(await fetchAuditsForTrees([singleTree.id]));
+            } catch {
+              setAuditsByTree({});
+            }
           }
         } catch {}
       } else {
@@ -1424,13 +1437,14 @@ export default function TreeMapScreen() {
             } catch {}
           });
 
-        // 3. Continuous live stream: navigation-grade accuracy, twice a second,
-        //    and the moment the user moves a single metre.
+        // 3. Continuous live stream: navigation-grade accuracy, four times a
+        //    second, including while the user is standing still so the fix
+        //    can tighten instead of waiting for a 1 m step.
         watcher = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.BestForNavigation,
-            distanceInterval: 1, // update every 1 meter
-            timeInterval: 500, // or every 0.5 seconds
+            distanceInterval: 0,
+            timeInterval: 250,
             mayShowUserSettingsDialog: false, // one-shot above already prompted
           },
           (loc) => {
@@ -1493,12 +1507,13 @@ export default function TreeMapScreen() {
     setWalkCorners([]);
     setGeofenceWalkMode(true);
 
-    // Start watching position at highest accuracy as user walks
+    // Same navigation-grade stream as the live dot, so a corner is locked
+    // from a tight fix instead of a 1 m / 1 s sample.
     const sub = await Location.watchPositionAsync(
       {
-        accuracy: Location.Accuracy.Highest,
-        distanceInterval: 1, // update every 1 meter
-        timeInterval: 1000,
+        accuracy: Location.Accuracy.BestForNavigation,
+        distanceInterval: 0,
+        timeInterval: 250,
       },
       (loc) => {
         handleLocationUpdate(loc);
@@ -1520,12 +1535,22 @@ export default function TreeMapScreen() {
   const handleRecordCorner = async () => {
     try {
       let locCoords: { latitude: number; longitude: number; accuracy?: number | null } | null = null;
-      try {
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        if (loc?.coords) {
-          locCoords = loc.coords;
-        }
-      } catch {
+      // The live stream is already navigation-grade. Reuse it when it is
+      // tight so the corner saves instantly instead of waiting for a new fix.
+      if (userCoords && gpsAccuracy != null && gpsAccuracy <= GPS_ACCURACY_GOOD_M) {
+        locCoords = { ...userCoords, accuracy: gpsAccuracy };
+      }
+      if (!locCoords) {
+        try {
+          const loc = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.BestForNavigation,
+          });
+          if (loc?.coords) {
+            locCoords = loc.coords;
+          }
+        } catch {}
+      }
+      if (!locCoords) {
         try {
           const lastKnown = await Location.getLastKnownPositionAsync({});
           if (lastKnown?.coords) {
@@ -2694,10 +2719,16 @@ export default function TreeMapScreen() {
               try { meta = JSON.parse(metaMatch[1]); } catch {}
               cleanNotes = selectedTree.notes!.replace(/##META##{.*}/s, '').trim();
             }
-            const dbh = selectedTree.dbh_cm || meta.dbh_cm;
-            const height = selectedTree.height_m || meta.height_m;
-            const condition = selectedTree.tree_condition || meta.tree_condition;
-            const date = selectedTree.survey_date || meta.survey_date || selectedTree.submitted_at?.split('T')[0] || '';
+            const latestAudit = getLatestAudit(auditsByTree[selectedTree.id]);
+            if (latestAudit?.notes) {
+              cleanNotes = String(latestAudit.notes).replace(/##META##{.*}/s, '').trim();
+            }
+            const dbh = latestAudit?.dbh_cm ?? selectedTree.dbh_cm ?? meta.dbh_cm;
+            const height = latestAudit?.height_m ?? selectedTree.height_m ?? meta.height_m;
+            const condition = latestAudit?.tree_condition || selectedTree.tree_condition || meta.tree_condition;
+            const date = latestAudit
+              ? (latestAudit.survey_date || latestAudit.submitted_at?.split('T')[0] || '')
+              : (selectedTree.survey_date || meta.survey_date || selectedTree.submitted_at?.split('T')[0] || '');
             const condColor = CONDITION_COLORS[condition || 'Healthy'] || '#16a34a';
 
             return (
@@ -2755,54 +2786,95 @@ export default function TreeMapScreen() {
                   </View>
                 )}
 
-                <View style={styles.detailGrid}>
-                  <View style={styles.detailCell}>
-                    <View style={styles.detailCellHeader}>
-                      <Ionicons name="shield-checkmark-outline" size={11} color="#64748b" />
-                      <Text style={styles.detailLabel}>Condition</Text>
-                    </View>
-                    {condition ? (
-                      <View style={[styles.detailCondBadge, { backgroundColor: `${condColor}18`, borderColor: `${condColor}45` }]}>
-                        <View style={[styles.detailCondDot, { backgroundColor: condColor }]} />
-                        <Text style={[styles.detailCondText, { color: condColor }]}>{condition}</Text>
+                {latestAudit ? (
+                  <>
+                    <View style={styles.detailGrid}>
+                      <View style={styles.detailCell}>
+                        <View style={styles.detailCellHeader}>
+                          <Ionicons name="shield-checkmark-outline" size={11} color="#64748b" />
+                          <Text style={styles.detailLabel}>Condition</Text>
+                        </View>
+                        {condition ? (
+                          <View style={[styles.detailCondBadge, { backgroundColor: `${condColor}18`, borderColor: `${condColor}45` }]}>
+                            <View style={[styles.detailCondDot, { backgroundColor: condColor }]} />
+                            <Text style={[styles.detailCondText, { color: condColor }]}>{condition}</Text>
+                          </View>
+                        ) : (
+                          <Text style={[styles.detailValue, { color: '#94a3b8' }]}>Not set</Text>
+                        )}
                       </View>
-                    ) : (
-                      <Text style={[styles.detailValue, { color: '#94a3b8' }]}>Not set</Text>
-                    )}
-                  </View>
 
-                  <View style={styles.detailCell}>
-                    <View style={styles.detailCellHeader}>
-                      <Ionicons name="ellipse-outline" size={11} color="#64748b" />
-                      <Text style={styles.detailLabel}>DBH</Text>
+                      <View style={styles.detailCell}>
+                        <View style={styles.detailCellHeader}>
+                          <Ionicons name="ellipse-outline" size={11} color="#64748b" />
+                          <Text style={styles.detailLabel}>DBH</Text>
+                        </View>
+                        <Text style={[styles.detailValue, !dbh && { color: '#94a3b8' }]}>
+                          {dbh ? `${dbh} cm` : 'Not recorded'}
+                        </Text>
+                      </View>
+
+                      <View style={styles.detailCell}>
+                        <View style={styles.detailCellHeader}>
+                          <Ionicons name="trending-up-outline" size={11} color="#64748b" />
+                          <Text style={styles.detailLabel}>Height</Text>
+                        </View>
+                        <Text style={[styles.detailValue, !height && { color: '#94a3b8' }]}>
+                          {height ? `${height} m` : 'Not recorded'}
+                        </Text>
+                      </View>
+
+                      <View style={styles.detailCell}>
+                        <View style={styles.detailCellHeader}>
+                          <Ionicons name="calendar-outline" size={11} color="#64748b" />
+                          <Text style={styles.detailLabel}>Date</Text>
+                        </View>
+                        <Text style={[styles.detailValue, !date && { color: '#94a3b8' }]}>
+                          {date || 'Not recorded'}
+                        </Text>
+                      </View>
                     </View>
-                    <Text style={[styles.detailValue, !dbh && { color: '#94a3b8' }]}>
-                      {dbh ? `${dbh} cm` : 'Not recorded'}
-                    </Text>
-                  </View>
 
-                  <View style={styles.detailCell}>
-                    <View style={styles.detailCellHeader}>
-                      <Ionicons name="trending-up-outline" size={11} color="#64748b" />
-                      <Text style={styles.detailLabel}>Height</Text>
-                    </View>
-                    <Text style={[styles.detailValue, !height && { color: '#94a3b8' }]}>
-                      {height ? `${height} m` : 'Not recorded'}
-                    </Text>
+                    {cleanNotes ? (
+                      <View style={styles.detailNotes}>
+                        <Text style={styles.detailNotesLabel}>Notes</Text>
+                        <Text style={styles.detailNotesText} numberOfLines={2}>{cleanNotes}</Text>
+                      </View>
+                    ) : null}
+                  </>
+                ) : (dbh || height || date) ? (
+                  <View style={styles.detailGrid}>
+                    {dbh ? (
+                      <View style={styles.detailCell}>
+                        <View style={styles.detailCellHeader}>
+                          <Ionicons name="ellipse-outline" size={11} color="#64748b" />
+                          <Text style={styles.detailLabel}>DBH</Text>
+                        </View>
+                        <Text style={styles.detailValue}>{dbh} cm</Text>
+                      </View>
+                    ) : null}
+                    {height ? (
+                      <View style={styles.detailCell}>
+                        <View style={styles.detailCellHeader}>
+                          <Ionicons name="trending-up-outline" size={11} color="#64748b" />
+                          <Text style={styles.detailLabel}>Height</Text>
+                        </View>
+                        <Text style={styles.detailValue}>{height} m</Text>
+                      </View>
+                    ) : null}
+                    {date ? (
+                      <View style={styles.detailCell}>
+                        <View style={styles.detailCellHeader}>
+                          <Ionicons name="calendar-outline" size={11} color="#64748b" />
+                          <Text style={styles.detailLabel}>Date</Text>
+                        </View>
+                        <Text style={styles.detailValue}>{date}</Text>
+                      </View>
+                    ) : null}
                   </View>
+                ) : null}
 
-                  <View style={styles.detailCell}>
-                    <View style={styles.detailCellHeader}>
-                      <Ionicons name="calendar-outline" size={11} color="#64748b" />
-                      <Text style={styles.detailLabel}>Date</Text>
-                    </View>
-                    <Text style={[styles.detailValue, !date && { color: '#94a3b8' }]}>
-                      {date || 'Not recorded'}
-                    </Text>
-                  </View>
-                </View>
-
-                {cleanNotes ? (
+                {!latestAudit && cleanNotes ? (
                   <View style={styles.detailNotes}>
                     <Text style={styles.detailNotesLabel}>Notes</Text>
                     <Text style={styles.detailNotesText} numberOfLines={2}>{cleanNotes}</Text>
