@@ -342,12 +342,57 @@ export interface GeofenceZone {
   label?: string;
 }
 
+export type HistoryCategory = 'condition' | 'status' | 'audit';
+
 export type GeofenceEvent = 'enter' | 'exit';
 
 export interface GeofenceAlert {
   zone: GeofenceZone;
   event: GeofenceEvent;
   timestamp: number;
+}
+
+export interface GeofenceCoordinate {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+  timestamp?: number;
+  corner_index?: number;
+}
+
+export interface ProjectGeofence {
+  id: string;
+  project_id: string;
+  project_name?: string;
+  coordinates: GeofenceCoordinate[];
+  area_sq_m: number;
+  area_hectares: number;
+  area_acres: number;
+  perimeter_m: number;
+  status: 'draft' | 'pending_admin' | 'locked';
+  locked: boolean;
+  locked_at?: string;
+  locked_by?: string;
+  locked_by_name?: string;
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+  notes?: string;
+}
+
+export interface GeofenceChangeRequest {
+  id: string;
+  project_id: string;
+  project_name?: string;
+  requested_by: string;
+  requested_by_name?: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at?: string;
+  reviewed_at?: string;
+  reviewed_by?: string;
+  reviewed_by_name?: string;
+  review_notes?: string;
 }
 
 // ─── Map Screen Navigation ──────────────────────────────────────────────────

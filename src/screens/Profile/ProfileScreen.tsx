@@ -286,27 +286,6 @@ const styles = StyleSheet.create({
   section: { paddingHorizontal: 16, marginBottom: 8 },
   sectionHead: { fontSize: 13, fontWeight: '800', color: '#555', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.8 },
 
-  /* Credits card */
-  creditsCard: {
-    flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: 16,
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 4,
-  },
-  creditsIconWrap: {
-    width: 48, height: 48, borderRadius: 14, backgroundColor: '#FEF3C7',
-    alignItems: 'center', justifyContent: 'center', marginRight: 14,
-  },
-  creditsBody: { flex: 1 },
-  creditsTitle: { fontSize: 12, fontWeight: '600', color: '#888', marginBottom: 2 },
-  creditsValue: { fontSize: 30, fontWeight: '900', color: '#1a5c2a' },
-  creditsSub: { fontSize: 11, color: '#aaa', marginTop: 2 },
-  creditBadge: {
-    backgroundColor: '#FEF0E3', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10,
-  },
-  creditBadgeDanger: { backgroundColor: '#FEE2E2' },
-  creditBadgeText: { fontSize: 11, fontWeight: '700', color: '#B45309' },
-  creditBadgeTextDanger: { color: '#DC2626' },
-
   /* Project card */
   projectCard: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff',

@@ -218,7 +218,7 @@ export default function HistoryScreen() {
       photo_url: photo,
       condition: normalizedCondition,
       status: isApproved ? 'approved' : 'completed',
-      date: latest?.survey_date || latest?.submitted_at || t.submitted_at,
+      date: latest?.survey_date || t.survey_date || latest?.submitted_at || t.submitted_at,
       latitude: latest?.latitude ?? t.latitude,
       longitude: latest?.longitude ?? t.longitude,
       surveyor: latest?.surveyor || t.surveyor || meta.surveyor,

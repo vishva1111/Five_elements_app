@@ -4,17 +4,15 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
-import { Animated, Easing, StyleSheet, View, ActivityIndicator, Text, Image, AppState, useWindowDimensions } from 'react-native';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Animated, Easing, StyleSheet, View, ActivityIndicator, Text, Image, useWindowDimensions } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { supabase } from './src/services/supabase';
 import { AppDialogHost, setWorkReportUser } from './src/services/appDialog';
 import { useAuthStore } from './src/store/authStore';
 import { useTreeStore } from './src/store/treeStore';
-import { useQueueStore } from './src/store/queueStore';
-import { fetchUserProfile, fetchMyTrees, fetchUserProjects, fetchAllProjects, buildUserFromProfile, computeCreditsForProject, INITIAL_CREDITS, getCachedUserProjects, cacheUserProjects } from './src/services/treeService';
+import { fetchUserProfile, fetchUserProjects, fetchAllProjects, buildUserFromProfile, getCachedUserProjects, cacheUserProjects } from './src/services/treeService';
 import { getCachedActiveProject } from './src/store/authStore';
 import logo from './src/assets/logo.png';
 import FloatingTabBar from './src/components/FloatingTabBar';
@@ -98,25 +96,7 @@ function shouldHideTabBar(state: { index: number; routes: { name: string; state?
   );
 }
 
-function SwipeTabBar({
-  onSync,
-  ...props
-}: BottomTabBarProps & {
-  onSync: (state: BottomTabBarProps['state'], navigation: BottomTabBarProps['navigation']) => void;
-}) {
-  const onSyncRef = useRef(onSync);
-  onSyncRef.current = onSync;
-
-  useEffect(() => {
-    onSyncRef.current(props.state, props.navigation);
-  }, [props.state, props.navigation]);
-
-  if (shouldHideTabBar(props.state)) return null;
-  return <FloatingTabBar {...props} />;
-}
-
 function MainTabs() {
-  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const slideX = useRef(new Animated.Value(0)).current;
   const tabIndexRef = useRef(0);
@@ -164,68 +144,10 @@ function MainTabs() {
         }
         return shouldHideTabBar(props.state) ? null : <FloatingTabBar {...props} />;
       }}
-      screenOptions={({ route }) => ({
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName: keyof typeof Ionicons.glyphMap = 'home';
-          if (route.name === 'Home') iconName = focused ? 'home' : 'home-outline';
-          else if (route.name === 'Map') iconName = focused ? 'map' : 'map-outline';
-          else if (route.name === 'Task') iconName = focused ? 'clipboard' : 'clipboard-outline';
-          else if (route.name === 'History') iconName = focused ? 'list' : 'list-outline';
-          else if (route.name === 'Profile') iconName = focused ? 'person' : 'person-outline';
-          return (
-            <View style={{
-              backgroundColor: focused ? 'rgba(26,92,42,0.12)' : 'transparent',
-              borderRadius: 14,
-              paddingHorizontal: 16,
-              paddingVertical: 6,
-            }}>
-              <Ionicons name={iconName} size={focused ? 24 : 22} color={color} />
-            </View>
-          );
-        },
-        tabBarLabel: ({ focused, color }) => {
-          const labels: Record<string, string> = {
-            Home: 'Home',
-            Map: 'Map',
-            Task: 'Tasks',
-            History: 'History',
-            Profile: 'Profile',
-          };
-          return (
-            <Text style={{
-              fontSize: 10,
-              fontWeight: focused ? '700' : '500',
-              color,
-              marginBottom: 2,
-              letterSpacing: 0.3,
-            }}>
-              {labels[route.name] ?? route.name}
-            </Text>
-          );
-        },
-        tabBarActiveTintColor: '#1a5c2a',
-        tabBarInactiveTintColor: '#999',
-        tabBarShowLabel: true,
-        tabBarStyle: {
-          backgroundColor: '#fff',
-          borderTopWidth: 0,
-          elevation: 20,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.1,
-          shadowRadius: 12,
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
-          paddingTop: 8,
-          height: 68 + (insets.bottom > 0 ? insets.bottom : 8),
-          borderTopLeftRadius: 24,
-          borderTopRightRadius: 24,
-          position: 'absolute',
-        },
-        headerStyle: { backgroundColor: '#1a5c2a' },
-        headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: 'bold', fontSize: 19 },
-        headerTitleAlign: 'center',
-      })}
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: { display: 'none' },
+      }}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ headerShown: false, title: 'DASHBOARD' }} />
       <Tab.Screen name="Task" component={TaskScreen} options={{ headerShown: false, title: 'TASKS' }} />
@@ -240,9 +162,6 @@ function MainTabs() {
 // ─── Fetch full user data (profile + credits + projects) ──────────────────────
 async function loadUserData(userId: string, email: string, metadata?: any) {
   const { data: profile, error: profileError } = await fetchUserProfile(userId);
-  // Fetch the user's trees — per-project credits are computed below
-  const { data: userTrees } = await fetchMyTrees(userId);
-  let remainingCredits = INITIAL_CREDITS;
 
   // ALL projects — the active-project dropdown and restoration use this list,
   // so the app shows every project and can restore any previously-used project.
@@ -279,13 +198,11 @@ async function loadUserData(userId: string, email: string, metadata?: any) {
     lastActive && allProjects.some((p: any) => p.id === lastActive) ? lastActive : null;
   const initialActiveProjectId = validLastActive ?? allProjects[0]?.id ?? null;
 
-  remainingCredits = computeCreditsForProject(userTrees, initialActiveProjectId);
-
   const user = buildUserFromProfile(
     userId,
     email,
     profileError ? null : profile,
-    remainingCredits,
+    null,
     metadata
   );
 

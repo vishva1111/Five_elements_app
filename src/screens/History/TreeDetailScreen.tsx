@@ -94,21 +94,41 @@ export default function TreeDetailScreen() {
 
   const photosFromAudit = (audit: any): string[] => {
     if (!audit) return [];
-    if (Array.isArray(audit.photo_urls) && audit.photo_urls.length > 0) {
-      return audit.photo_urls.filter((uri: unknown): uri is string => typeof uri === 'string' && !!uri);
-    }
-    return audit.photo_url ? [audit.photo_url] : [];
+    const raw = Array.isArray(audit.photo_urls) && audit.photo_urls.length > 0
+      ? audit.photo_urls
+      : audit.photo_url
+      ? [audit.photo_url]
+      : [];
+    // Each visit stores the three sides only: Front, Side, Close-up.
+    return raw
+      .filter((uri: unknown): uri is string => typeof uri === 'string' && !!uri)
+      .slice(0, PHOTO_ANGLES.length);
   };
-  const auditPhotos: string[] = [...plantingPhotos, ...audits.flatMap(photosFromAudit)];
 
-  // Has updated photo (any audit photo)
-  const hasAuditPhoto = auditPhotos.length > 0;
+  // One tab per completed audit, newest first (Audit 2, Audit 1, …), then Planting.
+  const completedAuditSets = (() => {
+    const byRound = new Map<number, string[]>();
+    for (const audit of audits) {
+      const round = Number(audit?.monitoring_round) || 0;
+      const photos = photosFromAudit(audit);
+      if (round > 0 && photos.length > 0) byRound.set(round, photos);
+    }
+    return [...byRound.entries()]
+      .map(([round, photos]) => ({ round, photos }))
+      .sort((a, b) => b.round - a.round);
+  })();
 
-  // Currently displayed photos array based on tab selection
+  const hasAuditPhoto = completedAuditSets.length > 0;
+  const plantingAnglePhotos = plantingPhotos.slice(0, PHOTO_ANGLES.length);
+  const selectedAuditSet =
+    completedAuditSets.find((set) => set.round === Number(activeInspectorAudit?.monitoring_round))
+    ?? completedAuditSets[0];
+
+  // The open tab shows only that visit's three sides — never every audit stacked together.
   const displayedPhotos: string[] =
     photoView === 'planting' || !hasAuditPhoto
-      ? plantingPhotos
-      : auditPhotos;
+      ? plantingAnglePhotos
+      : (selectedAuditSet?.photos ?? plantingAnglePhotos);
 
   // Keep the sliding pager in step with the photo set it is showing. Switching
   // the Audit/Planting set or inspecting another audit round swaps the array,
@@ -434,30 +454,42 @@ export default function TreeDetailScreen() {
 
           {/* Top Floating Glass Header: photo-set toggle left, N/3 counter right */}
           <View style={styles.photoTopRow}>
-            <View>
+            <View style={styles.photoToggleSlot}>
               {hasAuditPhoto ? (
-                <View style={styles.photoTogglePill}>
-                  <TouchableOpacity
-                    style={[styles.toggleBtn, photoView === 'audit' && styles.toggleBtnActive]}
-                    onPress={() => {
-                      setPhotoView('audit');
-                      setActivePhotoIdx(0);
-                      photoScrollRef.current?.scrollTo({ x: 0, animated: true });
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="sparkles" size={11} color={photoView === 'audit' ? '#fff' : 'rgba(255,255,255,0.7)'} />
-                    <Text style={[styles.toggleText, photoView === 'audit' && styles.toggleTextActive]}>
-                      Audit {latestAudit?.monitoring_round}
-                    </Text>
-                  </TouchableOpacity>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.photoToggleScroll}
+                  contentContainerStyle={styles.photoTogglePill}
+                >
+                  {completedAuditSets.map((set) => {
+                    const isActive = photoView === 'audit' && selectedAuditSet?.round === set.round;
+                    return (
+                      <TouchableOpacity
+                        key={`audit-tab-${set.round}`}
+                        style={[styles.toggleBtn, isActive && styles.toggleBtnActive]}
+                        onPress={() => {
+                          setPhotoView('audit');
+                          setSelectedAuditRound(set.round);
+                          setActivePhotoIdx(0);
+                          photoScrollRef.current?.scrollTo({ x: 0, animated: false });
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="sparkles" size={11} color={isActive ? '#fff' : 'rgba(255,255,255,0.7)'} />
+                        <Text style={[styles.toggleText, isActive && styles.toggleTextActive]}>
+                          Audit {set.round}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
 
                   <TouchableOpacity
                     style={[styles.toggleBtn, photoView === 'planting' && styles.toggleBtnActive]}
                     onPress={() => {
                       setPhotoView('planting');
                       setActivePhotoIdx(0);
-                      photoScrollRef.current?.scrollTo({ x: 0, animated: true });
+                      photoScrollRef.current?.scrollTo({ x: 0, animated: false });
                     }}
                     activeOpacity={0.8}
                   >
@@ -466,7 +498,7 @@ export default function TreeDetailScreen() {
                       Planting
                     </Text>
                   </TouchableOpacity>
-                </View>
+                </ScrollView>
               ) : null}
             </View>
 
@@ -487,12 +519,11 @@ export default function TreeDetailScreen() {
               pointerEvents="box-none"
             >
               <View style={styles.angleTabsRow}>
-                {displayedPhotos.map((_, idx) => {
-                  const angleCfg = PHOTO_ANGLES[idx] || { short: `Photo ${idx + 1}`, icon: 'camera' };
+                {PHOTO_ANGLES.slice(0, displayedPhotos.length).map((angleCfg, idx) => {
                   const isActive = activePhotoIdx === idx;
                   return (
                     <TouchableOpacity
-                      key={idx}
+                      key={angleCfg.short}
                       activeOpacity={0.8}
                       onPress={() => {
                         setActivePhotoIdx(idx);
@@ -649,14 +680,8 @@ export default function TreeDetailScreen() {
                 <Text style={styles.landTypeValue} numberOfLines={1}>
                   {formatDateFriendly(
                     hasAudits
-                      ? activeInspectorAudit?.survey_date || activeInspectorAudit?.submitted_at
-                      : isUpdated
-                      ? task?.completed_at || task?.reviewed_at
-                      : isRejected || isApproved
-                      ? task?.reviewed_at || task?.completed_at
-                      : task?.status === 'completed'
-                      ? task?.completed_at || tree.survey_date || tree.submitted_at
-                      : task?.created_at || tree.survey_date || tree.submitted_at
+                      ? activeInspectorAudit?.survey_date || activeInspectorAudit?.submitted_at || tree.survey_date
+                      : tree.survey_date || task?.reviewed_at || task?.completed_at || tree.submitted_at || task?.created_at
                   ) || '—'}
                 </Text>
               </View>
@@ -940,11 +965,7 @@ export default function TreeDetailScreen() {
                       : 'Assigned Date'
                   }
                   value={formatDateFriendly(
-                    isUpdated
-                      ? task?.completed_at || task?.reviewed_at
-                      : isRejected || isApproved
-                      ? task?.reviewed_at || task?.completed_at
-                      : task?.created_at || tree.submitted_at
+                    tree.survey_date || task?.reviewed_at || task?.completed_at || tree.submitted_at || task?.created_at
                   )}
                 />
                 {hasAudits ? (
@@ -1040,8 +1061,8 @@ export default function TreeDetailScreen() {
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
-                <Ionicons name="refresh-circle-outline" size={18} color="#fff" />
-                <Text style={styles.fabText}>Update Tree</Text>
+                <Ionicons name="create-outline" size={18} color="#fff" />
+                <Text style={styles.fabText}>Edit</Text>
               </LinearGradient>
             </TouchableOpacity>
           ) : null
@@ -1291,8 +1312,17 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.3,
   },
+  photoToggleSlot: {
+    flexShrink: 1,
+    marginRight: 8,
+  },
+  photoToggleScroll: {
+    flexGrow: 0,
+    maxWidth: SCREEN_WIDTH - 120,
+  },
   photoTogglePill: {
     flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.65)',
     borderRadius: 14,
     padding: 3,

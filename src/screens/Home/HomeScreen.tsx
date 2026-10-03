@@ -232,9 +232,6 @@ export default function HomeScreen() {
       }
     }
 
-    // 3. Pre-cache all project tree counts from server
-    preCacheAllProjects();
-
     return () => {
       cancelled = true;
     };
@@ -314,11 +311,11 @@ export default function HomeScreen() {
     const seq = ++taskSeqRef.current;
 
     try {
-      const [agentTasksRes, , projectTreesRes] = await Promise.all([
+      const [agentTasksRes] = await Promise.all([
         fetchAgentTasks(userId),
         clearLocalTasks(),
-        activeProjectId ? fetchTreesByProject(activeProjectId) : fetchAllTrees(),
       ]);
+      const projectTreesRes = { data: useTreeStore.getState().trees ?? [] };
       const auditsByTree = await fetchAuditsForTrees((projectTreesRes.data ?? []).map((tree) => tree.id));
 
       if (seq !== taskSeqRef.current) return;
@@ -448,8 +445,7 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadTrees();
-      loadTasks();
+      loadTrees().then(() => loadTasks());
       loadGeofence();
     }, [loadTrees, loadTasks, loadGeofence])
   );
@@ -470,14 +466,17 @@ export default function HomeScreen() {
     if (targetStats) {
       setStats(targetStats); // 0ms instant UI update!
     }
-    loadTrees();
-    loadTasks();
+    loadTrees().then(() => loadTasks());
     loadGeofence();
   }, [activeProjectId, refreshKey, loadTrees, loadTasks, loadGeofence]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadTrees(), loadTasks(), loadGeofence(), preCacheAllProjects()]);
+    await Promise.all([
+      loadTrees().then(() => loadTasks()),
+      loadGeofence(),
+      preCacheAllProjects(),
+    ]);
     setRefreshing(false);
   };
 
@@ -796,26 +795,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   noticeBadgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
-  creditsPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 14,
-    alignSelf: 'flex-start',
-    elevation: 2,
-    shadowColor: '#F09125',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  creditsPillText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#F09125',
-  },
   greeting: { fontSize: 24, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
   bannerSub: { fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
   captureCard: {

@@ -166,15 +166,7 @@ export default function TreeCard({
   // Date follows the card status: assigned, completed, rejected, approved, or the audit date.
   const rawDate = isAudit
     ? tree?.survey_date || task?.completed_at || task?.due_date || task?.created_at
-    : effectiveStatus === 'approved'
-    ? task?.reviewed_at || task?.completed_at || tree?.survey_date
-    : effectiveStatus === 'rejected'
-    ? task?.reviewed_at || task?.completed_at || tree?.survey_date
-    : isUpdatedCard
-    ? task?.completed_at || task?.reviewed_at || tree?.survey_date
-    : effectiveStatus === 'completed'
-    ? task?.completed_at || tree?.survey_date || tree?.submitted_at
-    : task?.created_at || tree?.survey_date || tree?.submitted_at;
+    : tree?.survey_date || task?.reviewed_at || task?.completed_at || tree?.submitted_at || task?.created_at;
   const dateStr = formatDateCustom(rawDate);
   const dateLabel = isAudit
     ? isCompletedAudit

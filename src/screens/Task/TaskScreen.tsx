@@ -16,6 +16,7 @@ import { useTaskStore } from '../../store/taskStore';
 import { useProjectRefreshStore } from '../../store/projectRefreshStore';
 import { fetchMyTrees, fetchTreesByProject, fetchAllTrees, fetchAllProjects, backfillProjectTreeIds } from '../../services/treeService';
 import { fetchAgentTasks, startTask } from '../../services/taskService';
+import { supabase } from '../../services/supabase';
 import { clearLocalTasks } from '../../services/localTaskService';
 import {
   ensureAuditTaskForTree,
@@ -230,6 +231,66 @@ export default function TaskScreen() {
     }, [loadTasks])
   );
 
+  // An admin approve or reject updates this user's task row. Follow that status
+  // without waiting for a manual refresh: Completed leaves, Approved or Rejected opens.
+  useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel(`agent-task-review-${userId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'tasks', filter: `assignee_id=eq.${userId}` },
+        (payload) => {
+          const next = payload.new as Partial<Task> | null;
+          const status = next?.status;
+          if (status !== 'approved' && status !== 'rejected') return;
+          setTasks(
+            (useTaskStore.getState().tasks ?? []).map((task) =>
+              task.id === next?.id ? { ...task, ...next, status } : task
+            )
+          );
+          setActiveTab(status);
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, setTasks]);
+
+  // Fallback when the live update is not delivered: a finished audit that an admin
+  // has since approved or rejected leaves Completed and opens that tab.
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    const watchReview = async () => {
+      const { data } = await fetchAgentTasks(userId);
+      if (cancelled || !data?.length) return;
+      const current = useTaskStore.getState().tasks ?? [];
+      const freshById = new Map(data.map((task) => [task.id, task]));
+      let moved: 'approved' | 'rejected' | null = null;
+      const next = current.map((task) => {
+        const fresh = freshById.get(task.id);
+        if (!fresh || fresh.status === task.status) return task;
+        if (fresh.status === 'approved' || fresh.status === 'rejected') {
+          if (task.status === 'completed' || task.status === 'assigned' || task.status === 'in_progress') {
+            moved = fresh.status;
+          }
+          return { ...task, ...fresh };
+        }
+        return task;
+      });
+      if (!moved) return;
+      setTasks(next);
+      setActiveTab(moved);
+    };
+    const timer = setInterval(watchReview, 12000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [userId, setTasks]);
+
   // Instantly reload whenever the active project changes (refreshKey incremented
   // by setActiveProjectId in authStore — fires even when this screen is not focused)
   useEffect(() => {
@@ -433,7 +494,7 @@ export default function TaskScreen() {
       if (key) dateSet.add(key);
     });
     projectTrees.forEach((t) => {
-      const key = localDateKeyFromValue(t.submitted_at);
+      const key = localDateKeyFromValue(t.survey_date) || localDateKeyFromValue(t.submitted_at);
       if (key) dateSet.add(key);
     });
     const sorted = Array.from(dateSet).sort((a, b) => b.localeCompare(a));
@@ -551,6 +612,8 @@ export default function TaskScreen() {
             ? 'Audit Now'
             : isAssigned
             ? 'Planting'
+            : isRejected
+            ? 'Edit'
             : undefined
         }
         actionVariant={
