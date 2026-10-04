@@ -17,7 +17,6 @@ import { useProjectRefreshStore } from '../../store/projectRefreshStore';
 import { fetchMyTrees, fetchAllProjects, fetchTreesByProject, fetchAllTrees } from '../../services/treeService';
 import { fetchAgentTasks } from '../../services/taskService';
 import { fetchAuditsForTrees, getLatestAudit } from '../../services/auditService';
-import { clearLocalTasks } from '../../services/localTaskService';
 import { supabase } from '../../services/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ProjectSelector from '../../components/ProjectSelector';
@@ -311,10 +310,7 @@ export default function HomeScreen() {
     const seq = ++taskSeqRef.current;
 
     try {
-      const [agentTasksRes] = await Promise.all([
-        fetchAgentTasks(userId),
-        clearLocalTasks(),
-      ]);
+      const agentTasksRes = await fetchAgentTasks(userId);
       const projectTreesRes = { data: useTreeStore.getState().trees ?? [] };
       const auditsByTree = await fetchAuditsForTrees((projectTreesRes.data ?? []).map((tree) => tree.id));
 

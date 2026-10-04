@@ -17,9 +17,7 @@ import { useProjectRefreshStore } from '../../store/projectRefreshStore';
 import { fetchMyTrees, fetchTreesByProject, fetchAllTrees, fetchAllProjects, backfillProjectTreeIds } from '../../services/treeService';
 import { fetchAgentTasks, startTask } from '../../services/taskService';
 import { supabase } from '../../services/supabase';
-import { clearLocalTasks } from '../../services/localTaskService';
 import {
-  ensureAuditTaskForTree,
   fetchAuditsForTrees,
   getLatestAudit,
   parseAuditDate,
@@ -132,7 +130,6 @@ export default function TaskScreen() {
     const [treesRes, tasksRes] = await Promise.all([
       treePromise,
       fetchAgentTasks(userId),
-      clearLocalTasks(),
     ]);
     if (seq !== loadSeqRef.current) return;
     let myTrees = treesRes.data ?? [];
@@ -163,49 +160,12 @@ export default function TaskScreen() {
       setHasRemainingGeofence(false);
     }
 
-    // Fetch audits for all trees so approved cards have complete audit schedules.
-    // The first audit is added to Assigned 30 minutes after the tree is approved.
+    // Audits already saved for these trees. A new audit card is not created here.
+    // It appears on Assigned only after an admin assigns that task.
     if (visibleTrees.length > 0) {
       const audits = await fetchAuditsForTrees(visibleTrees.map((t) => t.id));
       if (seq !== loadSeqRef.current) return;
       if (audits) setAuditsByTree(audits);
-
-      let createdAny = false;
-      for (const tree of visibleTrees) {
-        if ((audits?.[tree.id] ?? []).length > 0) continue;
-        const linked = visibleTasks.find(
-          (task) =>
-            (task.tree_id === tree.id || task.tree_record_id === tree.id) &&
-            task.task_type !== 'audit' &&
-            !task.audit_round
-        );
-        const isApproved = Boolean(tree.locked || linked?.status === 'approved');
-        if (!isApproved) continue;
-        const approvedAt =
-          parseAuditDate(linked?.reviewed_at) ||
-          parseAuditDate(linked?.completed_at) ||
-          parseAuditDate(tree.submitted_at) ||
-          new Date();
-        // Testing: the remaining first audit is assigned as soon as the tree is approved.
-        const dueDate = approvedAt;
-        const created = await ensureAuditTaskForTree({
-          tree,
-          round: 1,
-          userId,
-          dueDate,
-          isOverdue: false,
-        });
-        if (created.task && !visibleTasks.some((task) => task.id === created.task.id)) {
-          createdAny = true;
-        }
-      }
-
-      if (createdAny && seq === loadSeqRef.current) {
-        const refreshed = await fetchAgentTasks(userId);
-        if (seq !== loadSeqRef.current) return;
-        const nextDb = (refreshed.data ?? []).filter((task) => !task.id.startsWith('local_'));
-        setTasks(pid ? nextDb.filter((task) => task.project_id === pid) : nextDb);
-      }
     }
 
     // Tree capture cards labelled with the project tree ID (e.g. ARAV-001).
@@ -556,6 +516,7 @@ export default function TaskScreen() {
     const projectTreeId = treeRecord ? treeIds[treeRecord.id] || resolveTreeId(treeRecord) || displayTreeId(treeRecord) : undefined;
     const isAssigned = task.status === 'assigned' || task.status === 'in_progress';
     const isRejected = task.status === 'rejected';
+    const isRejectedAudit = isRejected && (task.task_type === 'audit' || !!task.audit_round);
     const isApproved = task.status === 'approved';
     // Audit rows may be keyed by the tree record id, the task's tree_record_id,
     // or its tree_id — accept any of them so the card always finds its audits.
@@ -587,6 +548,14 @@ export default function TaskScreen() {
     };
 
     const handleUpdate = () => {
+      if (isRejectedAudit) {
+        navigation.navigate('EditTree', {
+          treeId: targetId,
+          taskId: task.id,
+          auditRound: task.audit_round || 1,
+        });
+        return;
+      }
       navigation.navigate('TreeDetail', {
         treeId: targetId,
         taskId: task.id,

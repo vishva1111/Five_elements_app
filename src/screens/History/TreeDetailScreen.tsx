@@ -26,7 +26,6 @@ import {
   formatDateFriendly,
   getLatestAudit,
 } from '../../services/auditService';
-import { getPendingMonitoringRecords } from '../../services/localMonitoringService';
 import { displayTreeId, parseTreeMeta, stripTreeMeta, resolveTreeId } from '../../utils/treeId';
 import MapPreview from '../../components/MapPreview';
 
@@ -148,18 +147,7 @@ export default function TreeDetailScreen() {
 
   const loadTreeData = useCallback(async () => {
     try {
-      let { data } = await fetchTreeById(treeId);
-
-      // Resolve audit ID to underlying tree if needed
-      if (!data) {
-        try {
-          const local = (await getPendingMonitoringRecords()).find((r) => r.id === treeId);
-          if (local?.tree_record_id) {
-            const res2 = await fetchTreeById(local.tree_record_id);
-            data = res2.data;
-          }
-        } catch {}
-      }
+      const { data } = await fetchTreeById(treeId);
 
       if (!data) {
         setLoading(false);

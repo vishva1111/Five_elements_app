@@ -4,13 +4,14 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="app was making some fast.">
+    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="map upadte.">
       <change beforePath="$PROJECT_DIR$/.expo/dev/logs/start.log" beforeDir="false" afterPath="$PROJECT_DIR$/.expo/dev/logs/start.log" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Capture/MapPickerScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/MapPickerScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Map/TreeMapScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Map/TreeMapScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/Home/HomeScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Home/HomeScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/geofenceService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/geofenceService.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/services/localTaskService.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/services/treeService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/treeService.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -404,7 +405,15 @@
       <option name="project" value="LOCAL" />
       <updated>1791011249091</updated>
     </task>
-    <option name="localTasksCounter" value="41" />
+    <task id="LOCAL-00041" summary="map upadte.">
+      <option name="closed" value="true" />
+      <created>1791027477307</created>
+      <option name="number" value="00041" />
+      <option name="presentableId" value="LOCAL-00041" />
+      <option name="project" value="LOCAL" />
+      <updated>1791027477308</updated>
+    </task>
+    <option name="localTasksCounter" value="42" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -418,7 +427,7 @@
                   <entry key="branch">
                     <value>
                       <list>
-                        <option value="audit-update_flow" />
+                        <option value="deep_updates" />
                       </list>
                     </value>
                   </entry>
@@ -431,7 +440,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="add logo or apk build file update" />
     <MESSAGE value="add logo or apk build upadte" />
     <MESSAGE value="add logo or apk build upadte" />
     <MESSAGE value="Add Tree Markers, Geotagging, Geofencing &amp; Location Lock" />
@@ -456,6 +464,7 @@
     <MESSAGE value="upadte tree dtails page." />
     <MESSAGE value="card update" />
     <MESSAGE value="app was making some fast." />
-    <option name="LAST_COMMIT_MESSAGE" value="app was making some fast." />
+    <MESSAGE value="map upadte." />
+    <option name="LAST_COMMIT_MESSAGE" value="map upadte." />
   </component>
 </project>
