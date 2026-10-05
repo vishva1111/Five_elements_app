@@ -12,8 +12,7 @@ import { supabase } from './src/services/supabase';
 import { AppDialogHost, setWorkReportUser } from './src/services/appDialog';
 import { useAuthStore } from './src/store/authStore';
 import { useTreeStore } from './src/store/treeStore';
-import { fetchUserProfile, fetchUserProjects, fetchAllProjects, buildUserFromProfile, getCachedUserProjects, cacheUserProjects } from './src/services/treeService';
-import { getCachedActiveProject } from './src/store/authStore';
+import { fetchUserProfile, fetchUserProjects, fetchAllProjects, buildUserFromProfile } from './src/services/treeService';
 import logo from './src/assets/logo.png';
 import FloatingTabBar from './src/components/FloatingTabBar';
 
@@ -33,7 +32,6 @@ import EditTreeScreen from './src/screens/History/EditTreeScreen';
 import ProfileScreen from './src/screens/Profile/ProfileScreen';
 import TaskScreen from './src/screens/Task/TaskScreen';
 import TreeMapScreen from './src/screens/Map/TreeMapScreen';
-import SyncQueueScreen from './src/screens/Capture/SyncQueueScreen';
 
 const theme = {
   ...MD3LightTheme,
@@ -57,7 +55,6 @@ function CaptureNavigator() {
       <CaptureStack.Screen name="MapPicker" component={MapPickerScreen} />
       <CaptureStack.Screen name="TreeForm" component={TreeFormScreen} />
       <CaptureStack.Screen name="SubmitSuccess" component={SubmitSuccessScreen} />
-      <CaptureStack.Screen name="SyncQueue" component={SyncQueueScreen} />
     </CaptureStack.Navigator>
   );
 }
@@ -179,24 +176,11 @@ async function loadUserData(userId: string, email: string, metadata?: any) {
   try {
     const { data } = await fetchUserProjects(userId);
     assignedProjects = data ?? [];
-    if (assignedProjects.length === 0) {
-      const cached = await getCachedUserProjects(userId);
-      if (cached && cached.length > 0) assignedProjects = cached;
-    } else {
-      await cacheUserProjects(userId, assignedProjects);
-    }
   } catch {
     assignedProjects = [];
   }
 
-  // Restore the LAST ACTIVE project the user was working with (persisted per
-  // user on the device). If it no longer exists, or nothing was saved yet,
-  // fall back to the first available project so the app always opens with an
-  // active project selected.
-  const lastActive = await getCachedActiveProject(userId);
-  const validLastActive =
-    lastActive && allProjects.some((p: any) => p.id === lastActive) ? lastActive : null;
-  const initialActiveProjectId = validLastActive ?? allProjects[0]?.id ?? null;
+  const initialActiveProjectId = allProjects[0]?.id ?? null;
 
   const user = buildUserFromProfile(
     userId,

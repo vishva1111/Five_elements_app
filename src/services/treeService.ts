@@ -1,5 +1,4 @@
 import { supabase } from './supabase';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TreeRecord, TreeRecordInsert, ApiResponse, Project, User } from '../types';
 import {
   buildProjectTreeId,
@@ -7,7 +6,6 @@ import {
   nextProjectSequence,
   parseTreeMeta,
   resolveTreeId,
-  stripTreeMeta,
 } from '../utils/treeId';
 // ─── Transform raw Supabase row into TreeRecord with joined project_name ───────
 function mapTreeRecord(raw: any): TreeRecord {
@@ -228,71 +226,6 @@ export async function backfillProjectTreeIds(trees: TreeRecord[]): Promise<TreeR
   return next;
 }
 
-/** Monitoring rows for one tree, including audits still waiting on this phone. */
-function auditsFromNotes(notes?: string | null): any[] {
-  const raw = parseTreeMeta(notes)?.audits;
-  if (!Array.isArray(raw)) return [];
-  return [...raw]
-    .filter((row) => row && typeof row === 'object')
-    .sort(
-      (a, b) => (Number(a.monitoring_round) || 0) - (Number(b.monitoring_round) || 0)
-    );
-}
-
-function notesWithMeta(notes: string | null | undefined, meta: Record<string, any>): string {
-  const clean = stripTreeMeta(notes);
-  const blob = `##META##${JSON.stringify(meta)}`;
-  return clean ? `${clean}\n${blob}` : blob;
-}
-
-async function loadTreeNotes(treeId: string): Promise<{ notes: string; error: string | null }> {
-  const { data, error } = await supabase
-    .from('tree_records')
-    .select('notes')
-    .eq('id', treeId)
-    .maybeSingle();
-  if (error) return { notes: '', error: error.message };
-  return { notes: typeof data?.notes === 'string' ? data.notes : '', error: null };
-}
-
-/** Keep audits on the existing tree_records row when the monitoring table is absent. */
-async function writeAuditsToTree(treeId: string, audits: any[]): Promise<string | null> {
-  const { notes, error } = await loadTreeNotes(treeId);
-  if (error) return error;
-  const meta = { ...parseTreeMeta(notes), audits };
-  const { error: writeError } = await updateTreeColumns(treeId, {
-    notes: notesWithMeta(notes, meta),
-  } as Partial<TreeRecordInsert>);
-  if (!writeError) return null;
-  return writeError.message ?? 'Could not save the audit.';
-}
-
-async function saveAuditOnTreeRecord(record: Record<string, any>): Promise<ApiResponse<any>> {
-  const treeId = String(record.tree_record_id ?? '').trim();
-  if (!treeId) return { data: null, error: 'The audit is missing its tree id.' };
-
-  const { notes, error } = await loadTreeNotes(treeId);
-  if (error) return { data: null, error };
-
-  const round = Number(record.monitoring_round) || 1;
-  const existing = auditsFromNotes(notes).find((row) => Number(row?.monitoring_round) === round);
-  const saved = {
-    ...(existing ?? {}),
-    ...record,
-    id: record.id || existing?.id || `audit-${treeId}-${round}`,
-    tree_record_id: treeId,
-    monitoring_round: round,
-    submitted_at: record.submitted_at || existing?.submitted_at || new Date().toISOString(),
-  };
-  const audits = auditsFromNotes(notes).filter((row) => Number(row?.monitoring_round) !== round);
-  audits.push(saved);
-  audits.sort((a, b) => Number(a.monitoring_round) - Number(b.monitoring_round));
-
-  const writeError = await writeAuditsToTree(treeId, audits);
-  if (writeError) return { data: null, error: writeError };
-  return { data: saved, error: null };
-}
-
 /** Monitoring rows for many trees, keyed by tree_record_id. */
 export async function fetchMonitoringRecordsForTrees(
   treeIds: string[]
@@ -307,29 +240,16 @@ export async function fetchMonitoringRecordsForTrees(
     .in('tree_record_id', ids)
     .order('monitoring_round', { ascending: true });
 
-  if (!error) {
-    for (const row of (data ?? []) as any[]) {
-      const key = row.tree_record_id;
-      if (!key) continue;
-      if (!out[key]) out[key] = [];
-      out[key].push(row);
-    }
-  } else if (!isMissingSchemaError(error)) {
+  if (error) {
     console.warn('[treeService] fetchMonitoringRecordsForTrees:', error.message);
     return out;
   }
 
-  const missingIds = ids.filter((id) => !(out[id]?.length));
-  if (!missingIds.length) return out;
-
-  const trees = await supabase.from('tree_records').select('id, notes').in('id', missingIds);
-  if (trees.error) {
-    console.warn('[treeService] fetchMonitoringRecordsForTrees notes:', trees.error.message);
-    return out;
-  }
-  for (const row of trees.data ?? []) {
-    const audits = auditsFromNotes(row.notes);
-    if (audits.length) out[row.id] = audits;
+  for (const row of (data ?? []) as any[]) {
+    const key = row.tree_record_id;
+    if (!key) continue;
+    if (!out[key]) out[key] = [];
+    out[key].push(row);
   }
   return out;
 }
@@ -341,13 +261,29 @@ export async function fetchTreeMonitoringRecords(treeId: string): Promise<ApiRes
 }
 
 /**
- * Save one audit through the API.
- * Uses tree_monitoring_records when that table exists. This database does not
- * have it, so the audit is stored on the existing tree_records row instead.
+ * Save one audit in public.tree_monitoring_records.
+ * The same tree and round updates the existing row instead of inserting another.
  */
 export async function insertMonitoringRecord(
   record: Record<string, any>
 ): Promise<ApiResponse<any>> {
+  const treeId = String(record.tree_record_id ?? '').trim();
+  const round = Number(record.monitoring_round) || 0;
+  if (treeId && round) {
+    const existing = await supabase
+      .from('tree_monitoring_records')
+      .select('id')
+      .eq('tree_record_id', treeId)
+      .eq('monitoring_round', round)
+      .maybeSingle();
+    if (!existing.error && existing.data?.id) {
+      return updateStoredAudit(treeId, round, record);
+    }
+    if (existing.error && isMissingSchemaError(existing.error) && !missingColumnName(existing.error.message)) {
+      return { data: null, error: existing.error.message };
+    }
+  }
+
   const payload = { ...record };
   for (let attempt = 0; attempt < 8; attempt++) {
     const { data, error } = await supabase
@@ -357,8 +293,9 @@ export async function insertMonitoringRecord(
       .maybeSingle();
     if (!error) return { data, error: null };
 
-    if (isMissingSchemaError(error) && !missingColumnName(error.message)) {
-      return saveAuditOnTreeRecord(payload);
+    const duplicate = error.code === '23505' || /duplicate key|already exists/i.test(String(error.message ?? ''));
+    if (duplicate && treeId && round) {
+      return updateStoredAudit(treeId, round, payload);
     }
 
     const column = missingColumnName(error.message);
@@ -367,17 +304,17 @@ export async function insertMonitoringRecord(
     }
     delete payload[column];
   }
-  return saveAuditOnTreeRecord(record);
+  return { data: null, error: 'Could not save the audit.' };
 }
 
-/** Update one saved audit on the API, including the tree_records fallback. */
+/** Update one saved audit row in public.tree_monitoring_records. */
 export async function updateStoredAudit(
   treeId: string,
   round: number,
   patch: Record<string, any>
 ): Promise<ApiResponse<any>> {
   const payload = { ...patch };
-  let tableMissing = false;
+  delete payload.id;
   for (let attempt = 0; attempt < 8; attempt++) {
     const { error } = await supabase
       .from('tree_monitoring_records')
@@ -385,22 +322,13 @@ export async function updateStoredAudit(
       .eq('tree_record_id', treeId)
       .eq('monitoring_round', round);
     if (!error) return { data: payload, error: null };
-    if (isMissingSchemaError(error) && !missingColumnName(error.message)) {
-      tableMissing = true;
-      break;
-    }
     const column = missingColumnName(error.message);
     if (!column || !(column in payload)) {
       return { data: null, error: error.message };
     }
     delete payload[column];
   }
-  if (!tableMissing) return { data: null, error: 'Could not save the audit.' };
-  return saveAuditOnTreeRecord({
-    ...payload,
-    tree_record_id: treeId,
-    monitoring_round: round,
-  });
+  return { data: null, error: 'Could not save the audit.' };
 }
 
 // ─── Missing-schema helpers for tree_records writes ──────────────────────────
@@ -584,36 +512,6 @@ export function computeCreditsForProject(
   if (!trees || !projectId) return INITIAL_CREDITS;
   const count = trees.filter((t) => t.project_id === projectId).length;
   return Math.max(0, INITIAL_CREDITS - count);
-}
-
-// ─── Device-local cache of the user's project selection ────────────────────────
-// Used as a fallback so the app opens directly with the already-selected
-// projects even if the DB write/read fails (e.g. RLS migration not applied).
-const PROJECT_CACHE_PREFIX = 'treeapp_selected_projects_';
-
-export async function cacheUserProjects(
-  userId: string,
-  projects: Project[]
-): Promise<void> {
-  try {
-    await AsyncStorage.setItem(
-      PROJECT_CACHE_PREFIX + userId,
-      JSON.stringify(projects)
-    );
-  } catch {
-    // Cache is best-effort — ignore failures
-  }
-}
-
-export async function getCachedUserProjects(
-  userId: string
-): Promise<Project[] | null> {
-  try {
-    const raw = await AsyncStorage.getItem(PROJECT_CACHE_PREFIX + userId);
-    return raw ? (JSON.parse(raw) as Project[]) : null;
-  } catch {
-    return null;
-  }
 }
 
 // ─── Fetch all projects (for login selection or fallback) ─────────────────────

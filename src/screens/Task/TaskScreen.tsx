@@ -140,14 +140,13 @@ export default function TaskScreen() {
       }
     }
 
-    // Filter trees by active project if selected
+    // Filter trees by active project if selected. A failed read does not keep old cards.
     const visibleTrees = pid ? myTrees.filter((t) => t.project_id === pid) : myTrees;
-    setTrees(visibleTrees);
+    setTrees(treesRes.error ? [] : visibleTrees);
 
-    // Only database tasks are shown. Demo and phone-saved tasks are excluded.
+    // Only database tasks are shown. An empty API result clears the old cards.
     const dbTasks = (tasksRes.data ?? []).filter((task) => !task.id.startsWith('local_'));
-    const visibleTasks = pid ? dbTasks.filter((t) => t.project_id === pid) : dbTasks;
-    setTasks(visibleTasks);
+    setTasks(tasksRes.error ? [] : dbTasks);
 
     // Check if active project has remaining geofencing setup
     if (pid) {
@@ -227,7 +226,11 @@ export default function TaskScreen() {
     let cancelled = false;
     const watchReview = async () => {
       const { data } = await fetchAgentTasks(userId);
-      if (cancelled || !data?.length) return;
+      if (cancelled) return;
+      if (!data?.length) {
+        setTasks([]);
+        return;
+      }
       const current = useTaskStore.getState().tasks ?? [];
       const freshById = new Map(data.map((task) => [task.id, task]));
       let moved: 'approved' | 'rejected' | null = null;
@@ -402,10 +405,11 @@ export default function TaskScreen() {
           !isAuditItem(task) &&
           (task.tree_id === tree.id || task.tree_record_id === tree.id || task.id === tree.id)
       );
+      if (!linked && !tree.locked) return;
       if (tree.locked || linked?.status === 'approved') statusByTree.set(tree.id, 'approved');
       else if (linked?.status === 'rejected') statusByTree.set(tree.id, 'rejected');
       else if (linked?.status === 'assigned' || linked?.status === 'in_progress') statusByTree.set(tree.id, 'assigned');
-      else statusByTree.set(tree.id, 'completed');
+      else if (linked?.status === 'completed') statusByTree.set(tree.id, 'completed');
     });
 
     tasks.forEach((task) => {

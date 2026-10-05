@@ -11,14 +11,13 @@ import {
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getCachedActiveProject, useAuthStore } from '../../store/authStore';
+import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useProjectRefreshStore } from '../../store/projectRefreshStore';
 import { fetchMyTrees, fetchAllProjects, fetchTreesByProject, fetchAllTrees } from '../../services/treeService';
 import { fetchAgentTasks } from '../../services/taskService';
 import { fetchAuditsForTrees, getLatestAudit } from '../../services/auditService';
 import { supabase } from '../../services/supabase';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import ProjectSelector from '../../components/ProjectSelector';
 import CurveDivider from '../../components/CurveDivider';
 import GradientProgress from '../../components/GradientProgress';
@@ -66,8 +65,6 @@ export const computeTreeStats = (trees: TreeRecord[]) => {
     dead,
   };
 };
-
-const APPROVED_TREE_STATS_KEY = '@treeapp_approved_tree_stats_v1';
 
 const isAuditTask = (task: Pick<Task, 'id' | 'task_type' | 'audit_round'>) =>
   task.task_type === 'audit' || !!task.audit_round || String(task.id).startsWith('audit-');
@@ -188,7 +185,6 @@ export default function HomeScreen() {
         const map = buildApprovedStatsMap(all, tasks, audits);
         setProjectStatsMap(map);
         projectStatsMapRef.current = map;
-        AsyncStorage.setItem(APPROVED_TREE_STATS_KEY, JSON.stringify(map)).catch(() => {});
 
         const key = useAuthStore.getState().activeProjectId || '__all__';
         if (map[key]) {
@@ -202,24 +198,7 @@ export default function HomeScreen() {
   useEffect(() => {
     let cancelled = false;
 
-    // 1. Read persistent all-projects stats map from AsyncStorage (0ms startup)
-    AsyncStorage.getItem(APPROVED_TREE_STATS_KEY).then((raw) => {
-      if (!cancelled && raw) {
-        try {
-          const map = JSON.parse(raw);
-          if (map && typeof map === 'object') {
-            setProjectStatsMap(map);
-            projectStatsMapRef.current = map;
-            const key = activeProjectId || '__all__';
-            if (map[key]) {
-              setStats(map[key]);
-            }
-          }
-        } catch {}
-      }
-    });
-
-    // 2. Also check in-memory tree store
+    // Counts already loaded in this session. The database refresh below replaces them.
     const memoryTrees = useTreeStore.getState().trees;
     if (memoryTrees && memoryTrees.length > 0) {
       const match = activeProjectId
@@ -244,11 +223,8 @@ export default function HomeScreen() {
       if (active && data && data.length > 0) {
         setAllProjects(data);
         const state = useAuthStore.getState();
-        if (!state.activeProjectId) {
-          const userId = state.user?.id ?? state.session?.user?.id;
-          const savedProjectId = userId ? await getCachedActiveProject(userId) : null;
-          const savedProject = data.find((project) => project.id === savedProjectId);
-          if (active) setActiveProjectId(savedProject?.id ?? data[0].id);
+        if (!state.activeProjectId && active) {
+          setActiveProjectId(data[0].id);
         }
       }
     })();
@@ -299,7 +275,6 @@ export default function HomeScreen() {
       const updatedMap = { ...projectStatsMapRef.current, [key]: computedStats };
       setProjectStatsMap(updatedMap);
       projectStatsMapRef.current = updatedMap;
-      AsyncStorage.setItem(APPROVED_TREE_STATS_KEY, JSON.stringify(updatedMap)).catch(() => {});
     } catch (e) {
       console.warn('[HomeScreen] Error loading trees:', e);
     }
@@ -336,10 +311,11 @@ export default function HomeScreen() {
             !isAuditTask(task) &&
             (task.tree_id === tree.id || task.tree_record_id === tree.id || task.id === tree.id)
         );
+        if (!linked && !tree.locked) return;
         if (tree.locked || linked?.status === 'approved') statusByTree.set(tree.id, 'approved');
         else if (linked?.status === 'rejected') statusByTree.set(tree.id, 'rejected');
         else if (linked?.status === 'assigned' || linked?.status === 'in_progress') statusByTree.set(tree.id, 'assigned');
-        else statusByTree.set(tree.id, 'completed');
+        else if (linked?.status === 'completed') statusByTree.set(tree.id, 'completed');
       });
 
       visibleTasks.forEach((task) => {

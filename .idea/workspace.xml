@@ -4,14 +4,20 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="map upadte.">
+    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="working update.">
       <change beforePath="$PROJECT_DIR$/.expo/dev/logs/start.log" beforeDir="false" afterPath="$PROJECT_DIR$/.expo/dev/logs/start.log" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/App.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/generate-icons.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/Capture/SyncQueueScreen.tsx" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/Home/HomeScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Home/HomeScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/localTaskService.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/services/captureQueue.ts" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/services/treeService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/treeService.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/store/authStore.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/authStore.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/store/queueStore.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/store/taskStore.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/taskStore.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/types/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/types/index.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -413,7 +419,15 @@
       <option name="project" value="LOCAL" />
       <updated>1791027477308</updated>
     </task>
-    <option name="localTasksCounter" value="42" />
+    <task id="LOCAL-00042" summary="working update.">
+      <option name="closed" value="true" />
+      <created>1791104309044</created>
+      <option name="number" value="00042" />
+      <option name="presentableId" value="LOCAL-00042" />
+      <option name="project" value="LOCAL" />
+      <updated>1791104309044</updated>
+    </task>
+    <option name="localTasksCounter" value="43" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -441,7 +455,6 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="add logo or apk build upadte" />
-    <MESSAGE value="add logo or apk build upadte" />
     <MESSAGE value="Add Tree Markers, Geotagging, Geofencing &amp; Location Lock" />
     <MESSAGE value="location detch bug solve and project according tree fanching show." />
     <MESSAGE value="approve/reject according update/audit and chnage some designs." />
@@ -465,6 +478,7 @@
     <MESSAGE value="card update" />
     <MESSAGE value="app was making some fast." />
     <MESSAGE value="map upadte." />
-    <option name="LAST_COMMIT_MESSAGE" value="map upadte." />
+    <MESSAGE value="working update." />
+    <option name="LAST_COMMIT_MESSAGE" value="working update." />
   </component>
 </project>
