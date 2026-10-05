@@ -184,14 +184,34 @@ export default function TreeDetailScreen() {
         console.warn('[TreeApp] fetch audits failed:', auditErr);
       }
 
-      // Fetch linked task for approval status & rejection notes
+      // A tree can have a planting task and an audit task. A rejected audit
+      // must win, or the profile keeps showing the next "Start Audit" button.
       try {
-        const { data: taskData } = await supabase
-          .from('tasks')
-          .select('*')
-          .or(`tree_id.eq.${data.id},id.eq.${data.id}`)
-          .maybeSingle();
-        if (taskData) setTask(taskData);
+        const taskFilters = [
+          `tree_id.eq.${data.id},tree_record_id.eq.${data.id},id.eq.${data.id}`,
+          `tree_id.eq.${data.id},id.eq.${data.id}`,
+        ];
+        let taskRows: any[] = [];
+        for (const filter of taskFilters) {
+          const res = await supabase.from('tasks').select('*').or(filter).limit(20);
+          if (!res.error) {
+            taskRows = res.data ?? [];
+            break;
+          }
+        }
+        const rejectedAuditTask = taskRows
+          .filter(
+            (row) =>
+              row?.status === 'rejected' &&
+              (row?.task_type === 'audit' || Number(row?.audit_round) > 0)
+          )
+          .sort((a, b) => Number(b?.audit_round || 0) - Number(a?.audit_round || 0))[0];
+        const linkedTask =
+          rejectedAuditTask ||
+          taskRows.find((row) => row?.status === 'rejected') ||
+          taskRows.find((row) => row?.id === data.id) ||
+          taskRows[0];
+        if (linkedTask) setTask(linkedTask);
       } catch (taskErr) {
         console.warn('[TreeApp] fetch linked task failed:', taskErr);
       }
@@ -334,14 +354,26 @@ export default function TreeDetailScreen() {
 
   // Approval status & modes
   const isApproved = Boolean(tree.locked || task?.status === 'approved');
-  const rejectionReason = task?.status === 'rejected'
-    ? (rejectionNotes || task?.review_notes || null)
-    : null;
   const isRejected = task?.status === 'rejected';
-  const isUpdated = task?.status === 'completed' && Boolean(task?.review_notes);
-  const isPending = !isApproved && !isRejected;
   const hasAudits = audits.length > 0;
   const showAuditProfile = hasAudits || Boolean(asAuditProfile);
+  const rejectedAuditRound =
+    isRejected &&
+    (task?.task_type === 'audit' ||
+      Number(task?.audit_round) > 0 ||
+      (showAuditProfile && task?.task_type !== 'capture'))
+      ? Number(task?.audit_round) || Number(latestAudit?.monitoring_round) || 1
+      : 0;
+  const isRejectedAudit = rejectedAuditRound > 0;
+  const rejectionReason = isRejected
+    ? (rejectionNotes || task?.review_notes || 'This audit was rejected. Edit it and submit again.')
+    : null;
+  const isUpdated = task?.status === 'completed' && Boolean(task?.review_notes);
+  const isPending = !isApproved && !isRejected;
+  const canStartAudit =
+    Boolean(asAuditProfile) ||
+    ((task?.status === 'assigned' || task?.status === 'in_progress') &&
+      (task?.task_type === 'audit' || Number(task?.audit_round) > 0));
 
   // (Multi-photo derivation + pager-sync effects live above the loading /
   // not-found early returns so the hook order never changes between renders.)
@@ -366,6 +398,11 @@ export default function TreeDetailScreen() {
             <Ionicons name="checkmark-done" size={12} color="#fff" />
             <Text style={styles.completedPillText}>4/4 DONE</Text>
           </View>
+        ) : isRejected ? (
+          <View style={styles.rejectedPill}>
+            <Ionicons name="close-circle" size={12} color="#fff" />
+            <Text style={styles.rejectedPillText}>REJECTED</Text>
+          </View>
         ) : isApproved ? (
           <View style={styles.approvedPill}>
             <Ionicons name="shield-checkmark" size={12} color="#fff" />
@@ -375,11 +412,6 @@ export default function TreeDetailScreen() {
           <View style={styles.updatedPill}>
             <Ionicons name="refresh" size={12} color="#fff" />
             <Text style={styles.updatedPillText}>UPDATED</Text>
-          </View>
-        ) : isRejected ? (
-          <View style={styles.rejectedPill}>
-            <Ionicons name="close-circle" size={12} color="#fff" />
-            <Text style={styles.rejectedPillText}>REJECTED</Text>
           </View>
         ) : (
           <View style={styles.pendingPill}>
@@ -1054,8 +1086,8 @@ export default function TreeDetailScreen() {
               </LinearGradient>
             </TouchableOpacity>
           ) : null
-        ) : (
-          // Pre-Audit, Approved: Audit IS due -> Active Start Audit 1 button
+        ) : canStartAudit ? (
+          // Start Audit is only for an assigned audit card.
           <TouchableOpacity
             style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}
             activeOpacity={0.85}
@@ -1079,7 +1111,7 @@ export default function TreeDetailScreen() {
               </View>
             </LinearGradient>
           </TouchableOpacity>
-        )
+        ) : null
       ) : auditStatus.allCompleted ? (
         <View style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}>
           <View style={styles.allCompletedBar}>
@@ -1094,8 +1126,31 @@ export default function TreeDetailScreen() {
             </LinearGradient>
           </View>
         </View>
-      ) : (
-        // Post-Audit, Next Round IS due -> Active Start Audit button
+      ) : isRejectedAudit ? (
+        <TouchableOpacity
+          style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}
+          activeOpacity={0.85}
+          onPress={() =>
+            navigation.navigate('EditTree', {
+              treeId: tree.id,
+              taskId: task?.id || null,
+              auditRound: rejectedAuditRound,
+              rejectionNotes: rejectionReason,
+            })
+          }
+        >
+          <LinearGradient
+            colors={['#dc2626', '#ef4444']}
+            style={styles.fabGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+          >
+            <Ionicons name="create-outline" size={18} color="#fff" />
+            <Text style={styles.fabText}>Edit Audit {rejectedAuditRound}</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      ) : canStartAudit ? (
+        // Start Audit is only shown for a card opened from the Assigned tab.
         <TouchableOpacity
           style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}
           activeOpacity={0.85}
@@ -1119,7 +1174,7 @@ export default function TreeDetailScreen() {
             </View>
           </LinearGradient>
         </TouchableOpacity>
-      )}
+      ) : null}
     </View>
   );
 }

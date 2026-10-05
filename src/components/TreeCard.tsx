@@ -131,8 +131,24 @@ export default function TreeCard({
     return 'Tree';
   }, [task?.name, tree?.species]);
 
-  // Photo URL resolution
-  const photoUrl = task?.photo_url || tree?.photo_url;
+  // Photo URL resolution. An audited card shows the latest audit's front photo,
+  // not the original planting photo that is still stored on the tree.
+  const latestAuditPhoto = useMemo(() => {
+    const audits = auditsProp ?? [];
+    let latest: any = null;
+    let latestRound = -1;
+    for (const audit of audits) {
+      const round = Number(audit?.monitoring_round) || 0;
+      if (round >= latestRound) {
+        latest = audit;
+        latestRound = round;
+      }
+    }
+    const urls = Array.isArray(latest?.photo_urls) ? latest.photo_urls : [];
+    const front = urls.find((url: unknown) => typeof url === 'string' && url);
+    return front || latest?.photo_url || null;
+  }, [auditsProp]);
+  const photoUrl = latestAuditPhoto || task?.photo_url || tree?.photo_url;
 
   // Condition is an audit result: it is shown only once the tree has actually
   // been audited (at least one monitoring round exists). On an approved card the
@@ -163,6 +179,35 @@ export default function TreeCard({
   const isAudit = task?.task_type === 'audit' || !!task?.audit_round || actionVariant === 'audit';
   const isCompletedAudit = effectiveStatus === 'completed' && isAudit;
   const isUpdatedCard = effectiveStatus === 'completed' && Boolean(task?.review_notes);
+  const isAuditCard = isAudit && (isAssigned || isCompleted || isApproved || isRejected);
+  const auditColor = isUpdatedCard
+    ? '#ea580c'
+    : isAssigned
+    ? '#1a5c2a'
+    : isApproved
+    ? '#7c3aed'
+    : isRejected
+    ? '#ef4444'
+    : '#16a34a';
+  const auditTint = isUpdatedCard
+    ? '#fff7ed'
+    : isAssigned
+    ? '#e5f6ea'
+    : isApproved
+    ? '#f5f3ff'
+    : isRejected
+    ? '#fef2f2'
+    : '#f0fdf4';
+  const auditBorder = isUpdatedCard
+    ? '#fdba74'
+    : isAssigned
+    ? '#bbf7d0'
+    : isApproved
+    ? '#ddd6fe'
+    : isRejected
+    ? '#fca5a5'
+    : '#bbf7d0';
+  const showAuditedApprovedCard = isApproved && isAudit && hasCompletedAudit;
   // Date follows the card status: assigned, completed, rejected, approved, or the audit date.
   const rawDate = isAudit
     ? tree?.survey_date || task?.completed_at || task?.due_date || task?.created_at
@@ -177,7 +222,7 @@ export default function TreeCard({
     : effectiveStatus === 'rejected'
     ? 'Rejected'
     : isUpdatedCard
-    ? 'Updated'
+    ? 'Edited'
     : effectiveStatus === 'completed'
     ? 'Completed'
     : isAssigned
@@ -198,13 +243,17 @@ export default function TreeCard({
       ]}
       {...containerProps}
     >
-      {isAssigned ? (
-        <View style={[styles.plantingAccent, { backgroundColor: isAudit ? '#ea580c' : statusColor }]} />
+      {isAuditCard ? (
+        <View style={[styles.rejectedAccent, { backgroundColor: auditColor }]} />
+      ) : isAssigned ? (
+        <View style={[styles.plantingAccent, { backgroundColor: statusColor }]} />
+      ) : isCompleted ? (
+        <View style={[styles.statusAccent, { backgroundColor: isUpdatedCard ? '#ea580c' : statusColor }]} />
+      ) : isApproved ? (
+        <View style={[styles.statusAccent, { backgroundColor: statusColor }]} />
+      ) : isRejected ? (
+        <View style={styles.rejectedAccent} />
       ) : null}
-      {isCompletedAudit ? <View style={styles.completedAuditAccent} /> : null}
-      {isCompleted && !isCompletedAudit ? <View style={[styles.statusAccent, { backgroundColor: statusColor }]} /> : null}
-      {isApproved ? <View style={[styles.statusAccent, { backgroundColor: statusColor }]} /> : null}
-      {isRejected ? <View style={styles.rejectedAccent} /> : null}
       <View style={[styles.cardMainRow, styles.plantingRow]}>
         {isAssigned && !isAudit ? (
           <View style={styles.plantingMark}>
@@ -227,33 +276,17 @@ export default function TreeCard({
           {/* Row 1: ID (left) + Status Badge (right) */}
           <View style={styles.cardHeaderRow}>
             <Text style={styles.idText} numberOfLines={1}>
-              ID: <Text style={[styles.idValue, { color: isAudit ? '#ea580c' : statusColor }]}>{resolvedId}</Text>
+              ID: <Text style={[styles.idValue, { color: isAuditCard ? auditColor : isUpdatedCard ? '#ea580c' : statusColor }]}>{resolvedId}</Text>
             </Text>
 
-            {isAssigned ? (
-              onAction && isAudit ? (
-                  <TouchableOpacity
-                    style={[styles.startBtn, { backgroundColor: '#ea580c' }]}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      onAction();
-                    }}
-                    activeOpacity={0.7}
-                    accessibilityRole="button"
-                    accessibilityLabel={actionLabel || 'Audit Now'}
-                  >
-                    <Ionicons name={actionIcon || 'clipboard-outline'} size={14} color="#fff" />
-                    <Text style={styles.startBtnText}>{actionLabel || 'Audit Now'}</Text>
-                  </TouchableOpacity>
-              ) : null
-            ) : isCompletedAudit ? (
-              <View style={styles.completedAuditBadge}>
-                <Ionicons name="clipboard" size={11} color="#9a3412" />
-                <Text style={styles.completedAuditBadgeText}>
-                  AUDIT {auditRound || computedAuditStatus?.maxRound || ''}
+            {isAuditCard ? (
+              <View style={[styles.statusBadge, { backgroundColor: auditTint, borderColor: auditBorder }]}>
+                <View style={[styles.statusDot, { backgroundColor: auditColor }]} />
+                <Text style={[styles.statusText, { color: auditColor }]}>
+                  {isUpdatedCard ? 'EDITED' : isAssigned ? 'ASSIGNED' : isApproved ? 'APPROVED' : isRejected ? 'REJECTED' : 'COMPLETED'}
                 </Text>
               </View>
-            ) : (
+            ) : isAssigned ? null : (
               <View
                 style={[
                   styles.statusBadge,
@@ -291,7 +324,7 @@ export default function TreeCard({
                     },
                   ]}
                 >
-                  {effectiveStatus === 'completed' && task?.review_notes ? 'UPDATED' : effectiveStatus.toUpperCase()}
+                  {effectiveStatus === 'completed' && task?.review_notes ? 'EDITED' : effectiveStatus.toUpperCase()}
                 </Text>
               </View>
             )}
@@ -342,51 +375,60 @@ export default function TreeCard({
           ) : null}
 
           {/* Row 4: Audit Progress (4 Dots + Overdue/Due Status) */}
-          {((!isAssigned && effectiveStatus === 'approved') || isCompletedAudit || (isAssigned && isAudit)) && computedAuditStatus ? (() => {
-            const isCompleted = computedAuditStatus.allCompleted;
-            const isOverdue = computedAuditStatus.isOverdue || effectiveDueLabel?.toLowerCase().includes('overdue');
-            const isTaskDay = !isCompleted && !isOverdue && (computedAuditStatus.isDue || effectiveDueLabel === 'Audit Now' || effectiveDueLabel?.toLowerCase().includes('due today'));
-            const isRemaining = !isCompleted && !isOverdue && !isTaskDay;
+          {(isCompletedAudit || showAuditedApprovedCard || ((isAssigned || isRejected) && isAudit)) && computedAuditStatus ? (() => {
+            const finishedRound = Number(auditRound) || computedAuditStatus.maxRound || computedAuditStatus.completedCount || 1;
+            const isFinishedAuditCard = isCompletedAudit;
+            const isRejectedAuditCard = isRejected && isAudit;
+            const isCompleted = computedAuditStatus.allCompleted && !isFinishedAuditCard && !isRejectedAuditCard;
+            const isOverdue = !isFinishedAuditCard && !isRejectedAuditCard && (computedAuditStatus.isOverdue || effectiveDueLabel?.toLowerCase().includes('overdue'));
+            const isTaskDay = !isFinishedAuditCard && !isRejectedAuditCard && !isCompleted && !isOverdue && (computedAuditStatus.isDue || effectiveDueLabel === 'Audit Now' || effectiveDueLabel?.toLowerCase().includes('due today'));
+            const isRemaining = !isFinishedAuditCard && !isRejectedAuditCard && !isCompleted && !isOverdue && !isTaskDay;
 
-            const mainColor = isCompleted
-              ? '#16a34a'
+            const mainColor = isAuditCard
+              ? auditColor
               : isOverdue
               ? '#dc2626'
               : isTaskDay
               ? '#16a34a'
               : '#2563eb';
 
-            const bgColor = isCompleted
-              ? '#f0fdf4'
+            const bgColor = isAuditCard
+              ? auditTint
               : isOverdue
               ? '#fef2f2'
               : isTaskDay
               ? '#f0fdf4'
               : '#eff6ff';
 
-            const borderColor = isCompleted
-              ? '#bbf7d0'
+            const borderColor = isAuditCard
+              ? auditBorder
               : isOverdue
               ? '#fca5a5'
               : isTaskDay
               ? '#bbf7d0'
               : '#dbeafe';
 
+            const tabDotColor = isAuditCard ? auditColor : mainColor;
+            const pinnedRound = isFinishedAuditCard || isRejectedAuditCard || showAuditedApprovedCard;
             const dotRounds = [1, 2, 3, 4];
 
             return (
               <View style={[styles.auditProgressRow, { backgroundColor: bgColor, borderColor }]}>
                 <View style={styles.dotsWrap}>
                   {dotRounds.map((r) => {
-                    const isDone = r < computedAuditStatus.currentRound || (computedAuditStatus.allCompleted && r <= computedAuditStatus.completedCount);
-                    const isActive = r === computedAuditStatus.currentRound && !computedAuditStatus.allCompleted;
+                    const isDone = pinnedRound
+                      ? r < finishedRound
+                      : r < computedAuditStatus.currentRound || (computedAuditStatus.allCompleted && r <= computedAuditStatus.completedCount);
+                    const isActive = pinnedRound
+                      ? r === finishedRound
+                      : r === computedAuditStatus.currentRound && !computedAuditStatus.allCompleted;
                     return (
                       <View
                         key={r}
                         style={[
                           styles.auditDot,
-                          isDone && { backgroundColor: '#22c55e' },
-                          isActive && { backgroundColor: mainColor, width: 8, height: 8, borderRadius: 4 },
+                          isDone && { backgroundColor: tabDotColor },
+                          isActive && { backgroundColor: tabDotColor, width: 8, height: 8, borderRadius: 4 },
                           !isDone && !isActive && { backgroundColor: '#cbd5e1' },
                         ]}
                       />
@@ -399,7 +441,13 @@ export default function TreeCard({
                   </View>
                 ) : null}
                 <Text style={[styles.auditProgressText, { color: mainColor }]} numberOfLines={1}>
-                  {computedAuditStatus.allCompleted ? (
+                  {isFinishedAuditCard ? (
+                    <Text style={{ color: auditColor, fontWeight: '800' }}>Audit {finishedRound} is completed</Text>
+                  ) : showAuditedApprovedCard ? (
+                    <Text style={{ color: auditColor, fontWeight: '800' }}>Audit {finishedRound} approved</Text>
+                  ) : isRejectedAuditCard ? (
+                    <Text style={{ color: auditColor, fontWeight: '800' }}>Audit {finishedRound} rejected</Text>
+                  ) : computedAuditStatus.allCompleted ? (
                     <Text style={{ color: '#16a34a', fontWeight: '700' }}>All 4 Audits Completed ✓</Text>
                   ) : (
                     <>
@@ -512,6 +560,9 @@ const styles = StyleSheet.create({
     width: 5,
     backgroundColor: '#ea580c',
   },
+  completedAuditAccentPlain: {
+    backgroundColor: '#16a34a',
+  },
   statusCard: {
     backgroundColor: '#fff',
     borderLeftWidth: 0,
@@ -554,11 +605,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#fdba74',
   },
+  completedAuditBadgePlain: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+  },
   completedAuditBadgeText: {
     color: '#9a3412',
     fontSize: 8.5,
     fontWeight: '800',
     letterSpacing: 0.3,
+  },
+  completedAuditBadgeTextPlain: {
+    color: '#166534',
   },
   plantingMark: {
     width: 40,

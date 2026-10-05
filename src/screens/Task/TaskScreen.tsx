@@ -208,8 +208,9 @@ export default function TaskScreen() {
               task.id === next?.id ? { ...task, ...next, status } : task
             )
           );
-          // A finished audit lands on Completed. Only a reject opens its own tab.
+          // A reviewed audit leaves Completed. Reject opens Rejected; approve opens Approved.
           if (status === 'rejected') setActiveTab('rejected');
+          else if (status === 'approved') setActiveTab('approved');
           else setActiveTab('completed');
         }
       )
@@ -247,8 +248,8 @@ export default function TaskScreen() {
       });
       if (!moved) return;
       setTasks(next);
-      // A finished audit stays on Completed. A rejection still opens Rejected.
-      setActiveTab(moved === 'rejected' ? 'rejected' : 'completed');
+      // A reviewed audit leaves Completed for the one matching tab.
+      setActiveTab(moved === 'rejected' ? 'rejected' : 'approved');
     };
     const timer = setInterval(watchReview, 12000);
     return () => {
@@ -317,9 +318,26 @@ export default function TaskScreen() {
     });
   }, [tasks, projectTrees, activeProjectId]);
 
+  // One card per tree. A later assigned, completed, or rejected task moves that
+  // card off Approved, so an old approval does not keep it fixed there.
+  const currentTasks = useMemo(() => {
+    const rank = (task: Task) => {
+      const round = Number(task.audit_round) || (task.task_type === 'audit' ? 1 : 0);
+      const time = new Date(task.reviewed_at || task.completed_at || task.created_at || 0).getTime();
+      return round * 1e15 + (Number.isFinite(time) ? time : 0);
+    };
+    const byTree = new Map<string, Task>();
+    projectTasks.forEach((task) => {
+      const key = task.tree_record_id || task.tree_id || task.id;
+      const prev = byTree.get(key);
+      if (!prev || rank(task) >= rank(prev)) byTree.set(key, task);
+    });
+    return [...byTree.values()];
+  }, [projectTasks]);
+
   // assigned + in_progress both show in the Assigned tab
-  const assignedTasks = projectTasks.filter((t) => t.status === 'assigned' || t.status === 'in_progress');
-  const rejectedTasks = projectTasks
+  const assignedTasks = currentTasks.filter((t) => t.status === 'assigned' || t.status === 'in_progress');
+  const rejectedTasks = currentTasks
     .filter((t) => t.status === 'rejected')
     .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 
@@ -332,13 +350,11 @@ export default function TaskScreen() {
     return [...planting, ...audits];
   }, [assignedTasks]);
 
-  // Admin approval moves the same task card onto the Approved tab. When the card
-  // came from a tree audit, the latest monitoring record (if any) supplies the
-  // tree condition, so an approved audit card shows the same condition chip and
-  // updated audit dots/round as the Completed tab.
+  // Admin approval moves the same task card onto the Approved tab only.
+  // A rejected audit stays on Rejected and is never copied here.
   const approvedItems = useMemo(() => {
-    const list = projectTasks
-      .filter((t) => t.status === 'approved' && t.task_type !== 'audit' && !t.audit_round)
+    const list = currentTasks
+      .filter((t) => t.status === 'approved')
       .map((t) => {
         // Monitoring rows can be keyed by the tree record id, the task's
         // tree_record_id, or its tree_id — accept any so the audit is never missed.
@@ -357,17 +373,15 @@ export default function TaskScreen() {
     return list.sort(
       (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
     );
-  }, [projectTasks, auditsByTree]);
+  }, [currentTasks, auditsByTree]);
 
   // A completed task stays here until an admin approves or rejects that card.
   const completedItems = useMemo(() => {
     const list: Task[] = [];
     const seenIds = new Set<string>();
 
-    projectTasks.forEach((t) => {
-      const isFinishedAudit =
-        t.status === 'approved' && (t.task_type === 'audit' || !!t.audit_round);
-      if (t.status !== 'completed' && !isFinishedAudit) return;
+    currentTasks.forEach((t) => {
+      if (t.status !== 'completed') return;
       const treeId = t.tree_record_id || t.tree_id || t.id;
       const latestAudit = getLatestAudit(auditsByTree[treeId] || []);
       const latestAuditDate = latestAudit?.submitted_at || latestAudit?.survey_date || null;
@@ -390,7 +404,7 @@ export default function TaskScreen() {
       const bTime = new Date(b.completed_at || b.created_at || 0).getTime();
       return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
     });
-  }, [projectTasks, auditsByTree]);
+  }, [currentTasks, auditsByTree]);
 
   // One count per tree. A later audit of a tree that is already counted is not another tree.
   const isAuditItem = (item: Task) =>
@@ -530,24 +544,12 @@ export default function TaskScreen() {
         .map((key) => auditsByTree[key as string])
         .find((rows) => rows && rows.length > 0) || [];
 
-    const handleStartAudit = () => {
-      navigation.navigate('EditTree', {
-        treeId: targetId,
-        taskId: task.id,
-        auditRound: task.audit_round || 1,
-      });
-    };
-
     const handlePress = () => {
-      // Assigned audits go straight into the first audit form for testing.
-      // Planting cards and completed cards keep their existing pages.
-      if (isAuditTask) {
-        handleStartAudit();
-        return;
-      }
+      // An assigned audit opens the tree details first. The audit button on that
+      // page starts the audit; the card itself does not open the audit form.
       navigation.navigate('TreeDetail', {
         treeId: targetId,
-        asAuditProfile: false,
+        asAuditProfile: isAuditTask,
       });
     };
 
@@ -557,6 +559,7 @@ export default function TaskScreen() {
           treeId: targetId,
           taskId: task.id,
           auditRound: task.audit_round || 1,
+          rejectionNotes: task.review_notes || null,
         });
         return;
       }
@@ -578,33 +581,26 @@ export default function TaskScreen() {
         showSurveyor={false}
         onPress={isAssigned && !isAuditTask ? undefined : handlePress}
         onAction={
-          isAuditTask
-            ? handleStartAudit
-            : isAssigned
+          isAssigned && !isAuditTask
             ? () => handleStartTask(task)
             : isRejected
             ? handleUpdate
             : undefined
         }
         actionLabel={
-          isAuditTask
-            ? 'Audit Now'
-            : isAssigned
+          isAssigned && !isAuditTask
             ? 'Planting'
             : isRejected
             ? 'Edit'
             : undefined
         }
         actionVariant={
-          isAuditTask
-            ? 'audit'
-            : isAssigned
+          isAssigned && !isAuditTask
             ? 'start'
             : isRejected
             ? 'update'
             : undefined
         }
-        actionIcon={isAuditTask ? 'clipboard-outline' : undefined}
         onLocationPress={
           ((task.latitude && task.longitude) || (treeRecord?.latitude && treeRecord?.longitude))
             ? () =>
