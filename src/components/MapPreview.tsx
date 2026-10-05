@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
   },
   coordsOverlay: {
     position: 'absolute',
-    bottom: 8,
+    top: 8,
     left: 8,
     backgroundColor: 'rgba(0,0,0,0.55)',
     borderRadius: 14,

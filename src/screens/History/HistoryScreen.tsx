@@ -196,60 +196,79 @@ export default function HistoryScreen() {
     setAuditFilter('all');
   };
 
-  // Merge trees + approved/rejected tasks into history items
-  const allItems: HistoryItem[] = [];
+  // One card per tree, using that tree's current task — the same card the task page shows.
+  const taskRank = (task: Task) => {
+    const round = Number(task.audit_round) || (task.task_type === 'audit' ? 1 : 0);
+    const time = new Date(task.reviewed_at || task.completed_at || task.created_at || 0).getTime();
+    return round * 1e15 + (Number.isFinite(time) ? time : 0);
+  };
+  const taskMatchesTree = (task: Task, tree: TreeRecord) =>
+    task.tree_id === tree.id ||
+    task.tree_record_id === tree.id ||
+    task.id === tree.id ||
+    (!!tree.tree_id && task.tree_id === tree.tree_id);
 
-  // Trees (enriched with latest audit data if available)
+  const allItems: HistoryItem[] = [];
+  const seenTreeIds = new Set<string>();
+
   trees.forEach((t) => {
     const meta = parseTreeMeta(t.notes);
     const treeAudits = auditsByTree[t.id] ?? [];
     const latest = getLatestAudit(treeAudits);
-    const rawCondition = latest?.tree_condition || t.tree_condition || meta.tree_condition || 'Healthy';
+    const currentTask = tasks
+      .filter((task) => taskMatchesTree(task, t))
+      .sort((a, b) => taskRank(b) - taskRank(a))[0];
+    const rawCondition = latest?.tree_condition || currentTask?.tree_condition || t.tree_condition || meta.tree_condition || 'Healthy';
     const normalizedCondition = rawCondition.charAt(0).toUpperCase() + rawCondition.slice(1).toLowerCase();
-    const photo = latest?.photo_url || t.photo_url;
-    const linkedTask = tasks.find((tk) => tk.tree_id === t.id || tk.id === t.id);
-    const isApproved = Boolean(t.locked || linkedTask?.status === 'approved');
+    const status = currentTask?.status || (t.locked ? 'approved' : 'completed');
+    if (status !== 'completed' && status !== 'approved' && status !== 'rejected') return;
 
+    seenTreeIds.add(t.id);
     allItems.push({
       id: t.id,
       tree_record_id: t.id,
       type: 'tree',
-      title: t.species || 'Tree',
-      photo_url: photo,
+      title: t.species || currentTask?.name || 'Tree',
+      photo_url: latest?.photo_url || t.photo_url || currentTask?.photo_url,
       condition: normalizedCondition,
-      status: isApproved ? 'approved' : 'completed',
-      date: latest?.survey_date || t.survey_date || latest?.submitted_at || t.submitted_at,
-      latitude: latest?.latitude ?? t.latitude,
-      longitude: latest?.longitude ?? t.longitude,
-      surveyor: latest?.surveyor || t.surveyor || meta.surveyor,
-      project_id: t.project_id,
+      status,
+      date: latest?.survey_date || currentTask?.completed_at || t.survey_date || t.submitted_at,
+      latitude: latest?.latitude ?? t.latitude ?? currentTask?.latitude,
+      longitude: latest?.longitude ?? t.longitude ?? currentTask?.longitude,
+      surveyor: latest?.surveyor || t.surveyor || currentTask?.surveyor || meta.surveyor,
+      project_id: t.project_id || currentTask?.project_id,
       tree_id: resolveTreeId(t),
-      audit_round: latest?.monitoring_round ?? null,
+      audit_round: latest?.monitoring_round ?? currentTask?.audit_round ?? null,
+      rejection_notes: currentTask?.review_notes || null,
+      raw_task: currentTask || null,
     });
   });
 
-  // Tasks (completed, approved, rejected — all show in history with same TreeCard design)
+  // A finished task whose tree is not in the loaded list still gets one card.
   tasks.forEach((t) => {
-    if (t.status === 'approved' || t.status === 'rejected' || t.status === 'completed') {
-      const rawCondition = t.tree_condition || '';
-      const normalizedCondition = rawCondition.charAt(0).toUpperCase() + rawCondition.slice(1).toLowerCase();
-      allItems.push({
-        id: t.id,
-        tree_record_id: t.tree_record_id || t.tree_id || t.id,
-        type: 'task',
-        title: t.name || 'Task',
-        photo_url: t.photo_url,
-        condition: normalizedCondition,
-        status: t.status,
-        date: t.created_at,
-        latitude: t.latitude,
-        longitude: t.longitude,
-        surveyor: t.surveyor,
-        project_id: t.project_id,
-        rejection_notes: t.review_notes || t.notes || null,
-        raw_task: t,
-      });
-    }
+    if (t.status !== 'approved' && t.status !== 'rejected' && t.status !== 'completed') return;
+    const linkedId = t.tree_record_id || t.tree_id || t.id;
+    if (seenTreeIds.has(linkedId) || seenTreeIds.has(t.tree_id || '') || seenTreeIds.has(t.id)) return;
+    const rawCondition = t.tree_condition || '';
+    const normalizedCondition = rawCondition
+      ? rawCondition.charAt(0).toUpperCase() + rawCondition.slice(1).toLowerCase()
+      : '';
+    allItems.push({
+      id: t.id,
+      tree_record_id: linkedId,
+      type: 'task',
+      title: t.name || 'Task',
+      photo_url: t.photo_url,
+      condition: normalizedCondition,
+      status: t.status,
+      date: t.completed_at || t.created_at,
+      latitude: t.latitude,
+      longitude: t.longitude,
+      surveyor: t.surveyor,
+      project_id: t.project_id,
+      rejection_notes: t.review_notes || t.notes || null,
+      raw_task: t,
+    });
   });
 
   // Filter
@@ -366,36 +385,60 @@ export default function HistoryScreen() {
 
   const renderHistoryCard = (item: HistoryItem) => {
     const targetTreeId = item.tree_record_id || item.id;
-    const treeAudits = auditsByTree[targetTreeId] || [];
+    const treeRecord = trees.find((tree) => tree.id === targetTreeId);
+    const treeAudits =
+      [targetTreeId, item.raw_task?.tree_record_id, item.raw_task?.tree_id, item.id]
+        .filter(Boolean)
+        .map((key) => auditsByTree[key as string])
+        .find((rows) => rows && rows.length > 0) || [];
+    const isRejected = item.status === 'rejected';
 
     return (
       <TreeCard
         key={item.id}
-        tree={{
-          id: targetTreeId,
-          tree_id: item.tree_id,
-          species: item.title,
-          photo_url: item.photo_url || '',
-          latitude: item.latitude || 0,
-          longitude: item.longitude || 0,
-          tree_condition: (item.condition as TreeCondition) || 'Healthy',
-          health_status: 'healthy',
-          submitted_at: item.date,
-          synced: true,
-          locked: item.status === 'approved',
-          user_id: '',
-          surveyor: item.surveyor,
-        }}
-        task={null}
+        tree={
+          treeRecord
+            ? { ...treeRecord, locked: item.status === 'approved' }
+            : {
+                id: targetTreeId,
+                tree_id: item.tree_id,
+                species: item.title,
+                photo_url: item.photo_url || '',
+                latitude: item.latitude || 0,
+                longitude: item.longitude || 0,
+                tree_condition: (item.condition as TreeCondition) || 'Healthy',
+                health_status: 'healthy',
+                submitted_at: item.date,
+                synced: true,
+                locked: item.status === 'approved',
+                user_id: '',
+                surveyor: item.surveyor,
+              }
+        }
+        task={item.raw_task || null}
         status={item.status as any}
-        auditRound={item.audit_round}
         audits={treeAudits}
-        rejectionNotes={null}
         displayId={item.tree_id || undefined}
         showSurveyor={false}
         onPress={() => {
-          navigation.navigate('TreeDetail', { treeId: targetTreeId });
+          navigation.navigate('TreeDetail', {
+            treeId: targetTreeId,
+            taskId: item.raw_task?.id,
+            rejectionNotes: isRejected ? item.rejection_notes || null : null,
+          });
         }}
+        onAction={
+          isRejected
+            ? () =>
+                navigation.navigate('TreeDetail', {
+                  treeId: targetTreeId,
+                  taskId: item.raw_task?.id,
+                  rejectionNotes: item.rejection_notes || null,
+                })
+            : undefined
+        }
+        actionLabel={isRejected ? 'Edit' : undefined}
+        actionVariant={isRejected ? 'update' : undefined}
       />
     );
   };
@@ -488,7 +531,7 @@ export default function HistoryScreen() {
         data={filtered}
         keyExtractor={(item) => `${item.type}-${item.id}`}
         renderItem={({ item }) => renderHistoryCard(item)}
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 96 }]}
+        contentContainerStyle={[styles.list, { paddingBottom: 16 }]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a5c2a" />
         }
@@ -701,7 +744,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '800',
   },
-  list: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 100 },
+  list: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16 },
 
   historyCard: {
     backgroundColor: '#fff',

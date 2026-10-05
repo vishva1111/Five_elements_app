@@ -803,7 +803,7 @@ export default function UpdateTreeScreen() {
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 16 }]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         onScroll={(e: any) => {
@@ -1474,7 +1474,7 @@ const styles = StyleSheet.create({
 
   // Scroll
   scroll: { flex: 1 },
-  scrollContent: { padding: 14, gap: 12, paddingBottom: 110 },
+  scrollContent: { padding: 14, gap: 12, paddingBottom: 16 },
 
   // ─── 3-Slot Audit Photo Card ─────────────────────────────────────────────
   auditPhotoCard: {

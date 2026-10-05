@@ -244,7 +244,7 @@ export default function TreeFormScreen() {
       <ScrollView
         ref={scrollRef}
         style={styles.scrollContent}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >

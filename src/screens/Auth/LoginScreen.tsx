@@ -70,7 +70,7 @@ export default function LoginScreen() {
         <ScrollView
           contentContainerStyle={[
             styles.scroll,
-            { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 },
+            { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 16 },
           ]}
           keyboardShouldPersistTaps="handled"
         >

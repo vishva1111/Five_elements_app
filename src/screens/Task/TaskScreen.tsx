@@ -657,7 +657,7 @@ export default function TaskScreen() {
 
       <ScrollView
         style={s.scroll}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
+        contentContainerStyle={{ paddingBottom: 16 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a5c2a" />}
       >
         {/* Tabs with CircularProgress rings */}

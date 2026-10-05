@@ -69,18 +69,24 @@ export const computeTreeStats = (trees: TreeRecord[]) => {
 const isAuditTask = (task: Pick<Task, 'id' | 'task_type' | 'audit_round'>) =>
   task.task_type === 'audit' || !!task.audit_round || String(task.id).startsWith('audit-');
 
-/** A tree counts once: locked, or its planting task is approved. Audits do not add another tree. */
+const taskMatchesTree = (task: Task, tree: TreeRecord) =>
+  task.tree_id === tree.id ||
+  task.tree_record_id === tree.id ||
+  task.id === tree.id ||
+  (!!tree.tree_id && task.tree_id === tree.tree_id);
+
+const taskRank = (task: Task) => {
+  const round = Number(task.audit_round) || (task.task_type === 'audit' ? 1 : 0);
+  const time = new Date(task.reviewed_at || task.completed_at || task.created_at || 0).getTime();
+  return round * 1e15 + (Number.isFinite(time) ? time : 0);
+};
+
+/** Approved planting or approved audit, counted once for that tree. A newer task replaces an older one. */
 const isApprovedProjectTree = (tree: TreeRecord, tasks: Task[]) => {
-  if (tree.locked) return true;
-  return tasks.some((task) => {
-    if (isAuditTask(task) || task.status !== 'approved') return false;
-    return (
-      task.tree_id === tree.id ||
-      task.tree_record_id === tree.id ||
-      task.id === tree.id ||
-      (!!tree.tree_id && task.tree_id === tree.tree_id)
-    );
-  });
+  const current = tasks
+    .filter((task) => taskMatchesTree(task, tree))
+    .sort((a, b) => taskRank(b) - taskRank(a))[0];
+  return Boolean(current && current.status === 'approved');
 };
 
 /** Healthy / Sick / Dead follow the newest audit. No audit yet uses the approved tree itself. */
@@ -204,10 +210,8 @@ export default function HomeScreen() {
       const match = activeProjectId
         ? memoryTrees.filter((t) => t.project_id === activeProjectId)
         : memoryTrees;
-      const approved = match.filter((tree) => tree.locked);
-      if (approved.length > 0) {
-        setStats(computeTreeStats(approved));
-      }
+      const remembered = projectStatsMapRef.current[activeProjectId || '__all__'];
+      if (remembered) setStats(remembered);
     }
 
     return () => {
@@ -502,7 +506,7 @@ export default function HomeScreen() {
 
     <ScrollView
       style={styles.scroll}
-      contentContainerStyle={{ paddingBottom: insets.bottom + 88 }}
+      contentContainerStyle={{ paddingBottom: 16 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a5c2a" />}
     >
       <View style={styles.contentSection}>

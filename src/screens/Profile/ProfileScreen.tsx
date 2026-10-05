@@ -8,7 +8,6 @@ import {
   Alert,
   Dimensions,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
@@ -19,7 +18,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 const { width: SCREEN_W } = Dimensions.get('window');
 
 export default function ProfileScreen() {
-  const insets = useSafeAreaInsets();
   const { user, activeProjectId, signOut, assignedProjects } = useAuthStore();
   const trees = useTreeStore((s) => s.trees) ?? [];
   const [allProjects, setAllProjects] = useState<Project[]>([]);
@@ -60,7 +58,7 @@ export default function ProfileScreen() {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={{ paddingBottom: insets.bottom + 88 }}
+      contentContainerStyle={{ paddingBottom: 16 }}
       showsVerticalScrollIndicator={false}
     >
       {/* ═══ Hero header with wave bottom ═══ */}

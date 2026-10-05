@@ -386,6 +386,11 @@ export default function TreeDetailScreen() {
     Boolean(asAuditProfile) ||
     ((task?.status === 'assigned' || task?.status === 'in_progress') &&
       (task?.task_type === 'audit' || Number(task?.audit_round) > 0));
+  const hasBottomAction =
+    (!showAuditProfile && ((!isApproved && isRejected) || (isApproved && canStartAudit))) ||
+    (showAuditProfile && (auditStatus.allCompleted || isRejectedAudit || canStartAudit));
+  // Clear the phone navigation bar, and the bottom button when one is showing.
+  const bottomPad = insets.bottom + (hasBottomAction ? 64 : 12);
 
   // (Multi-photo derivation + pager-sync effects live above the loading /
   // not-found early returns so the hook order never changes between renders.)
@@ -440,7 +445,7 @@ export default function TreeDetailScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 16) + 84 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Rejection Notice Banner if rejected */}
@@ -1065,7 +1070,6 @@ export default function TreeDetailScreen() {
           </View>
         </View>
 
-        <View style={{ height: 100 }} />
       </ScrollView>
 
       {/* ─── FULLSCREEN LIGHTBOX MODAL ─── */}
@@ -1879,20 +1883,22 @@ const styles = StyleSheet.create({
   },
   locationHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   locationTitle: { fontSize: 12, fontWeight: '800', color: '#111827' },
-  locationActionsRow: { flexDirection: 'row', gap: 8 },
+  locationActionsRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   mapActionPrimary: {
     flex: 1,
+    height: 42,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     backgroundColor: '#15803d',
-    paddingVertical: 10,
+    paddingHorizontal: 10,
     borderRadius: 10,
   },
-  mapActionPrimaryText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  mapActionPrimaryText: { color: '#fff', fontSize: 12, fontWeight: '800', flexShrink: 1 },
   mapActionSecondary: {
     width: 42,
+    height: 42,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#f0fdf4',

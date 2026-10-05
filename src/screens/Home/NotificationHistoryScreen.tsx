@@ -46,7 +46,7 @@ export default function NotificationHistoryScreen() {
       <FlatList
         data={notices}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 16 }]}
         ListEmptyComponent={<Text style={styles.empty}>No notifications yet.</Text>}
         renderItem={({ item }) => <NoticeRow notice={item} />}
       />

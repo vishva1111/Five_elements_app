@@ -418,7 +418,7 @@ export default function EditTreeScreen() {
         </View>
       </LinearGradient>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 40 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 16 }} keyboardShouldPersistTaps="handled">
         <View style={styles.photoSection}>
           <View style={styles.photoGalleryRow}>
             {SLOT_CONFIG.map((cfg, slot) => {

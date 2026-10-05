@@ -1255,7 +1255,10 @@ export default function TreeMapScreen() {
     if (!u) return;
     let best: TreeRecord | null = null;
     let bestDist = Infinity;
-    for (const t of allTrees) {
+    const vibrationTrees = focusTreeId
+      ? allTrees.filter((tree) => tree.id === focusTreeId)
+      : allTrees;
+    for (const t of vibrationTrees) {
       if (!t?.latitude || !t?.longitude) continue;
       const d = haversineDistance(u.latitude, u.longitude, Number(t.latitude), Number(t.longitude));
       if (d < bestDist) {
@@ -1264,7 +1267,7 @@ export default function TreeMapScreen() {
       }
     }
     if (best && bestDist <= PROXIMITY_VIBRATE_M) startProximityVibration(best.id);
-  }, [allTrees, startProximityVibration]);
+  }, [allTrees, focusTreeId, startProximityVibration]);
 
   const toggleProximityVibration = useCallback(() => {
     const next = !vibrateEnabledRef.current;
@@ -1321,10 +1324,14 @@ export default function TreeMapScreen() {
       pushLocationToMap(latitude, longitude, accuracy ?? null, false);
 
       // ─── Proximity vibration ────────────────────────────────────────────
-      // Nearest tree wins — no need to tap a marker on the map first.
+      // A map opened for one tree can vibrate only for that tree.
+      // The full map still uses the nearest tree.
       let nearestTree: TreeRecord | null = null;
       let nearestDist = Infinity;
-      for (const t of allTrees) {
+      const vibrationTrees = focusTreeId
+        ? allTrees.filter((tree) => tree.id === focusTreeId)
+        : allTrees;
+      for (const t of vibrationTrees) {
         if (!t?.latitude || !t?.longitude) continue;
         const d = haversineDistance(
           latitude,
@@ -1370,7 +1377,7 @@ export default function TreeMapScreen() {
         pushNearestTreeToMap(null);
       }
     },
-    [allTrees, pushLocationToMap, startProximityVibration, stopProximityVibration, pushNearestTreeToMap]
+    [allTrees, focusTreeId, pushLocationToMap, startProximityVibration, stopProximityVibration, pushNearestTreeToMap]
   );
 
   // Always call the latest handler without restarting the GPS watcher whenever
