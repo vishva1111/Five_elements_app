@@ -23,7 +23,7 @@ import {
   parseAuditDate,
 } from '../../services/auditService';
 import { Task, Project, TreeRecord } from '../../types';
-import { displayTreeId, parseTreeMeta, resolveTreeId } from '../../utils/treeId';
+import { displayTreeId, parseTreeMeta, resolveTreeId, splitLabeledTreeName } from '../../utils/treeId';
 import { fetchProjectGeofence } from '../../services/projectGeofenceService';
 import CircularProgress from '../../components/CircularProgress';
 import TreeCard from '../../components/TreeCard';
@@ -341,13 +341,13 @@ export default function TaskScreen() {
     .filter((t) => t.status === 'rejected')
     .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 
-  // Only tasks an admin actually assigned. Planting does not start an audit clock.
+  // Planting and audit cards share one list, newest first, so they are not grouped apart.
   const assignedItems = useMemo(() => {
-    const byNewest = (a: Task, b: Task) =>
-      new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
-    const planting = assignedTasks.filter((item) => item.task_type !== 'audit' && !item.audit_round).sort(byNewest);
-    const audits = assignedTasks.filter((item) => item.task_type === 'audit' || !!item.audit_round).sort(byNewest);
-    return [...planting, ...audits];
+    return [...assignedTasks].sort((a, b) => {
+      const aTime = new Date(a.created_at || a.due_date || 0).getTime();
+      const bTime = new Date(b.created_at || b.due_date || 0).getTime();
+      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+    });
   }, [assignedTasks]);
 
   // Admin approval moves the same task card onto the Approved tab only.
@@ -517,21 +517,26 @@ export default function TaskScreen() {
       (task.tree_record_id ? treeByUuid.get(task.tree_record_id) : undefined);
 
     if (!treeRecord && task.name) {
-      const match = task.name.match(/\(([A-Fa-f0-9]{4,36})\)/);
-      if (match && match[1]) {
-        const hex = match[1].toLowerCase();
-        treeRecord = trees.find(
-          (t) =>
-            t.id.toLowerCase().startsWith(hex) ||
-            resolveTreeId(t).toLowerCase().includes(hex)
-        );
+      const labeled = splitLabeledTreeName(task.name);
+      const token = (labeled.code || task.name.match(/\(([A-Za-z0-9-]+)\)/)?.[1] || '').toLowerCase();
+      if (token) {
+        treeRecord = trees.find((t) => {
+          const labeledTree = splitLabeledTreeName(t.species);
+          return (
+            t.id.toLowerCase().startsWith(token) ||
+            resolveTreeId(t).toLowerCase() === token ||
+            labeledTree.code.toLowerCase() === token
+          );
+        });
       }
     }
 
     const isAuditTask = (task.task_type === 'audit' || !!task.audit_round) && (task.status === 'assigned' || task.status === 'in_progress');
     const isCompletedAudit = task.status === 'completed' && (task.task_type === 'audit' || !!task.audit_round);
     const targetId = treeRecord?.id || task.tree_record_id || task.tree_id || task.id;
-    const projectTreeId = treeRecord ? treeIds[treeRecord.id] || resolveTreeId(treeRecord) || displayTreeId(treeRecord) : undefined;
+    const labeledId = splitLabeledTreeName(treeRecord?.species || task.name).code;
+    const projectTreeId = labeledId
+      || (treeRecord ? treeIds[treeRecord.id] || resolveTreeId(treeRecord) || displayTreeId(treeRecord) : undefined);
     const isAssigned = task.status === 'assigned' || task.status === 'in_progress';
     const isRejected = task.status === 'rejected';
     const isRejectedAudit = isRejected && (task.task_type === 'audit' || !!task.audit_round);

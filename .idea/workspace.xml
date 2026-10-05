@@ -5,11 +5,110 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="fix database problem.">
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/android-adaptive-foreground/android-adaptive-foreground-830e32948871ab6af2392a8fa91629b373964ba1ee30eb6a600af167d0a55786-cover-transparent/icon_108.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/android-adaptive-foreground/android-adaptive-foreground-830e32948871ab6af2392a8fa91629b373964ba1ee30eb6a600af167d0a55786-cover-transparent/icon_162.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/android-adaptive-foreground/android-adaptive-foreground-830e32948871ab6af2392a8fa91629b373964ba1ee30eb6a600af167d0a55786-cover-transparent/icon_216.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/android-adaptive-foreground/android-adaptive-foreground-830e32948871ab6af2392a8fa91629b373964ba1ee30eb6a600af167d0a55786-cover-transparent/icon_324.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/android-adaptive-foreground/android-adaptive-foreground-830e32948871ab6af2392a8fa91629b373964ba1ee30eb6a600af167d0a55786-cover-transparent/icon_432.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/android-standard-circle/android-standard-circle-9c927daf80390e512e124737e210c9ccf17cdd8ac21ab148abc7c94d96f3723a-cover-transparent/icon_144.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/android-standard-circle/android-standard-circle-9c927daf80390e512e124737e210c9ccf17cdd8ac21ab148abc7c94d96f3723a-cover-transparent/icon_192.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/android-standard-circle/android-standard-circle-9c927daf80390e512e124737e210c9ccf17cdd8ac21ab148abc7c94d96f3723a-cover-transparent/icon_48.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/android-standard-circle/android-standard-circle-9c927daf80390e512e124737e210c9ccf17cdd8ac21ab148abc7c94d96f3723a-cover-transparent/icon_72.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/android-standard-circle/android-standard-circle-9c927daf80390e512e124737e210c9ccf17cdd8ac21ab148abc7c94d96f3723a-cover-transparent/icon_96.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/android-standard-square/android-standard-square-9c927daf80390e512e124737e210c9ccf17cdd8ac21ab148abc7c94d96f3723a-cover-transparent/icon_144.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/android-standard-square/android-standard-square-9c927daf80390e512e124737e210c9ccf17cdd8ac21ab148abc7c94d96f3723a-cover-transparent/icon_192.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/android-standard-square/android-standard-square-9c927daf80390e512e124737e210c9ccf17cdd8ac21ab148abc7c94d96f3723a-cover-transparent/icon_48.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/android-standard-square/android-standard-square-9c927daf80390e512e124737e210c9ccf17cdd8ac21ab148abc7c94d96f3723a-cover-transparent/icon_72.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/android-standard-square/android-standard-square-9c927daf80390e512e124737e210c9ccf17cdd8ac21ab148abc7c94d96f3723a-cover-transparent/icon_96.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/splash-android/splash-android-5ca22c54510bcb0adbd44c2f4633925226e91f1d39a909599ff17c4c2af3dce6-contain/icon_200.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/splash-android/splash-android-5ca22c54510bcb0adbd44c2f4633925226e91f1d39a909599ff17c4c2af3dce6-contain/icon_300.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/splash-android/splash-android-5ca22c54510bcb0adbd44c2f4633925226e91f1d39a909599ff17c4c2af3dce6-contain/icon_400.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/splash-android/splash-android-5ca22c54510bcb0adbd44c2f4633925226e91f1d39a909599ff17c4c2af3dce6-contain/icon_600.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.expo/web/cache/production/images/splash-android/splash-android-5ca22c54510bcb0adbd44c2f4633925226e91f1d39a909599ff17c4c2af3dce6-contain/icon_800.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Merge_at_9_29_2026_5_15_PM_[Changes]/shelved.patch" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Merge_at_9_29_2026_5_15_PM__Changes_.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_9_29_2026_3_42_PM_[Changes]/shelved.patch" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_9_29_2026_3_42_PM__Changes_.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_9_29_2026_3_43_PM_[Changes]/shelved.patch" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_9_29_2026_3_43_PM__Changes_.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_9_29_2026_5_13_PM_[Changes]/shelved.patch" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_9_29_2026_5_13_PM__Changes_.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.lyzo/master_memory.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Tree species and CO₂ sequestration defaults.pdf" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/build.gradle" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/debug.keystore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/proguard-rules.pro" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/debug/AndroidManifest.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/debugOptimized/AndroidManifest.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/AndroidManifest.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/java/com/fiveelements/treeapp/MainActivity.kt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/java/com/fiveelements/treeapp/MainApplication.kt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/drawable-hdpi/splashscreen_logo.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/drawable-mdpi/splashscreen_logo.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/drawable-xhdpi/splashscreen_logo.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/drawable-xxhdpi/splashscreen_logo.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/drawable-xxxhdpi/splashscreen_logo.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/drawable/ic_launcher_background.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/drawable/rn_edit_text_material.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/mipmap-hdpi/ic_launcher.webp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.webp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/mipmap-hdpi/ic_launcher_round.webp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/mipmap-mdpi/ic_launcher.webp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.webp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/mipmap-mdpi/ic_launcher_round.webp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/mipmap-xhdpi/ic_launcher.webp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.webp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.webp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/mipmap-xxhdpi/ic_launcher.webp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.webp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.webp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.webp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/values-night/colors.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/values/colors.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/values/strings.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/app/src/main/res/values/styles.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/build.gradle" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/gradle.properties" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/gradle/wrapper/gradle-wrapper.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/gradle/wrapper/gradle-wrapper.properties" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/gradlew" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/gradlew.bat" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/android/settings.gradle" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs/TreeApp-End-to-End.docx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs/audit-database-needed.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/eas-build-log.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/eas-build.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/eas-log.bin" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/gradle-release-log.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/components/FloatingTabBar.tsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/screens/History/EditTreeScreen.tsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/screens/History/UpdateTreeScreen.tsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/screens/Home/NotificationHistoryScreen.tsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/screens/Home/ProjectSelectScreen.tsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/services/appDialog.tsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/services/auditService.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/services/projectGeofenceService.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/services/treeLocationService.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/store/projectRefreshStore.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/utils/treeId.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/supabase/.temp/cli-latest" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tsc-flow.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.expo/dev/logs/start.log" beforeDir="false" afterPath="$PROJECT_DIR$/.expo/dev/logs/start.log" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/App.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/components/TreeCard.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/TreeCard.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/Capture/TreeFormScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/TreeFormScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/Home/HomeScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Home/HomeScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/services/taskService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/taskService.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/services/treeService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/treeService.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/store/authStore.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/authStore.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

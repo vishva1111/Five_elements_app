@@ -92,11 +92,18 @@ function missingColumnName(message?: string | null): string | null {
   );
 }
 
-export async function completeTask(taskId: string, treeId?: string, location?: string) {
+export async function completeTask(
+  taskId: string,
+  treeId?: string,
+  location?: string,
+  options?: { editedAfterReject?: boolean }
+) {
   const updates: Record<string, any> = {
     status: 'completed',
     completed_at: new Date().toISOString(),
   };
+  // Only a card edited after rejection is marked. A normal completion stays green.
+  if (options?.editedAfterReject) updates.review_notes = 'edited';
   if (treeId) {
     updates.tree_id = treeId;
     updates.tree_record_id = treeId;

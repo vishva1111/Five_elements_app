@@ -425,15 +425,26 @@ export async function updateTreeFromMonitoring(
 export async function updateBaselineTree(
   treeId: string,
   updates: Partial<TreeRecordInsert>,
-  taskId?: string
+  taskId?: string,
+  options?: { editedAfterReject?: boolean }
 ): Promise<ApiResponse<TreeRecord>> {
   const result = await updateTree(treeId, updates);
   if (!result.error && taskId) {
-    const { error } = await supabase
-      .from('tasks')
-      .update({ status: 'completed', completed_at: new Date().toISOString() })
-      .eq('id', taskId);
-    if (error) console.warn('[treeService] updateBaselineTree task:', error.message);
+    const completedAt = new Date().toISOString();
+    const edited: Record<string, string> = {
+      status: 'completed',
+      completed_at: completedAt,
+    };
+    // Orange is only for a card that was rejected and then edited.
+    if (options?.editedAfterReject) edited.review_notes = 'edited';
+    const { error } = await supabase.from('tasks').update(edited).eq('id', taskId);
+    if (error) {
+      const retry = await supabase
+        .from('tasks')
+        .update({ status: 'completed', completed_at: completedAt })
+        .eq('id', taskId);
+      if (retry.error) console.warn('[treeService] updateBaselineTree task:', retry.error.message);
+    }
   }
   return result;
 }

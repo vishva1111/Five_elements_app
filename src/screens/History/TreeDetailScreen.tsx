@@ -58,8 +58,8 @@ export default function TreeDetailScreen() {
   // Selected audit round for interactive journey inspection
   const [selectedAuditRound, setSelectedAuditRound] = useState<number | null>(null);
 
-  // Collapsible baseline details
-  const [baselineExpanded, setBaselineExpanded] = useState(false);
+  // Planting details stay open. An audited tree can still collapse them.
+  const [baselineExpanded, setBaselineExpanded] = useState(true);
 
   // Active photo index within the sliding photo pager
   const [activePhotoIdx, setActivePhotoIdx] = useState(0);
@@ -75,14 +75,19 @@ export default function TreeDetailScreen() {
   // Planting photos: photo_urls first, then the ##META## copy inside notes
   // (records saved before the photo_urls column existed), then photo_url.
   const metaPhotoUrls: unknown = tree ? parseTreeMeta(tree.notes)?.photo_urls : null;
+  const taskPhotoUrls: unknown = task ? parseTreeMeta(task.notes)?.photo_urls : null;
   const plantingPhotos: string[] = !tree
     ? []
     : Array.isArray(metaPhotoUrls) && metaPhotoUrls.length > 0
     ? metaPhotoUrls.filter((u: unknown): u is string => typeof u === 'string' && !!u)
     : tree.photo_urls && tree.photo_urls.length > 0
     ? tree.photo_urls
+    : Array.isArray(taskPhotoUrls) && taskPhotoUrls.length > 0
+    ? taskPhotoUrls.filter((u: unknown): u is string => typeof u === 'string' && !!u)
     : tree.photo_url
     ? [tree.photo_url]
+    : task?.photo_url
+    ? [task.photo_url]
     : [];
 
   // Audit photos for the currently selected/latest audit
@@ -199,15 +204,22 @@ export default function TreeDetailScreen() {
             break;
           }
         }
+        const isAuditRow = (row: any) =>
+          row?.task_type === 'audit' || Number(row?.audit_round) > 0;
+        const isOpen = (row: any) =>
+          row?.status === 'assigned' || row?.status === 'in_progress';
         const rejectedAuditTask = taskRows
-          .filter(
-            (row) =>
-              row?.status === 'rejected' &&
-              (row?.task_type === 'audit' || Number(row?.audit_round) > 0)
-          )
+          .filter((row) => row?.status === 'rejected' && isAuditRow(row))
           .sort((a, b) => Number(b?.audit_round || 0) - Number(a?.audit_round || 0))[0];
+        const openAuditTask = taskRows
+          .filter((row) => isOpen(row) && isAuditRow(row))
+          .sort((a, b) => Number(b?.audit_round || 0) - Number(a?.audit_round || 0))[0];
+        // An open or rejected audit task must win over an older planting task,
+        // or Start Audit opens the wrong form and the assigned card never moves.
         const linkedTask =
+          (asAuditProfile ? rejectedAuditTask || openAuditTask : null) ||
           rejectedAuditTask ||
+          openAuditTask ||
           taskRows.find((row) => row?.status === 'rejected') ||
           taskRows.find((row) => row?.id === data.id) ||
           taskRows[0];
@@ -228,12 +240,12 @@ export default function TreeDetailScreen() {
   );
 
   const openInSatelliteMaps = () => {
-    if (!tree?.latitude || !tree?.longitude) {
+    const lat = Number(tree?.latitude) || Number(task?.latitude) || 0;
+    const lng = Number(tree?.longitude) || Number(task?.longitude) || 0;
+    if (!lat || !lng) {
       Alert.alert('No GPS Coordinates', 'This tree does not have valid coordinates recorded.');
       return;
     }
-    const lat = Number(tree.latitude);
-    const lng = Number(tree.longitude);
     // Universal Google Maps URL forcing satellite view with t=k & basemap=satellite
     const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}&basemap=satellite`;
     const fallbackUrl = `https://maps.google.com/?q=${lat},${lng}&t=k&z=19`;
@@ -246,8 +258,8 @@ export default function TreeDetailScreen() {
     if (!tree) return;
     const navParams = {
       focusTreeId: tree.id,
-      focusLat: Number(tree.latitude) || undefined,
-      focusLng: Number(tree.longitude) || undefined,
+      focusLat: Number(tree.latitude) || Number(task?.latitude) || undefined,
+      focusLng: Number(tree.longitude) || Number(task?.longitude) || undefined,
     };
 
     // 1. Direct navigate on current navigator (works for HistoryStack, RootStack, or child)
@@ -412,6 +424,11 @@ export default function TreeDetailScreen() {
           <View style={styles.updatedPill}>
             <Ionicons name="refresh" size={12} color="#fff" />
             <Text style={styles.updatedPillText}>UPDATED</Text>
+          </View>
+        ) : task?.status === 'completed' ? (
+          <View style={styles.completedPill}>
+            <Ionicons name="checkmark-circle" size={12} color="#fff" />
+            <Text style={styles.completedPillText}>COMPLETED</Text>
           </View>
         ) : (
           <View style={styles.pendingPill}>
@@ -933,7 +950,7 @@ export default function TreeDetailScreen() {
         ) : null}
 
         {/* ─── 6. PLANTING BASELINE & SPECS (CLEAN EXPANDABLE ACCORDION) ─── */}
-        {hasAudits ? <View style={styles.accordionCard}>
+        <View style={styles.accordionCard}>
           <TouchableOpacity
             style={styles.accordionHeader}
             onPress={() => setBaselineExpanded(!baselineExpanded)}
@@ -982,6 +999,8 @@ export default function TreeDetailScreen() {
                       ? 'Rejected Date'
                       : isApproved
                       ? 'Approved Date'
+                      : task?.status === 'completed'
+                      ? 'Completed Date'
                       : 'Assigned Date'
                   }
                   value={formatDateFriendly(
@@ -1002,7 +1021,7 @@ export default function TreeDetailScreen() {
               </View>
             </View>
           )}
-        </View> : null}
+        </View>
 
         {/* ─── 7. LOCATION & MAP CARD ─── */}
         <View style={styles.locationCard}>
@@ -1012,7 +1031,10 @@ export default function TreeDetailScreen() {
           </View>
 
           <MapPreview
-            coords={{ latitude: Number(tree.latitude) || 0, longitude: Number(tree.longitude) || 0 }}
+            coords={{
+              latitude: Number(tree.latitude) || Number(task?.latitude) || 0,
+              longitude: Number(tree.longitude) || Number(task?.longitude) || 0,
+            }}
             height={150}
             onPress={handleViewOnInteractiveMap}
           />
@@ -1038,7 +1060,7 @@ export default function TreeDetailScreen() {
 
           <View style={styles.coordsStrip}>
             <Text style={styles.coordsText}>
-              Lat: <Text style={{ fontWeight: '800', color: '#111827' }}>{Number(tree.latitude ?? 0).toFixed(6)}</Text>  ·  Long: <Text style={{ fontWeight: '800', color: '#111827' }}>{Number(tree.longitude ?? 0).toFixed(6)}</Text>
+              Lat: <Text style={{ fontWeight: '800', color: '#111827' }}>{(Number(tree.latitude) || Number(task?.latitude) || 0).toFixed(6)}</Text>  ·  Long: <Text style={{ fontWeight: '800', color: '#111827' }}>{(Number(tree.longitude) || Number(task?.longitude) || 0).toFixed(6)}</Text>
             </Text>
           </View>
         </View>
@@ -1094,7 +1116,8 @@ export default function TreeDetailScreen() {
             onPress={() =>
               navigation.navigate('EditTree', {
                 treeId: tree.id,
-                auditRound: 1,
+                taskId: task?.id || null,
+                auditRound: Number(task?.audit_round) || auditStatus.currentRound || 1,
               })
             }
           >

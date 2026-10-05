@@ -1,0 +1,8 @@
+src/screens/History/HistoryScreen.tsx(22,53): error TS2305: Module '"../../types"' has no exported member 'HistoryCategory'.
+src/screens/Home/HomeScreen.tsx(29,25): error TS2305: Module '"../../types"' has no exported member 'ProjectGeofence'.
+src/screens/Map/TreeMapScreen.tsx(32,3): error TS2305: Module '"../../types"' has no exported member 'ProjectGeofence'.
+src/screens/Map/TreeMapScreen.tsx(33,3): error TS2305: Module '"../../types"' has no exported member 'GeofenceCoordinate'.
+src/screens/Map/TreeMapScreen.tsx(34,3): error TS2305: Module '"../../types"' has no exported member 'GeofenceChangeRequest'.
+src/services/projectGeofenceService.ts(4,3): error TS2305: Module '"../types"' has no exported member 'ProjectGeofence'.
+src/services/projectGeofenceService.ts(5,3): error TS2305: Module '"../types"' has no exported member 'GeofenceCoordinate'.
+src/services/projectGeofenceService.ts(6,3): error TS2305: Module '"../types"' has no exported member 'GeofenceChangeRequest'.

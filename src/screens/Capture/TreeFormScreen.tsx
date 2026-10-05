@@ -30,7 +30,7 @@ import { Project } from '../../types';
 import { uploadTreePhoto } from '../../services/storageService';
 import { completeTask } from '../../services/taskService';
 import { useTaskStore } from '../../store/taskStore';
-import { createTreeIdentity } from '../../utils/treeId';
+import { createTreeIdentity, splitLabeledTreeName } from '../../utils/treeId';
 import MapPreview from '../../components/MapPreview';
 
 type Nav = NativeStackNavigationProp<CaptureStackParamList, 'TreeForm'>;
@@ -39,10 +39,7 @@ type Route = RouteProp<CaptureStackParamList, 'TreeForm'>;
 const SLOT_LABELS = ['Front', 'Side', 'Close-up'];
 
 function splitAssignedTreeName(value: string): { name: string; code: string } {
-  const code = value.match(/\(([A-Za-z0-9]+)\)\s*$/)?.[1]?.toUpperCase() ?? '';
-  const withoutCode = value.replace(/\s*\([A-Za-z0-9]+\)\s*$/, '').trim();
-  const name = withoutCode.split(/\s+[—–-]\s+/).pop()?.trim() || withoutCode;
-  return { name, code };
+  return splitLabeledTreeName(value);
 }
 
 export default function TreeFormScreen() {

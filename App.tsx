@@ -10,7 +10,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { supabase } from './src/services/supabase';
 import { AppDialogHost, setWorkReportUser } from './src/services/appDialog';
-import { useAuthStore } from './src/store/authStore';
+import { getCachedActiveProject, useAuthStore } from './src/store/authStore';
 import { useTreeStore } from './src/store/treeStore';
 import { fetchUserProfile, fetchUserProjects, fetchAllProjects, buildUserFromProfile } from './src/services/treeService';
 import logo from './src/assets/logo.png';
@@ -180,7 +180,13 @@ async function loadUserData(userId: string, email: string, metadata?: any) {
     assignedProjects = [];
   }
 
-  const initialActiveProjectId = allProjects[0]?.id ?? null;
+  const cachedProjectId = await getCachedActiveProject(userId);
+  const initialActiveProjectId =
+    (cachedProjectId && allProjects.some((project) => project.id === cachedProjectId)
+      ? cachedProjectId
+      : null) ??
+    allProjects[0]?.id ??
+    null;
 
   const user = buildUserFromProfile(
     userId,

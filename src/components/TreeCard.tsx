@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { TreeRecord, Task, TreeCondition } from '../types';
-import { isAutoTreeId, resolveTreeId, shortRecordCode } from '../utils/treeId';
+import { isAutoTreeId, resolveTreeId, shortRecordCode, splitLabeledTreeName } from '../utils/treeId';
 import { getAuditStatus, getDueLabel, AuditStatus } from '../services/auditService';
 
 export interface TreeCardProps {
@@ -99,7 +99,11 @@ export default function TreeCard({
   const isCompleted = effectiveStatus === 'completed';
   const isApproved = effectiveStatus === 'approved';
 
-  // The code beside the tree name is the ID. A generated TREE-#### value is not shown.
+  // The code in the name, such as Saag (TREE-A38IN14), is the tree ID.
+  // A generated TREE-#### value and the record's short hex code are fallbacks.
+  const labeled = splitLabeledTreeName(tree?.species) ;
+  const taskLabeled = splitLabeledTreeName(task?.name || task?.title);
+  const labeledCode = labeled.code || taskLabeled.code;
   const storedId = tree ? resolveTreeId(tree) : '';
   const nameCode =
     shortRecordCode(tree?.id) ||
@@ -109,27 +113,26 @@ export default function TreeCard({
   const isAssignedCard = effectiveStatus === 'assigned' || effectiveStatus === 'in_progress';
   const resolvedId = isAssignedCard
     ? taskCode || (task?.id ? task.id.slice(0, 8).toUpperCase() : '—')
-    : (displayIdProp && !isAutoTreeId(displayIdProp) ? displayIdProp : '') ||
+    : (labeledCode && !isAutoTreeId(labeledCode) ? labeledCode : '') ||
+      (displayIdProp && !isAutoTreeId(displayIdProp) ? displayIdProp : '') ||
       (storedId && !isAutoTreeId(storedId) ? storedId : '') ||
       nameCode ||
       '—';
 
-  // Title is the species only. The record code belongs in the ID line, not beside the name.
+  // Title is the species only. The ID in parentheses stays on the ID line.
   const title = useMemo(() => {
     const species = (tree?.species || '').trim();
     if (species && species !== 'Tree Capture') {
-      return species.replace(/\s*\([A-Fa-f0-9]{4,36}\)\s*$/, '').trim() || species;
+      return splitLabeledTreeName(species).name || species;
     }
 
-    const rawName = (task?.name || '').trim();
+    const rawName = (task?.name || task?.title || '').trim();
     if (rawName) {
-      const parts = rawName.split(/ — | - | · /);
-      const mainPart = parts.length > 1 ? parts[parts.length - 1].trim() : rawName;
-      return mainPart.replace(/\s*\([A-Fa-f0-9]{4,36}\)\s*$/, '').trim() || 'Tree';
+      return splitLabeledTreeName(rawName).name || 'Tree';
     }
 
     return 'Tree';
-  }, [task?.name, tree?.species]);
+  }, [task?.name, task?.title, tree?.species]);
 
   // Photo URL resolution. An audited card shows the latest audit's front photo,
   // not the original planting photo that is still stored on the tree.

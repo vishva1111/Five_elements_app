@@ -1,0 +1,49 @@
+{
+  "id": "19326487-a120-4c35-8013-01b0940756dd",
+  "status": "ERRORED",
+  "platform": "ANDROID",
+  "error": {
+    "errorCode": "EAS_BUILD_UNKNOWN_GRADLE_ERROR",
+    "message": "Gradle build failed with unknown error. See logs for the \"Run gradlew\" phase for more information."
+  },
+  "artifacts": {},
+  "fingerprint": {
+    "id": "01a0ec45-8d35-7d61-a93a-13458d815eed",
+    "hash": "730287a5342bfaa722962eb457cd4dc833af034f"
+  },
+  "initiatingActor": {
+    "id": "e2ed44b3-d073-41ee-ad2c-300f41cc54a3",
+    "displayName": "deepnimbark"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/78b252e7-4fdc-4571-a542-c135789a5715/19326487-a120-4c35-8013-01b0940756dd/2026-09-29T08%3A35%3A49Z-1081cd2b-79bb-4341-a3c0-91e804ad4fda.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260929%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260929T083954Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=2b7e0a1acc994ffba74752ac80e6801c878ba6e6f4bcf8fea993ccaf89c1dd31ab9fba59a98c125bee1845e901e0e61df13900610f12098dc1f8d087ed209a8939f1b03ef9e91aa9bbfa85bb1267e5ee3e0f0d7a01898582ee17eb5162961a92155c5db96465b95eb1cda6f23964139b2bdbfc74399ee44c9f8cbbceda819c6fbdfa44746670ffd37cef97acda0698b34c80efbde3920a8929b4b64799f49014b2eb81ae09678cf5a70c0896ac23558bd45d9e668cf334c29c861a8b740ce5a357fc1cd54e15503032d2926d65f9777bce89aaea993de669a44aa8083bc402d610619bdd992813208fb392245b4e74508458fb6416a5e22670ff41fdd97926e0"
+  ],
+  "app": {
+    "id": "78b252e7-4fdc-4571-a542-c135789a5715",
+    "name": "treeapp",
+    "slug": "treeapp",
+    "ownerAccount": {
+      "id": "a31c81ef-33a6-4b03-93f3-b469e8eb8af7",
+      "name": "deepnimbark"
+    }
+  },
+  "distribution": "INTERNAL",
+  "buildProfile": "preview",
+  "appIdentifier": "com.fiveelements.treeapp",
+  "sdkVersion": "57.0.0",
+  "appVersion": "1.0.0",
+  "appBuildVersion": "1",
+  "gitCommitHash": "a5e6e5fcf11f9a65fa61be6e39fe897e387d0ff4",
+  "gitCommitMessage": "notification,alert box design.",
+  "priority": "NORMAL",
+  "createdAt": "2026-09-29T08:35:45.419Z",
+  "updatedAt": "2026-09-29T08:37:21.314Z",
+  "completedAt": "2026-09-29T08:37:21.123Z",
+  "expirationDate": "2026-10-13T08:35:45.455Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 2815,
+    "buildQueueTime": 5941,
+    "buildDuration": 86948
+  }
+}
