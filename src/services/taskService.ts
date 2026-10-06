@@ -1,19 +1,87 @@
 import { supabase } from './supabase';
 import { Task } from '../types';
 
-export async function fetchAgentTasks(userId: string) {
-  const { data, error } = await supabase
-    .from('tasks')
-    .select('*')
-    .eq('assignee_id', userId)
-    .order('created_at', { ascending: false });
+function normalizeTaskStatus(status: unknown, row: Record<string, any>): Task['status'] {
+  const value = String(status ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (value === 'in_progress' || value === 'inprogress' || value === 'started' || value === 'ongoing') return 'in_progress';
+  if (value === 'completed' || value === 'complete' || value === 'done' || value === 'submitted') return 'completed';
+  if (value === 'approved' || value === 'approve') return 'approved';
+  if (value === 'rejected' || value === 'reject') return 'rejected';
+  if (value === 'assigned' || value === 'assign' || value === 'pending' || value === 'open' || value === 'new') return 'assigned';
+  if (!value && !row.completed_at && !row.reviewed_at) return 'assigned';
+  return (value || 'assigned') as Task['status'];
+}
 
-  if (error) {
-    console.error('[taskService] fetchAgentTasks error:', error.message);
-    return { data: [] as Task[], error: error.message };
+function isPlantingTask(row: Record<string, any>) {
+  const kind = String(row.task_type ?? row.event_type ?? row.type ?? '').trim().toLowerCase();
+  if (kind === 'audit' || Number(row.audit_round) > 0) return false;
+  if (!kind || kind === 'planting' || kind === 'capture' || kind === 'task') return true;
+  const name = String(row.name ?? row.title ?? '').toLowerCase();
+  return name.includes('plant');
+}
+
+/** Auth id plus the profile id, when the admin panel stores a different user id. */
+async function assigneeIdsFor(userId: string): Promise<string[]> {
+  const ids = new Set<string>([userId]);
+  const { data } = await supabase
+    .from('profiles')
+    .select('id, auth_id')
+    .eq('auth_id', userId)
+    .limit(5);
+  (data ?? []).forEach((row: { id?: string | null; auth_id?: string | null }) => {
+    if (row.id) ids.add(row.id);
+    if (row.auth_id) ids.add(row.auth_id);
+  });
+  return [...ids];
+}
+
+export async function fetchAgentTasks(userId: string) {
+  const ids = await assigneeIdsFor(userId);
+  const columns = ['assignee_id', 'user_id', 'assigned_to', 'agent_id'];
+  const byId = new Map<string, Task>();
+  let lastError: string | null = null;
+  let sawRows = false;
+
+  for (const column of columns) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .in(column, ids)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      lastError = error.message;
+      const missing = /column|schema cache|does not exist/i.test(error.message);
+      if (missing) continue;
+      // A failed assignee_id read must not hide rows stored on another user column.
+      if (column === 'assignee_id') continue;
+      break;
+    }
+
+    const rows = data ?? [];
+    if (rows.length > 0) sawRows = true;
+    rows.forEach((row: any) => {
+      if (!row?.id || byId.has(row.id)) return;
+      const task = {
+        ...row,
+        assignee_id: row.assignee_id || row.user_id || row.assigned_to || row.agent_id || userId,
+        project_id: row.project_id || row.project || null,
+        status: normalizeTaskStatus(row.status, row),
+        task_type: row.task_type || (isPlantingTask(row) ? 'planting' : row.task_type),
+        name: row.name || row.title || 'Planting',
+      } as Task;
+      byId.set(row.id, task);
+    });
+    // The live table uses assignee_id. Only stop when that read actually found rows.
+    if (column === 'assignee_id' && rows.length > 0) break;
   }
 
-  const tasks = (data ?? []) as Task[];
+  if (!sawRows && lastError) {
+    console.error('[taskService] fetchAgentTasks error:', lastError);
+    return { data: [] as Task[], error: lastError };
+  }
+
+  const tasks = [...byId.values()];
 
   // Resolve created_by -> assigner's display name (who assigned me this task).
   // No FK-based embed available for this relationship, so it's a second lookup.

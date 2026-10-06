@@ -4,24 +4,10 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="fix id bug and work all.">
-      <change afterPath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" afterDir="false" />
+    <list default="true" id="675aa35d-d0b4-403e-b95f-bac4ab2efb41" name="Changes" comment="fix desin">
       <change beforePath="$PROJECT_DIR$/.expo/dev/logs/start.log" beforeDir="false" afterPath="$PROJECT_DIR$/.expo/dev/logs/start.log" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.lyzo/master_memory.json" beforeDir="false" afterPath="$PROJECT_DIR$/.lyzo/master_memory.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/MapPreview.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/MapPreview.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Auth/LoginScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Auth/LoginScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Capture/TreeFormScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Capture/TreeFormScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/History/EditTreeScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/EditTreeScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/History/HistoryScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/HistoryScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/TreeDetailScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/History/UpdateTreeScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/History/UpdateTreeScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Home/HomeScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Home/HomeScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Home/NotificationHistoryScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Home/NotificationHistoryScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Home/ProjectSelectScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Home/ProjectSelectScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Map/TreeMapScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Map/TreeMapScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Profile/ProfileScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Profile/ProfileScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/Task/TaskScreen.tsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -447,7 +433,15 @@
       <option name="project" value="LOCAL" />
       <updated>1791212458191</updated>
     </task>
-    <option name="localTasksCounter" value="45" />
+    <task id="LOCAL-00045" summary="fix desin">
+      <option name="closed" value="true" />
+      <created>1791217050130</created>
+      <option name="number" value="00045" />
+      <option name="presentableId" value="LOCAL-00045" />
+      <option name="project" value="LOCAL" />
+      <updated>1791217050131</updated>
+    </task>
+    <option name="localTasksCounter" value="46" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -474,7 +468,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="location detch bug solve and project according tree fanching show." />
     <MESSAGE value="approve/reject according update/audit and chnage some designs." />
     <MESSAGE value="tree card update." />
     <MESSAGE value="3 photos,card audit,auto audit time set or cheak." />
@@ -499,6 +492,7 @@
     <MESSAGE value="working update." />
     <MESSAGE value="fix database problem." />
     <MESSAGE value="fix id bug and work all." />
-    <option name="LAST_COMMIT_MESSAGE" value="fix id bug and work all." />
+    <MESSAGE value="fix desin" />
+    <option name="LAST_COMMIT_MESSAGE" value="fix desin" />
   </component>
 </project>

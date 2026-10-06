@@ -144,9 +144,9 @@ export default function TaskScreen() {
     const visibleTrees = pid ? myTrees.filter((t) => t.project_id === pid) : myTrees;
     setTrees(treesRes.error ? [] : visibleTrees);
 
-    // Only database tasks are shown. An empty API result clears the old cards.
-    const dbTasks = (tasksRes.data ?? []).filter((task) => !task.id.startsWith('local_'));
-    setTasks(tasksRes.error ? [] : dbTasks);
+    // Only database tasks are shown. A failed read keeps the cards already loaded.
+    const dbTasks = (tasksRes.data ?? []).filter((task) => task?.id && !String(task.id).startsWith('local_'));
+    if (!tasksRes.error) setTasks(dbTasks);
 
     // Check if active project has remaining geofencing setup
     if (pid) {
@@ -198,20 +198,28 @@ export default function TaskScreen() {
       .channel(`agent-task-review-${userId}`)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'tasks', filter: `assignee_id=eq.${userId}` },
+        { event: '*', schema: 'public', table: 'tasks', filter: `assignee_id=eq.${userId}` },
         (payload) => {
-          const next = payload.new as Partial<Task> | null;
-          const status = next?.status;
-          if (status !== 'approved' && status !== 'rejected' && status !== 'completed') return;
+          const next = (payload.new ?? null) as Partial<Task> | null;
+          if (!next?.id) return;
+          const status = next.status;
+          const current = useTaskStore.getState().tasks ?? [];
+          const exists = current.some((task) => task.id === next.id);
+          if (payload.eventType === 'INSERT' || !exists) {
+            setTasks([next as Task, ...current.filter((task) => task.id !== next.id)]);
+            if (status === 'assigned' || status === 'in_progress') setActiveTab('assigned');
+            return;
+          }
+          if (status !== 'approved' && status !== 'rejected' && status !== 'completed' && status !== 'assigned' && status !== 'in_progress') return;
           setTasks(
-            (useTaskStore.getState().tasks ?? []).map((task) =>
-              task.id === next?.id ? { ...task, ...next, status } : task
+            current.map((task) =>
+              task.id === next.id ? { ...task, ...next, status: status as Task['status'] } : task
             )
           );
           // A reviewed audit leaves Completed. Reject opens Rejected; approve opens Approved.
           if (status === 'rejected') setActiveTab('rejected');
           else if (status === 'approved') setActiveTab('approved');
-          else setActiveTab('completed');
+          else if (status === 'completed') setActiveTab('completed');
         }
       )
       .subscribe();
@@ -226,30 +234,35 @@ export default function TaskScreen() {
     if (!userId) return;
     let cancelled = false;
     const watchReview = async () => {
-      const { data } = await fetchAgentTasks(userId);
-      if (cancelled) return;
-      if (!data?.length) {
-        setTasks([]);
-        return;
-      }
+      const { data, error } = await fetchAgentTasks(userId);
+      if (cancelled || error) return;
       const current = useTaskStore.getState().tasks ?? [];
-      const freshById = new Map(data.map((task) => [task.id, task]));
+      const fresh = data ?? [];
+      const freshById = new Map(fresh.map((task) => [task.id, task]));
+      const added = fresh.filter((task) => !current.some((row) => row.id === task.id));
       let moved: 'approved' | 'rejected' | null = null;
       const next = current.map((task) => {
-        const fresh = freshById.get(task.id);
-        if (!fresh || fresh.status === task.status) return task;
-        if (fresh.status === 'approved' || fresh.status === 'rejected') {
+        const row = freshById.get(task.id);
+        if (!row || row.status === task.status) return task;
+        if (row.status === 'approved' || row.status === 'rejected') {
           if (task.status === 'completed' || task.status === 'assigned' || task.status === 'in_progress') {
-            moved = fresh.status;
+            moved = row.status;
           }
-          return { ...task, ...fresh };
+          return { ...task, ...row };
         }
-        return task;
+        return { ...task, ...row };
       });
-      if (!moved) return;
+      if (added.length > 0) {
+        setTasks([...added, ...next]);
+        if (added.some((task) => task.status === 'assigned' || task.status === 'in_progress')) {
+          setActiveTab('assigned');
+        }
+        return;
+      }
+      if (!moved && next.every((task, index) => task === current[index])) return;
       setTasks(next);
       // A reviewed audit leaves Completed for the one matching tab.
-      setActiveTab(moved === 'rejected' ? 'rejected' : 'approved');
+      if (moved) setActiveTab(moved === 'rejected' ? 'rejected' : 'approved');
     };
     const timer = setInterval(watchReview, 12000);
     return () => {
@@ -312,6 +325,8 @@ export default function TaskScreen() {
     const treeIds = new Set(projectTrees.map((tree) => tree.id));
     return liveTasks.filter((task) => {
       if (task.project_id === activeProjectId) return true;
+      // A planting task has no tree yet. Keep it when the admin left project_id empty.
+      if (!task.project_id && (task.status === 'assigned' || task.status === 'in_progress')) return true;
       if (task.project_id) return false;
       const linkedId = task.tree_record_id || task.tree_id;
       return Boolean(linkedId && treeIds.has(linkedId));
@@ -327,12 +342,22 @@ export default function TaskScreen() {
       return round * 1e15 + (Number.isFinite(time) ? time : 0);
     };
     const byTree = new Map<string, Task>();
+    const openPlanting: Task[] = [];
+    const isOpenPlanting = (task: Task) =>
+      (task.status === 'assigned' || task.status === 'in_progress') &&
+      task.task_type !== 'audit' &&
+      !task.audit_round;
     projectTasks.forEach((task) => {
+      // Each assigned planting task is its own card, even before a tree exists.
+      if (isOpenPlanting(task)) {
+        openPlanting.push(task);
+        return;
+      }
       const key = task.tree_record_id || task.tree_id || task.id;
       const prev = byTree.get(key);
       if (!prev || rank(task) >= rank(prev)) byTree.set(key, task);
     });
-    return [...byTree.values()];
+    return [...openPlanting, ...byTree.values()];
   }, [projectTasks]);
 
   // assigned + in_progress both show in the Assigned tab
