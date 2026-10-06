@@ -67,6 +67,8 @@ export default function TaskScreen() {
   const setTrees = useTreeStore((s) => s.setTrees);
   const tasks = useTaskStore((s) => s.tasks) ?? [];
   const setTasks = useTaskStore((s) => s.setTasks);
+  const pendingTaskTab = useTaskStore((s) => s.pendingTaskTab);
+  const pendingTaskTabAt = useTaskStore((s) => s.pendingTaskTabAt);
   const setActiveTaskId = useTaskStore((s) => s.setActiveTaskId);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<TaskTab>('assigned');
@@ -77,6 +79,7 @@ export default function TaskScreen() {
   const [treeIds, setTreeIds] = useState<Record<string, string>>({});
   const [auditsByTree, setAuditsByTree] = useState<Record<string, any[]>>({});
   const loadSeqRef = useRef(0);
+  const holdCompletedUntil = useRef(0);
 
   // Keep stable refs so loadTasks never needs to be recreated on value changes
   const activeProjectIdRef = useRef(activeProjectId);
@@ -87,6 +90,14 @@ export default function TaskScreen() {
     const params = route.params as { tab?: TaskTab; at?: number } | undefined;
     if (params?.tab) setActiveTab(params.tab);
   }, [route.params, (route.params as { at?: number } | undefined)?.at]);
+
+  // An audit form sits on the root stack, so it cannot pass a tab param to this
+  // sibling. The store request is what opens Completed after the audit is saved.
+  useEffect(() => {
+    if (!pendingTaskTab) return;
+    setActiveTab(pendingTaskTab);
+    if (pendingTaskTab === 'completed') holdCompletedUntil.current = Date.now() + 8000;
+  }, [pendingTaskTab, pendingTaskTabAt]);
 
   // Assigned tree and audit tasks belong to their due date. Other tabs stay on
   // the day the work was reviewed or created.
@@ -207,7 +218,19 @@ export default function TaskScreen() {
           const exists = current.some((task) => task.id === next.id);
           if (payload.eventType === 'INSERT' || !exists) {
             setTasks([next as Task, ...current.filter((task) => task.id !== next.id)]);
-            if (status === 'assigned' || status === 'in_progress') setActiveTab('assigned');
+            const linkedId = next.tree_record_id || next.tree_id;
+            const finishedSameTree = current.some((task) => {
+              if (task.status !== 'completed') return false;
+              const taskTree = task.tree_record_id || task.tree_id;
+              return Boolean(linkedId && taskTree && taskTree === linkedId);
+            });
+            // The next assigned round must not pull the screen off the audit that was just completed.
+            const stayOnCompleted =
+              useTaskStore.getState().pendingTaskTab === 'completed' ||
+              Date.now() < holdCompletedUntil.current;
+            if ((status === 'assigned' || status === 'in_progress') && !finishedSameTree && !stayOnCompleted) {
+              setActiveTab('assigned');
+            }
             return;
           }
           if (status !== 'approved' && status !== 'rejected' && status !== 'completed' && status !== 'assigned' && status !== 'in_progress') return;
@@ -254,7 +277,21 @@ export default function TaskScreen() {
       });
       if (added.length > 0) {
         setTasks([...added, ...next]);
-        if (added.some((task) => task.status === 'assigned' || task.status === 'in_progress')) {
+        const finishedTreeIds = new Set(
+          next
+            .filter((task) => task.status === 'completed')
+            .map((task) => task.tree_record_id || task.tree_id)
+            .filter((id): id is string => Boolean(id))
+        );
+        const opensAnotherTree = added.some((task) => {
+          if (task.status !== 'assigned' && task.status !== 'in_progress') return false;
+          const linkedId = task.tree_record_id || task.tree_id;
+          return !linkedId || !finishedTreeIds.has(linkedId);
+        });
+        const stayOnCompleted =
+          useTaskStore.getState().pendingTaskTab === 'completed' ||
+          Date.now() < holdCompletedUntil.current;
+        if (opensAnotherTree && !stayOnCompleted) {
           setActiveTab('assigned');
         }
         return;
@@ -343,10 +380,17 @@ export default function TaskScreen() {
     };
     const byTree = new Map<string, Task>();
     const openPlanting: Task[] = [];
+    const completedBesideOpen = new Map<string, Task>();
     const isOpenPlanting = (task: Task) =>
       (task.status === 'assigned' || task.status === 'in_progress') &&
       task.task_type !== 'audit' &&
       !task.audit_round;
+    const isOpen = (task: Task) => task.status === 'assigned' || task.status === 'in_progress';
+    const keepCompleted = (key: string, task: Task) => {
+      if (task.status !== 'completed') return;
+      const held = completedBesideOpen.get(key);
+      if (!held || rank(task) >= rank(held)) completedBesideOpen.set(key, task);
+    };
     projectTasks.forEach((task) => {
       // Each assigned planting task is its own card, even before a tree exists.
       if (isOpenPlanting(task)) {
@@ -355,9 +399,21 @@ export default function TaskScreen() {
       }
       const key = task.tree_record_id || task.tree_id || task.id;
       const prev = byTree.get(key);
-      if (!prev || rank(task) >= rank(prev)) byTree.set(key, task);
+      if (!prev || rank(task) >= rank(prev)) {
+        // A later assigned round must not hide the audit that was just completed.
+        if (prev && prev.status === 'completed' && isOpen(task)) keepCompleted(key, prev);
+        byTree.set(key, task);
+      } else if (task.status === 'completed' && isOpen(prev)) {
+        keepCompleted(key, task);
+      }
     });
-    return [...openPlanting, ...byTree.values()];
+    const keptCompleted = [...completedBesideOpen.entries()]
+      .filter(([key, task]) => {
+        const winner = byTree.get(key);
+        return Boolean(winner && isOpen(winner) && winner.id !== task.id);
+      })
+      .map(([, task]) => task);
+    return [...openPlanting, ...byTree.values(), ...keptCompleted];
   }, [projectTasks]);
 
   // assigned + in_progress both show in the Assigned tab
@@ -393,6 +449,8 @@ export default function TaskScreen() {
           ...t,
           photo_url: latestAudit.photo_url || t.photo_url,
           tree_condition: latestAudit.tree_condition || t.tree_condition,
+          audit_round: latestAudit.monitoring_round || t.audit_round || null,
+          task_type: 'audit',
         };
       });
     return list.sort(
@@ -579,7 +637,7 @@ export default function TaskScreen() {
       // page starts the audit; the card itself does not open the audit form.
       navigation.navigate('TreeDetail', {
         treeId: targetId,
-        asAuditProfile: isAuditTask,
+        asAuditProfile: isAuditTask || (isApproved && treeAudits.length > 0),
       });
     };
 

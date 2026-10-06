@@ -641,7 +641,13 @@ export default function UpdateTreeScreen() {
       Alert.alert(
         'Audit Saved',
         `Audit ${activeTab} recorded for ${liveTreeId}.${taskNote}`,
-        [{ text: 'OK', onPress: () => (navigation as any).navigate('Main', { screen: 'Task', params: { tab: 'completed', at: Date.now() } }) }]
+        [{
+          text: 'OK',
+          onPress: () => {
+            useTaskStore.getState().openTaskTab('completed');
+            (navigation as any).navigate('Main', { screen: 'Task', params: { tab: 'completed', at: Date.now() } });
+          },
+        }]
       );
     } catch (err: any) {
       Alert.alert('Error', err?.message ?? 'Failed to save audit');

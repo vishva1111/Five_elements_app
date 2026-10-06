@@ -327,6 +327,7 @@ export default function EditTreeScreen() {
         useTreeStore.getState().updateTree(tree.id, { survey_date: actionDate });
         useProjectRefreshStore.getState().triggerProjectRefresh();
         await updateBaselineTree(treeId, { survey_date: actionDate });
+        useTaskStore.getState().openTaskTab('completed');
         navigation.navigate('Main', {
           screen: 'Task',
           params: { tab: 'completed', at: Date.now() },

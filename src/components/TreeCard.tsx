@@ -179,7 +179,11 @@ export default function TreeCard({
   const surveyor = tree?.surveyor || task?.surveyor;
   const landType = tree?.land_type;
 
-  const isAudit = task?.task_type === 'audit' || !!task?.audit_round || actionVariant === 'audit';
+  const isAudit =
+    task?.task_type === 'audit' ||
+    !!task?.audit_round ||
+    actionVariant === 'audit' ||
+    (effectiveStatus === 'approved' && hasCompletedAudit);
   const isCompletedAudit = effectiveStatus === 'completed' && isAudit;
   const isUpdatedCard = effectiveStatus === 'completed' && Boolean(task?.review_notes);
   const isAuditCard = isAudit && (isAssigned || isCompleted || isApproved || isRejected);

@@ -152,6 +152,11 @@ export interface TaskState {
   // completed on submit, without threading a param through every screen.
   activeTaskId: string | null;
   setActiveTaskId: (taskId: string | null) => void;
+  // Set when an audit is saved. The task tab is a sibling of the audit form,
+  // so the form cannot pass this tab through navigation params.
+  pendingTaskTab: 'assigned' | 'completed' | 'approved' | 'rejected' | null;
+  pendingTaskTabAt: number;
+  openTaskTab: (tab: 'assigned' | 'completed' | 'approved' | 'rejected') => void;
 }
 
 // ─── Navigation Types ──────────────────────────────────────────────────────────

@@ -483,6 +483,10 @@ export async function submitAudit(params: SubmitAuditParams): Promise<SubmitAudi
     if (surveyor?.trim()) treeUpdates.surveyor = surveyor.trim();
   }
   treeUpdates.survey_date = dateStr;
+  // The task list rebuilds a card from this tree row. Leaving stage as the
+  // plantation job makes the audited card look assigned again.
+  treeUpdates.stage = 'completed';
+  treeUpdates.status = 'completed';
   try {
     await updateTreeFromMonitoring(tree.id, treeUpdates);
   } catch (treeUpdateErr) {

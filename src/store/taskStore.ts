@@ -6,4 +6,7 @@ export const useTaskStore = create<TaskState>((set) => ({
   setTasks: (tasks: Task[]) => set({ tasks }),
   activeTaskId: null,
   setActiveTaskId: (taskId: string | null) => set({ activeTaskId: taskId }),
+  pendingTaskTab: null,
+  pendingTaskTabAt: 0,
+  openTaskTab: (tab) => set({ pendingTaskTab: tab, pendingTaskTabAt: Date.now() }),
 }));
