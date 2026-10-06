@@ -258,7 +258,7 @@ export default function TreeCard({
         <View style={styles.rejectedAccent} />
       ) : null}
       <View style={[styles.cardMainRow, styles.plantingRow]}>
-        {isAssigned && !isAudit ? (
+        {isAssigned && !isAudit && !photoUrl ? (
           <View style={styles.plantingMark}>
             <Ionicons name="leaf" size={22} color="#1a5c2a" />
           </View>
@@ -339,7 +339,7 @@ export default function TreeCard({
           </Text>
 
           {/* Row 3: Badges Row (Location stays in its original place) */}
-          {(!isAssigned || isAudit) ? (
+          {(!isAssigned || isAudit || lat != null || condition) ? (
             <View style={styles.badgesRow}>
               {condition ? (
                 <View style={styles.conditionBadge}>

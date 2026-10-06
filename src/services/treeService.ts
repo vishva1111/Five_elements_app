@@ -154,7 +154,7 @@ export async function fetchMyTrees(
     return { data: null, error: error.message };
   }
 
-  const trees = await attachProjectNames((data ?? []).map(mapTreeRecord));
+  const trees = collapseDuplicateTrees(await attachProjectNames((data ?? []).map(mapTreeRecord)));
   return { data: trees, error: null };
 }
 
@@ -226,12 +226,86 @@ export async function backfillProjectTreeIds(trees: TreeRecord[]): Promise<TreeR
   return next;
 }
 
+const RECORD_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A tree code such as TREE-K4R8A4N is not a record id. The audit table rejects it. */
+export function isRecordUuid(value: unknown): boolean {
+  return RECORD_UUID.test(String(value ?? '').trim());
+}
+
+/** The same tree code can exist twice. Prefer the row that has the card details. */
+export function treeDetailScore(row: any): number {
+  if (!row) return -1;
+  let score = 0;
+  if (row.photo_url) score += 4;
+  if (Array.isArray(row.photo_urls) && row.photo_urls.length > 0) score += 4;
+  if (row.latitude != null && row.longitude != null) score += 4;
+  if (String(row.notes ?? '').includes('##META##')) score += 2;
+  if (row.tree_condition) score += 1;
+  return score;
+}
+
+export function pickBestTree(rows: any[] | null | undefined): any | null {
+  return (rows ?? []).reduce<any>(
+    (best, row) => (treeDetailScore(row) > treeDetailScore(best) ? row : best),
+    null
+  );
+}
+
+/** One card per tree code. A later empty duplicate must not replace the photos and location. */
+export function collapseDuplicateTrees<T extends { id?: string; tree_id?: string | null }>(trees: T[]): T[] {
+  const bestByCode = new Map<string, T>();
+  trees.forEach((tree) => {
+    const code = String(tree?.tree_id ?? '').trim().toLowerCase();
+    if (!code) return;
+    const prev = bestByCode.get(code);
+    if (!prev || treeDetailScore(tree) > treeDetailScore(prev)) bestByCode.set(code, tree);
+  });
+  const kept = new Set<string>();
+  return trees.filter((tree) => {
+    const code = String(tree?.tree_id ?? '').trim().toLowerCase();
+    if (!code) return true;
+    const best = bestByCode.get(code);
+    if (!best || kept.has(code) || best.id !== tree.id) return false;
+    kept.add(code);
+    return true;
+  });
+}
+
 /** Monitoring rows for many trees, keyed by tree_record_id. */
 export async function fetchMonitoringRecordsForTrees(
   treeIds: string[]
 ): Promise<Record<string, any[]>> {
   const out: Record<string, any[]> = {};
-  const ids = [...new Set(treeIds.filter(Boolean))];
+  const requested = [...new Set(treeIds.map((id) => String(id ?? '').trim()).filter(Boolean))];
+  if (!requested.length) return out;
+
+  const recordIds = requested.filter(isRecordUuid);
+  const codes = requested.filter((id) => !isRecordUuid(id));
+  const codeToRecord = new Map<string, string>();
+
+  // A task card can carry the visible tree code. Resolve it before the uuid filter.
+  if (codes.length > 0) {
+    const { data, error } = await supabase
+      .from('tree_records')
+      .select('id, tree_id, photo_url, photo_urls, latitude, longitude, notes, tree_condition')
+      .in('tree_id', codes);
+    if (!error) {
+      const bestByCode = new Map<string, any>();
+      (data ?? []).forEach((row: any) => {
+        const code = String(row?.tree_id ?? '').trim();
+        const prev = bestByCode.get(code);
+        if (code && (!prev || treeDetailScore(row) > treeDetailScore(prev))) bestByCode.set(code, row);
+      });
+      bestByCode.forEach((row, code) => {
+        if (!isRecordUuid(row?.id)) return;
+        codeToRecord.set(code, String(row.id));
+        recordIds.push(String(row.id));
+      });
+    }
+  }
+
+  const ids = [...new Set(recordIds)];
   if (!ids.length) return out;
 
   const { data, error } = await supabase
@@ -251,6 +325,9 @@ export async function fetchMonitoringRecordsForTrees(
     if (!out[key]) out[key] = [];
     out[key].push(row);
   }
+  codeToRecord.forEach((recordId, code) => {
+    if (out[recordId]) out[code] = out[recordId];
+  });
   return out;
 }
 
@@ -473,7 +550,7 @@ export async function fetchTreesByProject(
     return { data: null, error: error.message };
   }
 
-  const trees = await attachProjectNames((data ?? []).map(mapTreeRecord));
+  const trees = collapseDuplicateTrees(await attachProjectNames((data ?? []).map(mapTreeRecord)));
   return { data: trees, error: null };
 }
 
@@ -481,29 +558,37 @@ export async function fetchTreesByProject(
 export async function fetchTreeById(
   id: string
 ): Promise<ApiResponse<TreeRecord>> {
-  // Try with project join first; fall back to plain select if join fails
+  const key = String(id ?? '').trim();
+  if (!key) return { data: null, error: 'Tree not found' };
+
+  // A task card can open the visible tree code. The same code can exist twice,
+  // so choose the row that actually has photos and a location.
+  const column = isRecordUuid(key) ? 'id' : 'tree_id';
   let { data, error } = await supabase
     .from('tree_records')
     .select('*, projects(name)')
-    .eq('id', id)
-    .single();
+    .eq(column, key);
 
   if (error) {
-    // Retry without the join (projects table may not exist yet)
-    const retry = await supabase
-      .from('tree_records')
-      .select('*')
-      .eq('id', id)
-      .single();
+    const retry = await supabase.from('tree_records').select('*').eq(column, key);
     data = retry.data;
     error = retry.error;
   }
 
-  if (error) {
-    return { data: null, error: error.message };
+  let row = pickBestTree(data);
+  if (error || !row) {
+    return { data: null, error: error?.message || 'Tree not found' };
   }
 
-  return { data: await attachProjectName(mapTreeRecord(data)), error: null };
+  // The opened id can be the empty duplicate of a tree code. Use the copy
+  // that has the photos and location instead of leaving the profile blank.
+  const code = String(row.tree_id ?? '').trim();
+  if (code && treeDetailScore(row) < 4) {
+    const siblings = await supabase.from('tree_records').select('*').eq('tree_id', code);
+    row = pickBestTree([row, ...(siblings.data ?? [])]) ?? row;
+  }
+
+  return { data: await attachProjectName(mapTreeRecord(row)), error: null };
 }
 
 // ─── Credit calculation helpers ─────────────────────────────────────────────────
@@ -778,7 +863,7 @@ export async function fetchAllTrees(): Promise<ApiResponse<TreeRecord[]>> {
     return { data: [], error: error.message };
   }
 
-  const trees = await attachProjectNames((data ?? []).map(mapTreeRecord));
+  const trees = collapseDuplicateTrees(await attachProjectNames((data ?? []).map(mapTreeRecord)));
   return { data: trees, error: null };
 }
 
@@ -802,6 +887,6 @@ export async function fetchTreesInBounds(
     return { data: [], error: error.message };
   }
 
-  const trees = await attachProjectNames((data ?? []).map(mapTreeRecord));
+  const trees = collapseDuplicateTrees(await attachProjectNames((data ?? []).map(mapTreeRecord)));
   return { data: trees, error: null };
 }

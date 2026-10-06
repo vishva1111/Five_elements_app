@@ -1,5 +1,7 @@
 import { supabase } from './supabase';
 import { Task } from '../types';
+import { isAutoTreeId, splitLabeledTreeName } from '../utils/treeId';
+import { pickBestTree } from './treeService';
 
 function normalizeTaskStatus(status: unknown, row: Record<string, any>): Task['status'] {
   const value = String(status ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
@@ -20,23 +22,208 @@ function isPlantingTask(row: Record<string, any>) {
   return name.includes('plant');
 }
 
-/** Auth id plus the profile id, when the admin panel stores a different user id. */
-async function assigneeIdsFor(userId: string): Promise<string[]> {
+function quoteFilterValue(value: string) {
+  return `"${value.replace(/"/g, '')}"`;
+}
+
+/** Auth id, profile id, and the names the new tree assignment column stores. */
+async function assigneeIdentity(userId: string): Promise<{ ids: string[]; names: string[] }> {
   const ids = new Set<string>([userId]);
-  const { data } = await supabase
-    .from('profiles')
-    .select('id, auth_id')
-    .eq('auth_id', userId)
-    .limit(5);
-  (data ?? []).forEach((row: { id?: string | null; auth_id?: string | null }) => {
+  const names = new Set<string>();
+  const addRow = (row: {
+    id?: string | null;
+    auth_id?: string | null;
+    name?: string | null;
+    display_name?: string | null;
+    full_name?: string | null;
+  }) => {
     if (row.id) ids.add(row.id);
     if (row.auth_id) ids.add(row.auth_id);
+    [row.name, row.display_name, row.full_name].forEach((name) => {
+      const value = String(name ?? '').trim();
+      if (value) names.add(value);
+    });
+  };
+
+  const joined = await supabase
+    .from('profiles')
+    .select('id, auth_id, name, display_name, full_name')
+    .or(`auth_id.eq.${userId},id.eq.${userId}`)
+    .limit(5);
+  if (!joined.error) {
+    (joined.data ?? []).forEach(addRow);
+  } else {
+    const fallback = await supabase
+      .from('profiles')
+      .select('id, auth_id, name, display_name, full_name')
+      .eq('auth_id', userId)
+      .limit(5);
+    (fallback.data ?? []).forEach(addRow);
+  }
+  return { ids: [...ids], names: [...names] };
+}
+
+function taskStatusFromTree(row: Record<string, any>): Task['status'] {
+  if (row.locked === true) return 'approved';
+  const raw = String(row.status ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (raw === 'approved' || raw === 'rejected' || raw === 'completed') {
+    return normalizeTaskStatus(row.status, row);
+  }
+  // The new rows keep status "inprogress" for both jobs. A planted tree already
+  // has the photo and location the card must show; only a plantation job stays assigned.
+  const stage = String(row.stage ?? '').trim().toLowerCase();
+  if (stage === 'planted' || stage.includes('completed')) return 'completed';
+  return 'assigned';
+}
+
+function taskFromTreeRecord(row: Record<string, any>, userId: string): Task {
+  const status = taskStatusFromTree(row);
+  const labeled = splitLabeledTreeName(row.species);
+  const storedCode = String(row.tree_id ?? '').trim();
+  const taskCode = storedCode && !isAutoTreeId(storedCode) ? storedCode : labeled.code || storedCode || null;
+  const photos = Array.isArray(row.photo_urls)
+    ? row.photo_urls.filter((url: unknown): url is string => typeof url === 'string' && !!url)
+    : [];
+  const name = labeled.name || String(row.species ?? '').trim() || taskCode || 'Planting';
+  const latitude = typeof row.latitude === 'number' ? row.latitude : undefined;
+  const longitude = typeof row.longitude === 'number' ? row.longitude : undefined;
+
+  return {
+    id: String(row.id),
+    task_code: taskCode,
+    name,
+    title: name,
+    project_id: row.project_id || null,
+    assignee_id: userId,
+    target_count: Number(row.quantity) > 0 ? Number(row.quantity) : 1,
+    location: latitude != null && longitude != null ? `${latitude},${longitude}` : row.location || undefined,
+    priority: 'medium',
+    due_date: row.due_date || null,
+    started_at: status === 'in_progress' ? row.submitted_at || null : null,
+    completed_at: status === 'completed' || status === 'approved' ? row.submitted_at || row.survey_date || null : null,
+    created_at: row.submitted_at || row.survey_date || row.created_at || new Date().toISOString(),
+    captured: status === 'assigned' || status === 'in_progress' ? 0 : 1,
+    remaining: status === 'assigned' || status === 'in_progress' ? 1 : 0,
+    progress: status === 'assigned' || status === 'in_progress' ? 0 : 100,
+    status,
+    tree_id: row.id,
+    tree_record_id: row.id,
+    notes: row.notes || undefined,
+    photo_url: row.photo_url || photos[0],
+    latitude,
+    longitude,
+    tree_condition: row.tree_condition || undefined,
+    surveyor: row.surveyor || row.assigned_to || undefined,
+    task_type: row.task_type || 'planting',
+  };
+}
+
+/**
+ * The changed database stores the assignment on the tree instead of a tasks row.
+ * assigned_to is the person's name, and team_member_id is the other user key.
+ */
+async function fetchAssignedTreeTasks(userId: string, ids: string[], names: string[]) {
+  const filters = [
+    ...ids.flatMap((id) => [`team_member_id.eq.${id}`, `assigned_to.eq.${id}`]),
+    ...names.map((name) => `assigned_to.eq.${quoteFilterValue(name)}`),
+  ];
+  if (filters.length === 0) return [] as Task[];
+
+  for (let attempt = 0; attempt < 6 && filters.length > 0; attempt++) {
+    const { data, error } = await supabase.from('tree_records').select('*').or(filters.join(','));
+    if (!error) {
+      return (data ?? [])
+        .filter((row: any) => row?.id && (row.assigned_to || row.team_member_id))
+        .map((row: any) => taskFromTreeRecord(row, userId));
+    }
+    const column = missingColumnName(error.message);
+    if (!column) {
+      console.error('[taskService] fetchAssignedTreeTasks error:', error.message);
+      return [] as Task[];
+    }
+    for (let index = filters.length - 1; index >= 0; index--) {
+      if (filters[index].startsWith(`${column}.`)) filters.splice(index, 1);
+    }
+  }
+  return [] as Task[];
+}
+
+function taskLinkKeys(task: Partial<Task>) {
+  return [task.id, task.tree_id, task.tree_record_id, task.task_code]
+    .map((value) => String(value ?? '').trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+/** The tasks table no longer stores the card photo, place, or condition. Copy them from the tree. */
+async function hydrateTaskDetails(tasks: Task[]) {
+  const ids = new Set<string>();
+  const codes = new Set<string>();
+  tasks.forEach((task) => {
+    [task.id, task.tree_id, task.tree_record_id, task.task_code].forEach((value) => {
+      const text = String(value ?? '').trim();
+      if (!text) return;
+      if (isUuid(text)) ids.add(text);
+      else codes.add(text);
+    });
   });
-  return [...ids];
+  if (ids.size === 0 && codes.size === 0) return tasks;
+
+  const rows: Record<string, any>[] = [];
+  if (ids.size > 0) {
+    const byId = await supabase.from('tree_records').select('*').in('id', [...ids]);
+    if (!byId.error) rows.push(...(byId.data ?? []));
+  }
+  if (codes.size > 0) {
+    const byCode = await supabase.from('tree_records').select('*').in('tree_id', [...codes]);
+    if (!byCode.error) rows.push(...(byCode.data ?? []));
+  }
+
+  const byUuid = new Map(rows.filter((row) => row?.id).map((row) => [String(row.id), row]));
+  const rowsByCode = new Map<string, any[]>();
+  rows.forEach((row) => {
+    const code = String(row?.tree_id ?? '').trim().toLowerCase();
+    if (!code) return;
+    const list = rowsByCode.get(code) ?? [];
+    list.push(row);
+    rowsByCode.set(code, list);
+  });
+  const byCode = new Map(
+    [...rowsByCode.entries()].map(([code, list]) => [code, pickBestTree(list)])
+  );
+  const treeFor = (task: Task) =>
+    (task.tree_record_id && byUuid.get(task.tree_record_id)) ||
+    (task.tree_id && (byUuid.get(task.tree_id) || byCode.get(String(task.tree_id).trim().toLowerCase()))) ||
+    (task.task_code && byCode.get(task.task_code.trim().toLowerCase())) ||
+    byUuid.get(task.id);
+
+  return tasks.map((task) => {
+    const row = treeFor(task);
+    if (!row) return task;
+    const card = taskFromTreeRecord(row, task.assignee_id || '');
+    const genericName = !task.name || task.name === 'Planting' || task.name === 'Task' || task.name === 'Tree';
+    return {
+      ...task,
+      name: genericName ? card.name : task.name,
+      title: task.title || card.name,
+      tree_id: isUuid(String(task.tree_id ?? '')) ? task.tree_id : row.id,
+      tree_record_id: task.tree_record_id || row.id,
+      task_code: task.task_code || card.task_code,
+      photo_url: task.photo_url || card.photo_url,
+      latitude: task.latitude ?? card.latitude,
+      longitude: task.longitude ?? card.longitude,
+      location: task.location || card.location,
+      tree_condition: task.tree_condition || card.tree_condition,
+      surveyor: task.surveyor || card.surveyor,
+    };
+  });
 }
 
 export async function fetchAgentTasks(userId: string) {
-  const ids = await assigneeIdsFor(userId);
+  const { ids, names } = await assigneeIdentity(userId);
   const columns = ['assignee_id', 'user_id', 'assigned_to', 'agent_id'];
   const byId = new Map<string, Task>();
   let lastError: string | null = null;
@@ -76,28 +263,40 @@ export async function fetchAgentTasks(userId: string) {
     if (column === 'assignee_id' && rows.length > 0) break;
   }
 
-  if (!sawRows && lastError) {
+  const tasks = [...byId.values()];
+  const treeCards = await fetchAssignedTreeTasks(userId, ids, names);
+  const linked = new Set(tasks.flatMap(taskLinkKeys));
+  treeCards.forEach((card) => {
+    const keys = taskLinkKeys(card);
+    if (keys.some((key) => linked.has(key))) return;
+    tasks.push(card);
+    keys.forEach((key) => linked.add(key));
+  });
+
+  if (tasks.length === 0 && lastError) {
     console.error('[taskService] fetchAgentTasks error:', lastError);
     return { data: [] as Task[], error: lastError };
   }
 
-  const tasks = [...byId.values()];
+  // Rejected, completed, and approved task rows no longer carry the tree photo,
+  // location, or condition. Fill those card details from the linked tree.
+  const detailed = await hydrateTaskDetails(tasks);
 
   // Resolve created_by -> assigner's display name (who assigned me this task).
   // No FK-based embed available for this relationship, so it's a second lookup.
-  const assignerIds = [...new Set(tasks.map(t => t.created_by).filter(Boolean))] as string[];
+  const assignerIds = [...new Set(detailed.map(t => t.created_by).filter(Boolean))] as string[];
   if (assignerIds.length > 0) {
     const { data: profiles } = await supabase
       .from('profiles')
       .select('auth_id, display_name')
       .in('auth_id', assignerIds);
     const nameMap = Object.fromEntries((profiles ?? []).map(p => [p.auth_id, p.display_name]));
-    tasks.forEach(t => {
+    detailed.forEach(t => {
       if (t.created_by) t.assigned_by_name = nameMap[t.created_by] || undefined;
     });
   }
 
-  return { data: tasks, error: null };
+  return { data: detailed, error: null };
 }
 
 export async function createTask(task: Omit<Task, 'id' | 'created_at' | 'captured' | 'remaining' | 'progress'>) {
