@@ -628,16 +628,10 @@ export default function UpdateTreeScreen() {
       }
 
       const liveTreeId = resolveTreeId(tree) || treeIdDisplay;
-      const nextDateFriendly = result.nextDate ? formatDateFriendly(result.nextDate) : '—';
-      const taskNote = result.nextTask
-        ? `\nNext audit task auto-assigned (due ${nextDateFriendly}).`
-        : result.taskSkippedReason
-        ? `\nSchedule saved. Next audit: Audit ${result.nextRound} on ${nextDateFriendly}.`
-        : `\nNext audit: Audit ${result.nextRound} on ${nextDateFriendly}.`;
 
       Alert.alert(
         'Audit Saved',
-        `Audit ${activeTab} recorded for ${liveTreeId}.${taskNote}`,
+        `Audit ${activeTab} recorded for ${liveTreeId}. It is on the Completed tab until an admin approves or rejects it.`,
         [{
           text: 'OK',
           onPress: () => {

@@ -381,14 +381,15 @@ export default function TreeCard({
             </View>
           ) : null}
 
-          {/* Row 4: Audit Progress (4 Dots + Overdue/Due Status) */}
-          {(isCompletedAudit || showAuditedApprovedCard || ((isAssigned || isRejected) && isAudit)) && computedAuditStatus ? (() => {
-            const finishedRound = Number(auditRound) || computedAuditStatus.maxRound || computedAuditStatus.completedCount || 1;
+          {/* Row 4: Audit 1–4 tabs. An assigned audit card always shows them. */}
+          {isAudit && (isAssigned || isRejected || isCompletedAudit || showAuditedApprovedCard) ? (() => {
+            const status = computedAuditStatus;
+            const finishedRound = Number(auditRound) || status?.maxRound || status?.completedCount || 1;
             const isFinishedAuditCard = isCompletedAudit;
             const isRejectedAuditCard = isRejected && isAudit;
-            const isCompleted = computedAuditStatus.allCompleted && !isFinishedAuditCard && !isRejectedAuditCard;
-            const isOverdue = !isFinishedAuditCard && !isRejectedAuditCard && (computedAuditStatus.isOverdue || effectiveDueLabel?.toLowerCase().includes('overdue'));
-            const isTaskDay = !isFinishedAuditCard && !isRejectedAuditCard && !isCompleted && !isOverdue && (computedAuditStatus.isDue || effectiveDueLabel === 'Audit Now' || effectiveDueLabel?.toLowerCase().includes('due today'));
+            const isCompleted = Boolean(status?.allCompleted) && !isFinishedAuditCard && !isRejectedAuditCard;
+            const isOverdue = !isFinishedAuditCard && !isRejectedAuditCard && (status?.isOverdue || effectiveDueLabel?.toLowerCase().includes('overdue'));
+            const isTaskDay = !isFinishedAuditCard && !isRejectedAuditCard && !isCompleted && !isOverdue && (status?.isDue || effectiveDueLabel === 'Audit Now' || effectiveDueLabel?.toLowerCase().includes('due today'));
             const isRemaining = !isFinishedAuditCard && !isRejectedAuditCard && !isCompleted && !isOverdue && !isTaskDay;
 
             const mainColor = isAuditCard
@@ -425,10 +426,10 @@ export default function TreeCard({
                   {dotRounds.map((r) => {
                     const isDone = pinnedRound
                       ? r < finishedRound
-                      : r < computedAuditStatus.currentRound || (computedAuditStatus.allCompleted && r <= computedAuditStatus.completedCount);
+                      : r < (status?.currentRound ?? 1) || (status?.allCompleted && r <= (status?.completedCount ?? 0));
                     const isActive = pinnedRound
                       ? r === finishedRound
-                      : r === computedAuditStatus.currentRound && !computedAuditStatus.allCompleted;
+                      : r === (status?.currentRound ?? 1) && !status?.allCompleted;
                     return (
                       <View
                         key={r}
@@ -442,9 +443,9 @@ export default function TreeCard({
                     );
                   })}
                 </View>
-                {computedAuditStatus.completedCount > 0 ? (
+                {(status?.completedCount ?? 0) > 0 ? (
                   <View style={styles.auditCountDot}>
-                    <Text style={styles.auditCountText}>{computedAuditStatus.completedCount}</Text>
+                    <Text style={styles.auditCountText}>{status?.completedCount}</Text>
                   </View>
                 ) : null}
                 <Text style={[styles.auditProgressText, { color: mainColor }]} numberOfLines={1}>
@@ -454,11 +455,11 @@ export default function TreeCard({
                     <Text style={{ color: auditColor, fontWeight: '800' }}>Audit {finishedRound} approved</Text>
                   ) : isRejectedAuditCard ? (
                     <Text style={{ color: auditColor, fontWeight: '800' }}>Audit {finishedRound} rejected</Text>
-                  ) : computedAuditStatus.allCompleted ? (
+                  ) : status?.allCompleted ? (
                     <Text style={{ color: '#16a34a', fontWeight: '700' }}>All 4 Audits Completed ✓</Text>
                   ) : (
                     <>
-                      <Text style={{ fontWeight: '800' }}>Audit {computedAuditStatus.currentRound}</Text>
+                      <Text style={{ fontWeight: '800' }}>Audit {status?.currentRound ?? finishedRound}</Text>
                       <Text style={{ color: mainColor, opacity: 0.6, fontWeight: '400' }}> · </Text>
                       <Text style={{ fontWeight: '700' }}>
                         {effectiveDueLabel}

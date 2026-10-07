@@ -149,6 +149,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS tree_records_tree_id_key
 ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS tree_record_id uuid
   REFERENCES public.tree_records (id) ON DELETE CASCADE;
 ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS audit_round integer;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS task_type text;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS event_type text;
 
 CREATE INDEX IF NOT EXISTS tasks_tree_record_idx
   ON public.tasks (tree_record_id);

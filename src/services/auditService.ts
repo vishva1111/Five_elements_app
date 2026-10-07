@@ -256,50 +256,9 @@ export interface SubmitAuditResult {
 }
 
 /**
- * Postgres reports `column tasks.notes does not exist` — pull the column name
- * out so it can be dropped and the insert retried (the same technique
- * insertTreeRecord / fetchMyTrees use for pre-migration databases).
- */
-function missingColumnFromMessage(message?: string | null): string | null {
-  const match = String(message ?? '').match(/column\s+(?:\w+\.)?"?([A-Za-z_][\w]*)"?\s+does not exist/i);
-  return match ? match[1] : null;
-}
-
-/**
- * Insert the next-audit task, dropping any column this database does not have
- * yet (tasks.notes / tasks.tree_record_id / tasks.audit_round until the
- * migration is applied). The task itself is important — it is what the field
- * user sees for the next audit — so it is never skipped just because an
- * optional column is missing.
- */
-async function insertNextAuditTask(
-  payload: Record<string, any>
-): Promise<{ data?: any; error?: any; droppedColumns: string[] }> {
-  const attempt: Record<string, any> = { ...payload };
-  const droppedColumns: string[] = [];
-
-  for (let tries = 0; tries < 4; tries += 1) {
-    const { data, error } = await supabase.from('tasks').insert(attempt).select().single();
-    if (!error) return { data, droppedColumns };
-
-    const missing = missingColumnFromMessage(error.message);
-    if (missing && missing in attempt) {
-      delete attempt[missing];
-      droppedColumns.push(missing);
-      continue;
-    }
-    return { error, droppedColumns };
-  }
-
-  return {
-    error: { message: `tasks insert failed (unsupported columns: ${droppedColumns.join(', ')})` },
-    droppedColumns,
-  };
-}
-
-/**
- * Auto-assign an audit task for a tree whose audit time is NOW.
- * Avoids duplicate insertion if a task for this tree + round already exists.
+ * The next audit is not created by the phone. An admin assigns that task
+ * after approving the round that was just saved. Returning the existing row,
+ * when one is already assigned, does not insert another Assigned card.
  */
 export async function ensureAuditTaskForTree(params: {
   tree: TreeRecord;
@@ -308,60 +267,21 @@ export async function ensureAuditTaskForTree(params: {
   dueDate: Date;
   isOverdue?: boolean;
 }): Promise<{ task?: any; error?: any }> {
-  const { tree, round, userId, dueDate, isOverdue } = params;
+  const { tree, round } = params;
+  void params.userId;
+  void params.dueDate;
+  void params.isOverdue;
 
-  try {
-    // 1. A task already open, or already completed, for this tree and round
-    //    must not be created again as Assigned.
-    const { data: existing } = await supabase
-      .from('tasks')
-      .select('id, status, audit_round, tree_id, tree_record_id')
-      .or(`tree_record_id.eq.${tree.id},tree_id.eq.${tree.id}`)
-      .in('status', ['assigned', 'in_progress', 'completed', 'approved'])
-      .limit(10);
+  const { data: existing, error } = await supabase
+    .from('tasks')
+    .select('id, status, audit_round, tree_id, tree_record_id')
+    .or(`tree_record_id.eq.${tree.id},tree_id.eq.${tree.id}`)
+    .in('status', ['assigned', 'in_progress'])
+    .limit(10);
 
-    const match = (existing ?? []).find((t: any) => {
-      const taskRound = Number(t.audit_round);
-      return taskRound === round || (!taskRound && (t.status === 'assigned' || t.status === 'in_progress'));
-    });
-
-    if (match) {
-      return { task: match };
-    }
-  } catch {
-    // Fall through to insert if columns not yet supported in select
-  }
-
-  // 2. Build and insert the assigned audit task
-  const resolvedId = resolveTreeId(tree);
-  const taskTitle = `Audit Round #${round} — ${tree.species || 'Tree'} (${resolvedId})`;
-  const locationStr =
-    tree.latitude && tree.longitude
-      ? `${tree.latitude.toFixed(6)}, ${tree.longitude.toFixed(6)}`
-      : undefined;
-
-  const payload: Record<string, any> = {
-    name: taskTitle,
-    title: taskTitle,
-    project_id: tree.project_id,
-    assignee_id: userId,
-    target_count: 1,
-    remaining: 1,
-    captured: 0,
-    progress: 0,
-    status: 'assigned',
-    priority: isOverdue ? 'high' : 'medium',
-    location: locationStr,
-    tree_id: tree.id,
-    tree_record_id: tree.id,
-    audit_round: round,
-    task_type: 'audit',
-    due_date: dueDate.toISOString(),
-    notes: `Scheduled field audit for Round #${round}.`,
-  };
-
-  const { data, error } = await insertNextAuditTask(payload);
-  return { task: data, error };
+  if (error) return { error };
+  const match = (existing ?? []).find((t: any) => Number(t.audit_round) === round);
+  return { task: match };
 }
 
 /**
@@ -369,7 +289,7 @@ export async function ensureAuditTaskForTree(params: {
  *  1. Upload new photo (or reuse original as fallback)
  *  2. Insert monitoring record (the audit row)
  *  3. Update the main tree with latest measurements
- *  4. Auto-create a task for the NEXT audit (due = +30 minutes while testing)
+ *  4. Mark this audit task completed. The next round is not inserted.
  */
 export async function submitAudit(params: SubmitAuditParams): Promise<SubmitAuditResult> {
   const {
@@ -575,6 +495,40 @@ export async function submitAudit(params: SubmitAuditParams): Promise<SubmitAudi
         auditRound: clampedRound,
       });
       if (closed.error) console.warn('[auditService] close task:', closed.error);
+    }
+
+    // A later save used to insert the next round as a new Assigned task. That
+    // row is not this audit. Delete every later open audit for this tree in
+    // the database, even when this save's first lookup missed it.
+    const laterColumns = [
+      'id, status, audit_round, tree_id, tree_record_id, task_type',
+      'id, status, audit_round, tree_id, tree_record_id',
+      'id, status, audit_round, tree_id',
+    ];
+    let laterTasks: any[] = [];
+    for (const columns of laterColumns) {
+      const res = await supabase
+        .from('tasks')
+        .select(columns)
+        .or(orFilter)
+        .in('status', ['assigned', 'in_progress'])
+        .limit(20);
+      if (!res.error) {
+        laterTasks = (res.data ?? []) as any[];
+        break;
+      }
+    }
+    const nextRoundIds = laterTasks
+      .filter((task: any) => {
+        if (taskId && task.id === taskId) return false;
+        const isAuditTask =
+          task.task_type === 'audit' || Number(task.audit_round) > 0;
+        return isAuditTask && Number(task.audit_round) > clampedRound;
+      })
+      .map((task: any) => task.id);
+    if (nextRoundIds.length > 0) {
+      const removed = await supabase.from('tasks').delete().in('id', nextRoundIds);
+      if (removed.error) console.warn('[auditService] remove next audit task:', removed.error.message);
     }
   } catch (closeErr) {
     console.warn('[auditService] close current audit task failed:', closeErr);
