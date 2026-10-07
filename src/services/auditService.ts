@@ -12,6 +12,7 @@ import {
   isMissingSchemaError,
 } from './treeService';
 import { uploadTreePhoto } from './storageService';
+import { completeTask } from './taskService';
 import { resolveTreeId } from '../utils/treeId';
 
 // ─── Audit schedule constants ────────────────────────────────────────────────
@@ -513,15 +514,10 @@ export async function submitAudit(params: SubmitAuditParams): Promise<SubmitAudi
         .eq('id', taskId)
         .single();
       if (taskRow) {
-        const isRejected = taskRow.status === 'rejected';
-        await supabase
-          .from('tasks')
-          .update({
-            status: 'completed',
-            completed_at: completedAt,
-            ...(isRejected ? { review_notes: 'edited' } : {}),
-          })
-          .eq('id', taskId);
+        const closed = await completeTask(taskId, undefined, undefined, {
+          editedAfterReject: taskRow.status === 'rejected',
+        });
+        if (closed.error) console.warn('[auditService] close task:', closed.error);
       }
     }
 
@@ -564,17 +560,13 @@ export async function submitAudit(params: SubmitAuditParams): Promise<SubmitAudi
     const finishedIds = matching
       .filter((task: any) => task.status !== 'rejected')
       .map((task: any) => task.id);
-    if (finishedIds.length > 0) {
-      await supabase
-        .from('tasks')
-        .update({ status: 'completed', completed_at: completedAt })
-        .in('id', finishedIds);
+    for (const id of finishedIds) {
+      const closed = await completeTask(id);
+      if (closed.error) console.warn('[auditService] close task:', closed.error);
     }
-    if (rejectedIds.length > 0) {
-      await supabase
-        .from('tasks')
-        .update({ status: 'completed', completed_at: completedAt, review_notes: 'edited' })
-        .in('id', rejectedIds);
+    for (const id of rejectedIds) {
+      const closed = await completeTask(id, undefined, undefined, { editedAfterReject: true });
+      if (closed.error) console.warn('[auditService] close task:', closed.error);
     }
   } catch (closeErr) {
     console.warn('[auditService] close current audit task failed:', closeErr);

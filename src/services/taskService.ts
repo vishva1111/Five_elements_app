@@ -324,31 +324,34 @@ export async function createTask(task: Omit<Task, 'id' | 'created_at' | 'capture
 }
 
 export async function updateTaskStatus(taskId: string, status: Task['status']) {
-  const { error } = await supabase
-    .from('tasks')
-    .update({ status })
-    .eq('id', taskId);
-
-  if (error) {
-    console.error('[taskService] updateTaskStatus error:', error.message);
-    return { error: error.message };
-  }
-
-  return { error: null };
+  return writeTaskColumns(taskId, { status });
 }
 
 export async function startTask(taskId: string) {
-  const { error } = await supabase
-    .from('tasks')
-    .update({ status: 'in_progress', started_at: new Date().toISOString() })
-    .eq('id', taskId);
+  return writeTaskColumns(taskId, {
+    status: 'in_progress',
+    started_at: new Date().toISOString(),
+  });
+}
 
-  if (error) {
-    console.error('[taskService] startTask error:', error.message);
-    return { error: error.message };
+/**
+ * Write task columns, dropping any column this database does not have yet.
+ * status is never dropped: a missing extra column must not leave the task stuck.
+ */
+async function writeTaskColumns(taskId: string, updates: Record<string, any>) {
+  const payload = { ...updates };
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const { error } = await supabase.from('tasks').update(payload).eq('id', taskId);
+    if (!error) return { error: null };
+
+    const column = missingColumnName(error.message);
+    if (!column || !(column in payload) || column === 'status') {
+      console.error('[taskService] task update error:', error.message);
+      return { error: error.message };
+    }
+    delete payload[column];
   }
-
-  return { error: null };
+  return { error: 'Could not update the task.' };
 }
 
 /**

@@ -508,19 +508,20 @@ export async function updateBaselineTree(
   const result = await updateTree(treeId, updates);
   if (!result.error && taskId) {
     const completedAt = new Date().toISOString();
-    const edited: Record<string, string> = {
+    const taskPayload: Record<string, string> = {
       status: 'completed',
       completed_at: completedAt,
     };
-    // Orange is only for a card that was rejected and then edited.
-    if (options?.editedAfterReject) edited.review_notes = 'edited';
-    const { error } = await supabase.from('tasks').update(edited).eq('id', taskId);
-    if (error) {
-      const retry = await supabase
-        .from('tasks')
-        .update({ status: 'completed', completed_at: completedAt })
-        .eq('id', taskId);
-      if (retry.error) console.warn('[treeService] updateBaselineTree task:', retry.error.message);
+    if (options?.editedAfterReject) taskPayload.review_notes = 'edited';
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const { error } = await supabase.from('tasks').update(taskPayload).eq('id', taskId);
+      if (!error) break;
+      const column = missingColumnName(error.message);
+      if (!column || !(column in taskPayload) || column === 'status' || column === 'completed_at') {
+        console.warn('[treeService] updateBaselineTree task:', error.message);
+        break;
+      }
+      delete taskPayload[column];
     }
   }
   return result;
