@@ -87,7 +87,6 @@ export function formatDateFriendly(value: string | Date | null | undefined): str
     year: 'numeric',
   });
 }
-
 // ─── Audit status (computed — never stored) ──────────────────────────────────
 
 export interface AuditStatus {
