@@ -58,8 +58,8 @@ export default function TreeDetailScreen() {
   // Selected audit round for interactive journey inspection
   const [selectedAuditRound, setSelectedAuditRound] = useState<number | null>(null);
 
-  // Planting details stay open. An audited tree can still collapse them.
-  const [baselineExpanded, setBaselineExpanded] = useState(true);
+  // Planting details stay closed until the header is tapped.
+  const [baselineExpanded, setBaselineExpanded] = useState(false);
 
   // Active photo index within the sliding photo pager
   const [activePhotoIdx, setActivePhotoIdx] = useState(0);

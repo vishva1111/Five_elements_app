@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { Task } from '../types';
-import { isAutoTreeId, splitLabeledTreeName } from '../utils/treeId';
+import { isAutoTreeId, parseTreeMeta, splitLabeledTreeName } from '../utils/treeId';
 import { pickBestTree } from './treeService';
 
 function normalizeTaskStatus(status: unknown, row: Record<string, any>): Task['status'] {
@@ -218,6 +218,11 @@ async function hydrateTaskDetails(tasks: Task[]) {
       tree_record_id: task.tree_record_id || row.id,
       task_code: task.task_code || card.task_code,
       photo_url: task.photo_url || card.photo_url,
+      scientific_name:
+        task.scientific_name ||
+        row.scientific_name ||
+        parseTreeMeta(row.notes)?.scientific_name ||
+        null,
       latitude: task.latitude ?? card.latitude,
       longitude: task.longitude ?? card.longitude,
       location: task.location || card.location,
@@ -274,7 +279,11 @@ export async function fetchAgentTasks(userId: string) {
   const linked = new Set(tasks.flatMap(taskLinkKeys));
   treeCards.forEach((card) => {
     const keys = taskLinkKeys(card);
+    // A tree that already has a task row is not a second card. Saving an audit
+    // marks that tree completed, and a second card would stay on Assigned and
+    // also appear on Completed.
     if (keys.some((key) => linked.has(key))) return;
+    if (card.status !== 'assigned' && card.status !== 'in_progress') return;
     tasks.push(card);
     keys.forEach((key) => linked.add(key));
   });
@@ -372,12 +381,19 @@ export async function completeTask(
   taskId: string,
   treeId?: string,
   location?: string,
-  options?: { editedAfterReject?: boolean }
+  options?: { editedAfterReject?: boolean; asAudit?: boolean; auditRound?: number | null }
 ) {
   const updates: Record<string, any> = {
     status: 'completed',
     completed_at: new Date().toISOString(),
   };
+  // An audit must stay an audit in the tasks table. Writing only completed made
+  // the admin panel read the same row as a planting.
+  if (options?.asAudit) {
+    updates.task_type = 'audit';
+    updates.event_type = 'audit';
+    if (options.auditRound) updates.audit_round = options.auditRound;
+  }
   // Only a card edited after rejection is marked. A normal completion stays green.
   if (options?.editedAfterReject) updates.review_notes = 'edited';
   if (treeId) {

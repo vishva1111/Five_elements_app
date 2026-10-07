@@ -1,145 +1,184 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CaptureStackParamList } from '../../types';
+import { useTaskStore } from '../../store/taskStore';
+
+type Route = RouteProp<CaptureStackParamList, 'SubmitSuccess'>;
+
+const SAVED = [
+  { icon: 'image-outline' as const, label: 'Photo on the tree record' },
+  { icon: 'navigate-outline' as const, label: 'GPS point locked' },
+  { icon: 'cloud-done-outline' as const, label: 'Sent to the admin panel' },
+];
 
 export default function SubmitSuccessScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<Route>();
+  const insets = useSafeAreaInsets();
+  const treeId = route.params?.treeId;
+  const ticket = treeId ? treeId.replace(/-/g, '').slice(0, 8).toUpperCase() : 'FIELD';
+
+  const openNextTask = () => {
+    useTaskStore.getState().openTaskTab('assigned');
+    navigation.navigate('Main', { screen: 'Task', params: { tab: 'assigned', at: Date.now() } });
+  };
+
+  const openTreeDetails = () => {
+    if (!treeId) return;
+    navigation.navigate('TreeDetail', { treeId });
+  };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        <View style={styles.iconCircle}>
-          <Ionicons name="checkmark-circle" size={80} color="#22c55e" />
+    <View style={[styles.page, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 16 }]}>
+      <View style={styles.ticket}>
+        <View style={styles.ticketHead}>
+          <Text style={styles.ticketMark}>Field ticket</Text>
+          <Text style={styles.ticketCode}>{ticket}</Text>
         </View>
-
-        <Text style={styles.title}>Tree Submitted! 🌳</Text>
-        <Text style={styles.subtitle}>
-          Your tree record has been saved and synced with the admin panel in real-time.
+        <View style={styles.stamp}>
+          <Ionicons name="checkmark" size={28} color="#14301C" />
+        </View>
+        <Text style={styles.title}>Tree on record</Text>
+        <Text style={styles.copy}>
+          This planting is saved. The admin panel already has the photo, the point, and the tree name.
         </Text>
-
-        <View style={styles.infoBox}>
-          <Text style={styles.infoItem}>✅ Photo uploaded to cloud</Text>
-          <Text style={styles.infoItem}>📍 GPS location saved</Text>
-          <Text style={styles.infoItem}>🔄 Synced with admin dashboard</Text>
+        <View style={styles.rows}>
+          {SAVED.map((item) => (
+            <View key={item.label} style={styles.row}>
+              <Ionicons name={item.icon} size={18} color="#1F6B3A" />
+              <Text style={styles.rowText}>{item.label}</Text>
+            </View>
+          ))}
         </View>
-
-        <TouchableOpacity
-          style={styles.captureMoreBtn}
-          onPress={() => navigation.navigate('CaptureCamera')}
-        >
-          <Ionicons name="camera" size={20} color="#fff" />
-          <Text style={styles.captureMoreText}>Capture Another Tree</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.homeBtn}
-          onPress={() => navigation.navigate('Home')}
-        >
-          <Text style={styles.homeBtnText}>Go to Dashboard</Text>
-        </TouchableOpacity>
       </View>
+
+      <Pressable
+        style={({ pressed }) => [styles.next, pressed && styles.pressed]}
+        onPress={openNextTask}
+        accessibilityRole="button"
+        accessibilityLabel="Next Task"
+      >
+        <Ionicons name="arrow-forward" size={18} color="#FFFDF8" />
+        <Text style={styles.nextText}>Next Task</Text>
+      </Pressable>
+      <Pressable
+        style={({ pressed }) => [styles.details, pressed && styles.pressed]}
+        onPress={openTreeDetails}
+        disabled={!treeId}
+        accessibilityRole="button"
+        accessibilityLabel="Tree Details"
+      >
+        <Text style={[styles.detailsText, !treeId && styles.detailsMuted]}>Tree Details</Text>
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  page: {
     flex: 1,
-    backgroundColor: '#f0fdf4',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#E7F0E4',
+    paddingHorizontal: 20,
+    justifyContent: 'space-between',
+  },
+  ticket: {
+    backgroundColor: '#FFFDF8',
+    borderRadius: 16,
     padding: 24,
+    borderWidth: 1,
+    borderColor: '#D5E3D4',
   },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 7.5,
-    padding: 32,
+  ticketHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    width: '100%',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
   },
-  iconCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#dcfce7',
+  ticketMark: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1F6B3A',
+    letterSpacing: 0.2,
+  },
+  ticketCode: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#5C7262',
+  },
+  stamp: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: '#1F6B3A',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
+    marginTop: 32,
+    marginBottom: 16,
   },
   title: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#1a5c2a',
-    marginBottom: 12,
-    textAlign: 'center',
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '800',
+    color: '#14301C',
   },
-  subtitle: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
+  copy: {
+    marginTop: 8,
+    fontSize: 16,
+    lineHeight: 24,
+    color: '#3E5646',
+    maxWidth: 320,
   },
-  creditCard: {
-    backgroundColor: '#f0fdf4',
-    borderRadius: 7.5,
-    borderWidth: 1,
-    borderColor: '#bbf7d0',
-    paddingVertical:  14,
-    paddingHorizontal:  16,
-    marginBottom:  16,
-    width: '100%',
+  rows: {
+    marginTop: 24,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#D5E3D4',
+    paddingTop: 16,
   },
-  creditRow: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap:  12,
+    gap: 12,
+    minHeight: 28,
   },
-  creditIconWrap: {
-    width:  42,
-    height:  42,
-    borderRadius: 21,
-    backgroundColor: '#E8F5E9',
-    alignItems: 'center',
-    justifyContent:'center',
+  rowText: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#14301C',
+    fontWeight: '600',
   },
-  creditInfo: { flex:  1 },
-  creditLabel: { fontSize:  12, color: '#666' },
-  creditValue: { fontSize:14, fontWeight: '600', color: '#333', marginTop: 2 },
-  creditNumber: { color: '#1a5c2a', fontWeight: 'bold', fontSize:17 },
-  infoBox: {
-    backgroundColor: '#f0fdf4',
-    borderRadius: 7.5,
-    padding: 16,
-    width: '100%',
-    gap: 8,
-    marginBottom: 28,
-  },
-  infoItem: { fontSize: 14, color: '#15803d', fontWeight: '500' },
-  captureMoreBtn: {
+  next: {
+    minHeight: 52,
+    borderRadius: 14,
+    backgroundColor: '#1F6B3A',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#1a5c2a',
-    borderRadius: 7.5,
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    width: '100%',
     justifyContent: 'center',
-    marginBottom: 12,
+    gap: 8,
   },
-  captureMoreText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  homeBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 28,
-    width: '100%',
+  nextText: {
+    color: '#FFFDF8',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  details: {
+    minHeight: 48,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
   },
-  homeBtnText: { color: '#1a5c2a', fontWeight: '600', fontSize: 14 },
+  detailsText: {
+    color: '#1F6B3A',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  detailsMuted: {
+    opacity: 0.4,
+  },
+  pressed: {
+    opacity: 0.82,
+  },
 });

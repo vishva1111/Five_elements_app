@@ -620,14 +620,11 @@ export default function UpdateTreeScreen() {
           (Number(task.audit_round) === activeTab || !task.audit_round)
       );
       if (matched) {
-        await completeTask(matched.id, tree.id);
-        useTaskStore.getState().setTasks(
-          tasks.map((task) =>
-            task.id === matched.id
-              ? { ...task, status: 'completed' as const, completed_at: new Date().toISOString() }
-              : task
-          )
-        );
+        const closed = await completeTask(matched.id, tree.id, undefined, {
+          asAudit: true,
+          auditRound: activeTab,
+        });
+        if (closed.error) throw new Error(closed.error);
       }
 
       const liveTreeId = resolveTreeId(tree) || treeIdDisplay;

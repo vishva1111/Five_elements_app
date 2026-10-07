@@ -160,32 +160,9 @@ export default function TaskScreen() {
     // Only database tasks are shown. A failed read keeps the cards already loaded.
     const dbTasks = (tasksRes.data ?? []).filter((task) => task?.id && !String(task.id).startsWith('local_'));
     if (!tasksRes.error) {
-      // During the hold window (just after an audit save), the store already has
-      // the task marked as 'completed' optimistically. Do not let a stale DB row
-      // that still says 'assigned' or 'in_progress' overwrite that status.
-      // Check both the time-based hold AND the pending tab flag (which is set
-      // before navigation, so it is always present when loadTasks first runs).
-      const isHolding =
-        Date.now() < holdCompletedUntil.current ||
-        useTaskStore.getState().pendingTaskTab === 'completed';
-      if (isHolding) {
-        const optimistic = useTaskStore.getState().tasks ?? [];
-        const optimisticCompleted = new Map(
-          optimistic
-            .filter((t) => t.status === 'completed')
-            .map((t) => [t.id, t])
-        );
-        const merged = dbTasks.map((t) => {
-          const held = optimisticCompleted.get(t.id);
-          if (held && (t.status === 'assigned' || t.status === 'in_progress')) {
-            return { ...t, status: 'completed' as const, completed_at: held.completed_at };
-          }
-          return t;
-        });
-        setTasks(merged);
-      } else {
-        setTasks(dbTasks);
-      }
+      // Assigned and Completed follow the tasks row. A local completed flag must
+      // not keep a card on Completed after the database still says assigned.
+      setTasks(dbTasks);
     }
 
     // Check if active project has remaining geofencing setup
@@ -421,50 +398,15 @@ export default function TaskScreen() {
     });
   }, [tasks, projectTrees, activeProjectId]);
 
-  // One card per tree. A later assigned, completed, or rejected task moves that
-  // card off Approved, so an old approval does not keep it fixed there.
+  // One card per tasks row. An audit and the next audit of the same tree are
+  // different rows, so each follows its own database status.
   const currentTasks = useMemo(() => {
-    const rank = (task: Task) => {
-      const round = Number(task.audit_round) || (task.task_type === 'audit' ? 1 : 0);
-      const time = new Date(task.reviewed_at || task.completed_at || task.created_at || 0).getTime();
-      return round * 1e15 + (Number.isFinite(time) ? time : 0);
-    };
-    const byTree = new Map<string, Task>();
-    const openPlanting: Task[] = [];
-    const completedBesideOpen = new Map<string, Task>();
-    const isOpenPlanting = (task: Task) =>
-      (task.status === 'assigned' || task.status === 'in_progress') &&
-      task.task_type !== 'audit' &&
-      !task.audit_round;
-    const isOpen = (task: Task) => task.status === 'assigned' || task.status === 'in_progress';
-    const keepCompleted = (key: string, task: Task) => {
-      if (task.status !== 'completed') return;
-      const held = completedBesideOpen.get(key);
-      if (!held || rank(task) >= rank(held)) completedBesideOpen.set(key, task);
-    };
-    projectTasks.forEach((task) => {
-      // Each assigned planting task is its own card, even before a tree exists.
-      if (isOpenPlanting(task)) {
-        openPlanting.push(task);
-        return;
-      }
-      const key = task.tree_record_id || task.tree_id || task.id;
-      const prev = byTree.get(key);
-      if (!prev || rank(task) >= rank(prev)) {
-        // A later assigned round must not hide the audit that was just completed.
-        if (prev && prev.status === 'completed' && isOpen(task)) keepCompleted(key, prev);
-        byTree.set(key, task);
-      } else if (task.status === 'completed' && isOpen(prev)) {
-        keepCompleted(key, task);
-      }
+    const seen = new Set<string>();
+    return projectTasks.filter((task) => {
+      if (!task.id || seen.has(task.id)) return false;
+      seen.add(task.id);
+      return true;
     });
-    const keptCompleted = [...completedBesideOpen.entries()]
-      .filter(([key, task]) => {
-        const winner = byTree.get(key);
-        return Boolean(winner && isOpen(winner) && winner.id !== task.id);
-      })
-      .map(([, task]) => task);
-    return [...openPlanting, ...byTree.values(), ...keptCompleted];
   }, [projectTasks]);
 
   // assigned + in_progress both show in the Assigned tab
@@ -678,7 +620,6 @@ export default function TaskScreen() {
       || (treeRecord ? treeIds[treeRecord.id] || resolveTreeId(treeRecord) || displayTreeId(treeRecord) : undefined);
     const isAssigned = task.status === 'assigned' || task.status === 'in_progress';
     const isRejected = task.status === 'rejected';
-    const isRejectedAudit = isRejected && (task.task_type === 'audit' || !!task.audit_round);
     const isApproved = task.status === 'approved';
     // Audit rows may be keyed by the tree record id, the task's tree_record_id,
     // or its tree_id — accept any of them so the card always finds its audits.
@@ -687,6 +628,12 @@ export default function TaskScreen() {
         .filter(Boolean)
         .map((key) => auditsByTree[key as string])
         .find((rows) => rows && rows.length > 0) || [];
+    const isRejectedAudit =
+      isRejected && (task.task_type === 'audit' || !!task.audit_round || treeAudits.length > 0);
+    const cardTask =
+      isRejectedAudit && task.task_type !== 'audit'
+        ? { ...task, task_type: 'audit' as const, audit_round: task.audit_round || treeAudits.length || 1 }
+        : task;
 
     const handlePress = () => {
       // An assigned audit opens the tree details first. The audit button on that
@@ -719,7 +666,7 @@ export default function TaskScreen() {
       <TreeCard
         key={task.id}
         tree={treeRecord ? { ...treeRecord, locked: isApproved } : null}
-        task={task}
+        task={cardTask}
         status={isApproved && !isAuditTask ? 'approved' : task.status}
         audits={treeAudits}
         displayId={isAssigned && !isAuditTask ? (task.task_code || undefined) : projectTreeId}

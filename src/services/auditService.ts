@@ -487,10 +487,9 @@ export async function submitAudit(params: SubmitAuditParams): Promise<SubmitAudi
     if (surveyor?.trim()) treeUpdates.surveyor = surveyor.trim();
   }
   treeUpdates.survey_date = dateStr;
-  // The task list rebuilds a card from this tree row. Leaving stage as the
-  // plantation job makes the audited card look assigned again.
-  treeUpdates.stage = 'completed';
-  treeUpdates.status = 'completed';
+  // Do not copy the audit result onto the tree's own status. The tasks row is
+  // what the Assigned and Completed tabs read. Writing completed here made the
+  // tree look like a second completed task while the assignment stayed open.
   try {
     await updateTreeFromMonitoring(tree.id, treeUpdates);
   } catch (treeUpdateErr) {
@@ -514,8 +513,10 @@ export async function submitAudit(params: SubmitAuditParams): Promise<SubmitAudi
         .eq('id', taskId)
         .single();
       if (taskRow) {
-        const closed = await completeTask(taskId, undefined, undefined, {
+        const closed = await completeTask(taskId, tree.id, undefined, {
           editedAfterReject: taskRow.status === 'rejected',
+          asAudit: true,
+          auditRound: clampedRound,
         });
         if (closed.error) console.warn('[auditService] close task:', closed.error);
       }
@@ -561,11 +562,18 @@ export async function submitAudit(params: SubmitAuditParams): Promise<SubmitAudi
       .filter((task: any) => task.status !== 'rejected')
       .map((task: any) => task.id);
     for (const id of finishedIds) {
-      const closed = await completeTask(id);
+      const closed = await completeTask(id, tree.id, undefined, {
+        asAudit: true,
+        auditRound: clampedRound,
+      });
       if (closed.error) console.warn('[auditService] close task:', closed.error);
     }
     for (const id of rejectedIds) {
-      const closed = await completeTask(id, undefined, undefined, { editedAfterReject: true });
+      const closed = await completeTask(id, tree.id, undefined, {
+        editedAfterReject: true,
+        asAudit: true,
+        auditRound: clampedRound,
+      });
       if (closed.error) console.warn('[auditService] close task:', closed.error);
     }
   } catch (closeErr) {

@@ -183,7 +183,7 @@ export default function TreeCard({
     task?.task_type === 'audit' ||
     !!task?.audit_round ||
     actionVariant === 'audit' ||
-    (effectiveStatus === 'approved' && hasCompletedAudit);
+    ((effectiveStatus === 'approved' || effectiveStatus === 'rejected') && hasCompletedAudit);
   const isCompletedAudit = effectiveStatus === 'completed' && isAudit;
   const isUpdatedCard = effectiveStatus === 'completed' && Boolean(task?.review_notes);
   const isAuditCard = isAudit && (isAssigned || isCompleted || isApproved || isRejected);

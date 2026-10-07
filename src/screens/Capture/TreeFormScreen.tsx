@@ -26,12 +26,12 @@ import {
 } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
-import { insertTreeRecord, fetchAllProjects } from '../../services/treeService';
+import { insertTreeRecord, fetchAllProjects, fetchTreeById } from '../../services/treeService';
 import { Project } from '../../types';
 import { uploadTreePhoto } from '../../services/storageService';
 import { completeTask } from '../../services/taskService';
 import { useTaskStore } from '../../store/taskStore';
-import { createTreeIdentity, splitLabeledTreeName } from '../../utils/treeId';
+import { createTreeIdentity, parseTreeMeta, splitLabeledTreeName } from '../../utils/treeId';
 import MapPreview from '../../components/MapPreview';
 
 type Nav = NativeStackNavigationProp<CaptureStackParamList, 'TreeForm'>;
@@ -81,6 +81,7 @@ export default function TreeFormScreen() {
   // The tree ID is the 8-character record code shown beside the tree name.
   // The tree name starts as the assigned task name.
   useEffect(() => {
+    let active = true;
     const identity = createTreeIdentity();
     recordIdRef.current = identity.id;
     const tasks = useTaskStore.getState().tasks ?? [];
@@ -91,7 +92,18 @@ export default function TreeFormScreen() {
     const assignedName = assignedTask?.name || assignedTask?.title || '';
     const parsed = splitAssignedTreeName(assignedName);
     const speciesName = parsed.name;
-    const storedScientific = String(assignedTask?.scientific_name || '').trim();
+    const localTree = trees.find(
+      (tree) =>
+        tree.id === assignedTask?.tree_record_id ||
+        tree.id === assignedTask?.tree_id ||
+        (!!parsed.code && tree.tree_id === parsed.code)
+    );
+    const storedScientific = String(
+      assignedTask?.scientific_name ||
+        localTree?.scientific_name ||
+        parseTreeMeta(localTree?.notes)?.scientific_name ||
+        ''
+    ).trim();
     const scientific =
       storedScientific ||
       getSpeciesDefault(speciesName)?.scientific ||
@@ -103,6 +115,22 @@ export default function TreeFormScreen() {
       species: f.species || speciesName,
       scientific_name: scientific,
     }));
+
+    const treeKey = assignedTask?.tree_record_id || assignedTask?.tree_id || parsed.code;
+    if (!scientific && treeKey) {
+      fetchTreeById(treeKey).then(({ data }) => {
+        if (!active || !data) return;
+        const fromDb = String(
+          data.scientific_name || parseTreeMeta(data.notes)?.scientific_name || ''
+        ).trim();
+        const detected = fromDb || getSpeciesDefault(data.species)?.scientific || '';
+        if (!detected) return;
+        setForm((f) => (f.scientific_name ? f : { ...f, scientific_name: detected }));
+      });
+    }
+    return () => {
+      active = false;
+    };
   }, []);
 
   const scrollRef = useRef<ScrollView>(null);

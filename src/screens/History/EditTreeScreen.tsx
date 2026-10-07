@@ -307,24 +307,29 @@ export default function EditTreeScreen() {
         if (matched) {
           // Write completed status to DB — TaskScreen will reload fresh data on focus
           const editedAfterReject = matched.status === 'rejected' || Boolean(rejectionNotes);
-          await completeTask(
-            matched.id,
-            tree.id,
-            undefined,
-            editedAfterReject ? { editedAfterReject: true } : undefined
-          );
+          const closed = await completeTask(matched.id, tree.id, undefined, {
+            editedAfterReject,
+            asAudit: true,
+            auditRound: round,
+          });
+          if (closed.error) {
+            Alert.alert('Save Failed', closed.error);
+            return;
+          }
         } else if (taskId) {
           // taskId passed but not in local store — complete by id in DB directly
-          await completeTask(
-            taskId,
-            tree.id,
-            undefined,
-            rejectionNotes ? { editedAfterReject: true } : undefined
-          );
+          const closed = await completeTask(taskId, tree.id, undefined, {
+            editedAfterReject: Boolean(rejectionNotes),
+            asAudit: true,
+            auditRound: round,
+          });
+          if (closed.error) {
+            Alert.alert('Save Failed', closed.error);
+            return;
+          }
         }
         useTreeStore.getState().updateTree(tree.id, { survey_date: actionDate });
         useProjectRefreshStore.getState().triggerProjectRefresh();
-        await updateBaselineTree(treeId, { survey_date: actionDate });
         useTaskStore.getState().openTaskTab('completed');
         navigation.navigate('Main', {
           screen: 'Task',
@@ -460,8 +465,8 @@ export default function EditTreeScreen() {
             <Ionicons name="finger-print" size={16} color="#1a5c2a" />
             <Text style={[styles.sectionTitle, styles.sectionTitleGrow]}>Tree Identity</Text>
             <View style={styles.plantingTag}>
-              <Ionicons name="leaf" size={12} color="#1a5c2a" />
-              <Text style={styles.plantingTagText}>{eventType}</Text>
+              <Ionicons name={isAudit ? 'clipboard-outline' : 'leaf'} size={12} color="#1a5c2a" />
+              <Text style={styles.plantingTagText}>{isAudit ? `Audit ${auditRound}` : eventType}</Text>
             </View>
           </View>
 
