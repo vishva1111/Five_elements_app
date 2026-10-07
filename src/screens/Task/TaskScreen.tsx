@@ -96,7 +96,9 @@ export default function TaskScreen() {
   useEffect(() => {
     if (!pendingTaskTab) return;
     setActiveTab(pendingTaskTab);
-    if (pendingTaskTab === 'completed') holdCompletedUntil.current = Date.now() + 8000;
+    if (pendingTaskTab === 'completed') holdCompletedUntil.current = Date.now() + 12000;
+    // Clear the pending request so it does not re-fire on subsequent renders.
+    useTaskStore.getState().openTaskTab(null);
   }, [pendingTaskTab, pendingTaskTabAt]);
 
   // Assigned tree and audit tasks belong to their due date. Other tabs stay on
@@ -157,7 +159,34 @@ export default function TaskScreen() {
 
     // Only database tasks are shown. A failed read keeps the cards already loaded.
     const dbTasks = (tasksRes.data ?? []).filter((task) => task?.id && !String(task.id).startsWith('local_'));
-    if (!tasksRes.error) setTasks(dbTasks);
+    if (!tasksRes.error) {
+      // During the hold window (just after an audit save), the store already has
+      // the task marked as 'completed' optimistically. Do not let a stale DB row
+      // that still says 'assigned' or 'in_progress' overwrite that status.
+      // Check both the time-based hold AND the pending tab flag (which is set
+      // before navigation, so it is always present when loadTasks first runs).
+      const isHolding =
+        Date.now() < holdCompletedUntil.current ||
+        useTaskStore.getState().pendingTaskTab === 'completed';
+      if (isHolding) {
+        const optimistic = useTaskStore.getState().tasks ?? [];
+        const optimisticCompleted = new Map(
+          optimistic
+            .filter((t) => t.status === 'completed')
+            .map((t) => [t.id, t])
+        );
+        const merged = dbTasks.map((t) => {
+          const held = optimisticCompleted.get(t.id);
+          if (held && (t.status === 'assigned' || t.status === 'in_progress')) {
+            return { ...t, status: 'completed' as const, completed_at: held.completed_at };
+          }
+          return t;
+        });
+        setTasks(merged);
+      } else {
+        setTasks(dbTasks);
+      }
+    }
 
     // Check if active project has remaining geofencing setup
     if (pid) {
@@ -217,7 +246,19 @@ export default function TaskScreen() {
           const current = useTaskStore.getState().tasks ?? [];
           const exists = current.some((task) => task.id === next.id);
           if (payload.eventType === 'INSERT' || !exists) {
-            setTasks([next as Task, ...current.filter((task) => task.id !== next.id)]);
+            // During the hold window, an INSERT for the same task id that still
+            // carries 'assigned' must not overwrite the optimistic 'completed'.
+            const isHolding =
+              Date.now() < holdCompletedUntil.current ||
+              useTaskStore.getState().pendingTaskTab === 'completed';
+            const existingTask = current.find((t) => t.id === next.id);
+            const protectCompleted =
+              isHolding &&
+              existingTask?.status === 'completed' &&
+              (status === 'assigned' || status === 'in_progress');
+            if (!protectCompleted) {
+              setTasks([next as Task, ...current.filter((task) => task.id !== next.id)]);
+            }
             const linkedId = next.tree_record_id || next.tree_id;
             const finishedSameTree = current.some((task) => {
               if (task.status !== 'completed') return false;
@@ -225,9 +266,7 @@ export default function TaskScreen() {
               return Boolean(linkedId && taskTree && taskTree === linkedId);
             });
             // The next assigned round must not pull the screen off the audit that was just completed.
-            const stayOnCompleted =
-              useTaskStore.getState().pendingTaskTab === 'completed' ||
-              Date.now() < holdCompletedUntil.current;
+            const stayOnCompleted = isHolding;
             if ((status === 'assigned' || status === 'in_progress') && !finishedSameTree && !stayOnCompleted) {
               setActiveTab('assigned');
             }
@@ -264,9 +303,21 @@ export default function TaskScreen() {
       const freshById = new Map(fresh.map((task) => [task.id, task]));
       const added = fresh.filter((task) => !current.some((row) => row.id === task.id));
       let moved: 'approved' | 'rejected' | null = null;
+      const isHolding =
+        Date.now() < holdCompletedUntil.current ||
+        useTaskStore.getState().pendingTaskTab === 'completed';
       const next = current.map((task) => {
         const row = freshById.get(task.id);
         if (!row || row.status === task.status) return task;
+        // During the hold window, protect optimistic 'completed' from being
+        // overwritten by a stale 'assigned' or 'in_progress' DB row.
+        if (
+          isHolding &&
+          task.status === 'completed' &&
+          (row.status === 'assigned' || row.status === 'in_progress')
+        ) {
+          return task;
+        }
         if (row.status === 'approved' || row.status === 'rejected') {
           if (task.status === 'completed' || task.status === 'assigned' || task.status === 'in_progress') {
             moved = row.status;
@@ -341,11 +392,11 @@ export default function TaskScreen() {
     const safe = Number.isNaN(selected.getTime()) ? new Date() : selected;
     return {
       primary: safe.toLocaleDateString('en-IN', {
-        weekday: 'long',
+        weekday: 'short',
         day: 'numeric',
-        month: 'long',
+        month: 'short',
+        year: 'numeric',
       }),
-      year: String(safe.getFullYear()),
     };
   }, [selectedDate]);
 
@@ -465,20 +516,25 @@ export default function TaskScreen() {
 
     currentTasks.forEach((t) => {
       if (t.status !== 'completed') return;
-      const treeId = t.tree_record_id || t.tree_id || t.id;
-      const latestAudit = getLatestAudit(auditsByTree[treeId] || []);
+      // Use the same three-key lookup as approvedItems so the audit is never missed
+      // when monitoring rows are keyed by tree_record_id, tree_id, or task id.
+      const auditRows = [t.tree_record_id, t.tree_id, t.id]
+        .filter(Boolean)
+        .map((key) => auditsByTree[key as string])
+        .find((rows) => rows && rows.length > 0);
+      const latestAudit = getLatestAudit(auditRows || []);
       const latestAuditDate = latestAudit?.submitted_at || latestAudit?.survey_date || null;
-        list.push({
-          ...t,
-          status: 'completed',
-          completed_at: latestAuditDate || t.completed_at || t.created_at,
-          photo_url: latestAudit?.photo_url || t.photo_url,
-          tree_condition: latestAudit?.tree_condition || t.tree_condition,
-          audit_round: latestAudit?.monitoring_round || t.audit_round || null,
-          task_type: latestAudit ? 'audit' : t.task_type,
-        });
-        seenIds.add(t.id);
-        if (t.tree_id) seenIds.add(t.tree_id);
+      list.push({
+        ...t,
+        status: 'completed',
+        completed_at: latestAuditDate || t.completed_at || t.created_at,
+        photo_url: latestAudit?.photo_url || t.photo_url,
+        tree_condition: latestAudit?.tree_condition || t.tree_condition,
+        audit_round: latestAudit?.monitoring_round || t.audit_round || null,
+        task_type: latestAudit ? 'audit' : t.task_type,
+      });
+      seenIds.add(t.id);
+      if (t.tree_id) seenIds.add(t.tree_id);
       if (t.tree_record_id) seenIds.add(t.tree_record_id);
     });
 
@@ -635,9 +691,10 @@ export default function TaskScreen() {
     const handlePress = () => {
       // An assigned audit opens the tree details first. The audit button on that
       // page starts the audit; the card itself does not open the audit form.
+      // A completed or approved audit card also opens the audit profile view.
       navigation.navigate('TreeDetail', {
         treeId: targetId,
-        asAuditProfile: isAuditTask || (isApproved && treeAudits.length > 0),
+        asAuditProfile: isAuditTask || isCompletedAudit || (isApproved && treeAudits.length > 0),
       });
     };
 
@@ -720,8 +777,7 @@ export default function TaskScreen() {
       <LinearGradient colors={['#123f24', '#1a5c2a', '#2e7d43']} style={[s.header, { paddingTop: insets.top + 8 }]}>
           <View style={s.headerRow}>
             <View style={s.headerLeft}>
-              <Text style={s.headerDate}>{headerDateParts.primary}</Text>
-              <Text style={s.headerYear}>{headerDateParts.year}</Text>
+              <Text style={s.headerDate} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{headerDateParts.primary}</Text>
               <Text style={s.headerSub} numberOfLines={1}>{activeProject?.name ?? 'No project selected'}</Text>
             </View>
             <View style={s.headerDivider} />
@@ -902,9 +958,8 @@ const s = StyleSheet.create({
     gap: 14,
   },
   headerLeft: { flex: 1 },
-  headerDate: { fontSize: 18, fontWeight: '800', color: '#fff' },
-  headerYear: { fontSize: 18, fontWeight: '800', color: '#fff', marginTop: -1 },
-  headerSub: { fontSize: 13, fontWeight: '600', color: '#cde8d3', marginTop: 2 },
+  headerDate: { fontSize: 19, fontWeight: '800', color: '#fff' },
+  headerSub: { fontSize: 12, fontWeight: '600', color: '#cde8d3', marginTop: 4 },
   headerDivider: {
     width: 1,
     height: 40,

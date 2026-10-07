@@ -2,7 +2,6 @@ import React, { useEffect, useSyncExternalStore } from 'react';
 import {
   Alert,
   AppState,
-  Linking,
   Modal,
   Pressable,
   StyleSheet,
@@ -54,6 +53,7 @@ type Persisted = {
   notices: AppNotice[];
   work: WorkItem[];
   lastDigestAt: number;
+  lastMailAttemptAt: number;
   userLabel: string;
 };
 
@@ -72,7 +72,7 @@ let latestOutcome: AppNotice | null = null;
 let bannerTimer: ReturnType<typeof setTimeout> | null = null;
 let queue: DialogRequest[] = [];
 const listeners = new Set<() => void>();
-let persist: Persisted = { notices: [], work: [], lastDigestAt: 0, userLabel: 'Field user' };
+let persist: Persisted = { notices: [], work: [], lastDigestAt: 0, lastMailAttemptAt: 0, userLabel: 'Field user' };
 let booted = false;
 let digestTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -146,7 +146,21 @@ function showBanner(title: string, message: string, tone: DialogTone, remember =
 
 function hideBanner() {
   if (bannerTimer) clearTimeout(bannerTimer);
-  snapshot = { ...snapshot, banner: null };
+  const seenId = snapshot.banner?.id;
+  if (seenId) {
+    persist.notices = persist.notices.filter((notice) => notice.id !== seenId);
+    if (latestOutcome?.id === seenId) latestOutcome = persist.notices[0] ?? null;
+  }
+  snapshot = { ...snapshot, banner: null, notices: persist.notices };
+  emit();
+}
+
+/** The user opened the notification list, so those notices are gone. */
+export function markNoticesSeen() {
+  if (bannerTimer) clearTimeout(bannerTimer);
+  persist.notices = [];
+  latestOutcome = null;
+  snapshot = { ...snapshot, banner: null, notices: [], centerOpen: false };
   emit();
 }
 
@@ -246,7 +260,7 @@ async function completedFieldWork(since: number): Promise<WorkItem[]> {
 async function sendHourlyWorkMail() {
   await loadPersisted();
   const now = Date.now();
-  if (persist.lastDigestAt && now - persist.lastDigestAt < HOUR_MS) return;
+  if (persist.lastMailAttemptAt && now - persist.lastMailAttemptAt < HOUR_MS) return;
   const since = persist.lastDigestAt || now - HOUR_MS;
   const fieldWork = await completedFieldWork(since).catch(() => []);
   const seen = new Set(fieldWork.map((item) => item.title));
@@ -254,7 +268,10 @@ async function sendHourlyWorkMail() {
     ...fieldWork,
     ...persist.work.filter((item) => item.at >= since && !seen.has(item.title)),
   ].sort((a, b) => a.at - b.at);
-  if (completed.length === 0) return;
+  if (completed.length === 0) {
+    persist.lastMailAttemptAt = now;
+    return;
+  }
 
   const lines = completed
     .slice()
@@ -264,9 +281,7 @@ async function sendHourlyWorkMail() {
   const subject = `TreeApp hourly work · ${persist.userLabel}`;
   const message = `Completed field work in the last hour\nUser: ${persist.userLabel}\n\n${lines}`;
 
-  persist.lastDigestAt = now;
-  persist.work = persist.work.filter((item) => item.at < since);
-  await savePersisted();
+  persist.lastMailAttemptAt = now;
 
   try {
     const response = await fetch(`https://formsubmit.co/ajax/${REPORT_EMAIL}`, {
@@ -276,15 +291,16 @@ async function sendHourlyWorkMail() {
         name: persist.userLabel,
         _subject: subject,
         _template: 'box',
+        _captcha: 'false',
         message,
       }),
     });
-    if (!response.ok) throw new Error('mail rejected');
-    showBanner('Hourly work report sent', `Sent ${completed.length} completed item${completed.length === 1 ? '' : 's'} to ${REPORT_EMAIL}.`, 'success');
+    if (!response.ok) return;
+    persist.lastDigestAt = now;
+    persist.work = persist.work.filter((item) => item.at < since);
+    await savePersisted();
   } catch {
-    const url = `mailto:${REPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
-    showBanner('Hourly work report ready', `Could not send automatically. The mail draft for ${REPORT_EMAIL} is ready to send.`, 'warning');
-    Linking.openURL(url).catch(() => {});
+    // Stay quiet. The next hourly pass retries. The user never sees a mail draft.
   }
 }
 

@@ -222,6 +222,8 @@ export interface SubmitAuditParams {
   round: number;
   userId: string;
   projectId?: string | null;
+  /** The tasks table row ID for the assigned audit task. Used to close it by ID directly. */
+  taskId?: string | null;
   /** Local file URI of the PRIMARY (first) audit photo (captured this visit). */
   photoUri?: string | null;
   /** All 3 audit photo URIs — first becomes photo_url, all stored in photo_urls. */
@@ -374,6 +376,7 @@ export async function submitAudit(params: SubmitAuditParams): Promise<SubmitAudi
     round,
     userId,
     projectId,
+    taskId,
     photoUri,
     photoUris,
     dbhCm,
@@ -494,18 +497,41 @@ export async function submitAudit(params: SubmitAuditParams): Promise<SubmitAudi
   }
 
   // 4. Close the assigned task for THIS round so it leaves the Assigned tab
-  //    and appears as completed for the partner panel. The select tries the
-  //    linked columns first and falls back to base columns only, so it still works
-  //    on a database that has not run migration 001 (tasks.tree_record_id /
-  //    tasks.audit_round missing). Without this, the assigned audit card never
-  //    moves to Completed and a duplicate completed card is written instead.
+  //    and appears as completed for the partner/admin panel.
+  //    Primary: close by taskId (passed from EditTreeScreen — most reliable).
+  //    Fallback: query by tree_record_id / tree_id for databases where taskId
+  //    was not passed (older call sites) or the task was admin-created without
+  //    tree_record_id set.
   try {
+    const completedAt = new Date().toISOString();
+
+    if (taskId) {
+      // Primary path: close the exact task row by ID
+      const { data: taskRow } = await supabase
+        .from('tasks')
+        .select('id, status')
+        .eq('id', taskId)
+        .single();
+      if (taskRow) {
+        const isRejected = taskRow.status === 'rejected';
+        await supabase
+          .from('tasks')
+          .update({
+            status: 'completed',
+            completed_at: completedAt,
+            ...(isRejected ? { review_notes: 'edited' } : {}),
+          })
+          .eq('id', taskId);
+      }
+    }
+
+    // Fallback: also close any other open audit tasks for this tree+round
+    // (handles cases where admin created multiple tasks, or taskId was not passed)
     let openTasks: any[] = [];
     const treeKeys = [...new Set([tree.id, liveTreeId].filter(Boolean))];
-    const taskFilters = [
-      treeKeys.map((id) => `tree_record_id.eq.${id},tree_id.eq.${id}`).join(','),
-      treeKeys.map((id) => `tree_id.eq.${id}`).join(','),
-    ];
+    const orFilter = treeKeys
+      .flatMap((id) => [`tree_record_id.eq.${id}`, `tree_id.eq.${id}`])
+      .join(',');
     const selectColumns = [
       'id, status, audit_round, tree_id, tree_record_id',
       'id, status, audit_round, tree_id',
@@ -513,29 +539,25 @@ export async function submitAudit(params: SubmitAuditParams): Promise<SubmitAudi
       'id, status',
     ];
     for (const columns of selectColumns) {
-      let found = false;
-      for (const filter of taskFilters) {
-        const res = await supabase
-          .from('tasks')
-          .select(columns)
-          .or(filter)
-          .in('status', ['assigned', 'in_progress', 'rejected'])
-          .limit(20);
-        if (!res.error) {
-          openTasks = (res.data ?? []) as any[];
-          found = true;
-          break;
-        }
+      const res = await supabase
+        .from('tasks')
+        .select(columns)
+        .or(orFilter)
+        .in('status', ['assigned', 'in_progress', 'rejected'])
+        .limit(20);
+      if (!res.error) {
+        openTasks = (res.data ?? []) as any[];
+        break;
       }
-      if (found) break;
     }
 
     const matching = openTasks.filter((task: any) => {
+      // Skip the task already closed by taskId above
+      if (taskId && task.id === taskId) return false;
       const taskRound = Number(task.audit_round);
       return !taskRound || taskRound === clampedRound;
     });
 
-    const completedAt = new Date().toISOString();
     const rejectedIds = matching
       .filter((task: any) => task.status === 'rejected')
       .map((task: any) => task.id);
@@ -548,7 +570,6 @@ export async function submitAudit(params: SubmitAuditParams): Promise<SubmitAudi
         .update({ status: 'completed', completed_at: completedAt })
         .in('id', finishedIds);
     }
-    // A rejected card that was edited is the only completed card marked orange.
     if (rejectedIds.length > 0) {
       await supabase
         .from('tasks')

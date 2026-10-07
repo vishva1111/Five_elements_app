@@ -193,8 +193,7 @@ export default function EditTreeScreen() {
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [4, 3],
+      allowsEditing: false,
       quality: 0.85,
     });
     if (!result.canceled && result.assets[0]?.uri) {
@@ -266,6 +265,7 @@ export default function EditTreeScreen() {
           round: Number(auditRound),
           userId: user.id,
           projectId: tree.project_id,
+          taskId: taskId || undefined,
           // Pass the full 3-photo set (already uploaded above) — first becomes
           // photo_url, all are stored in photo_urls for the details slider
           photoUris: finalPhotoUrls,
@@ -285,6 +285,9 @@ export default function EditTreeScreen() {
         }
         const tasks = useTaskStore.getState().tasks ?? [];
         const round = Number(auditRound) || 1;
+        // 1. Find by explicit taskId first (most reliable)
+        // 2. Fall back to any assigned/in_progress/rejected audit task for this tree+round
+        // 3. Fall back to any assigned/in_progress audit task for this tree (any round)
         const matched =
           tasks.find((task) => task.id === taskId) ||
           tasks.find(
@@ -293,17 +296,16 @@ export default function EditTreeScreen() {
               (task.task_type === 'audit' || !!task.audit_round) &&
               (task.tree_record_id === tree.id || task.tree_id === tree.id) &&
               (Number(task.audit_round) === round || !task.audit_round)
+          ) ||
+          tasks.find(
+            (task) =>
+              (task.status === 'assigned' || task.status === 'in_progress') &&
+              (task.task_type === 'audit' || !!task.audit_round) &&
+              (task.tree_record_id === tree.id || task.tree_id === tree.id)
           );
-        // The assigned card may not be in the local list yet. Close it by id anyway.
-        if (taskId && !matched) {
-          await completeTask(
-            taskId,
-            tree.id,
-            undefined,
-            rejectionNotes ? { editedAfterReject: true } : undefined
-          );
-        }
+
         if (matched) {
+          // Write completed status to DB — TaskScreen will reload fresh data on focus
           const editedAfterReject = matched.status === 'rejected' || Boolean(rejectionNotes);
           await completeTask(
             matched.id,
@@ -311,17 +313,13 @@ export default function EditTreeScreen() {
             undefined,
             editedAfterReject ? { editedAfterReject: true } : undefined
           );
-          useTaskStore.getState().setTasks(
-            tasks.map((task) =>
-              task.id === matched.id
-                ? {
-                    ...task,
-                    status: 'completed' as const,
-                    completed_at: new Date().toISOString(),
-                    ...(editedAfterReject ? { review_notes: 'edited' } : {}),
-                  }
-                : task
-            )
+        } else if (taskId) {
+          // taskId passed but not in local store — complete by id in DB directly
+          await completeTask(
+            taskId,
+            tree.id,
+            undefined,
+            rejectionNotes ? { editedAfterReject: true } : undefined
           );
         }
         useTreeStore.getState().updateTree(tree.id, { survey_date: actionDate });

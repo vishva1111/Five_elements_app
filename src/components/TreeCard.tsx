@@ -872,7 +872,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   assignedDateRow: {
-    marginTop: 4,
+    marginTop: 1,
     gap: 3,
   },
   dateText: {

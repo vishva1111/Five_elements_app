@@ -130,6 +130,7 @@ export interface Task {
   notes?: string;
   // Tree capture fields (for completed tasks from tree captures)
   photo_url?: string;
+  scientific_name?: string | null;
   latitude?: number;
   longitude?: number;
   tree_condition?: string;
@@ -156,7 +157,7 @@ export interface TaskState {
   // so the form cannot pass this tab through navigation params.
   pendingTaskTab: 'assigned' | 'completed' | 'approved' | 'rejected' | null;
   pendingTaskTabAt: number;
-  openTaskTab: (tab: 'assigned' | 'completed' | 'approved' | 'rejected') => void;
+  openTaskTab: (tab: 'assigned' | 'completed' | 'approved' | 'rejected' | null) => void;
 }
 
 // ─── Navigation Types ──────────────────────────────────────────────────────────
@@ -258,6 +259,7 @@ export interface SpeciesDefault {
 export const SPECIES_DEFAULTS: SpeciesDefault[] = [
   { common: 'Neem', scientific: 'Azadirachta indica', value: 15 },
   { common: 'Mango', scientific: 'Mangifera indica', value: 15 },
+  { common: 'Guava', scientific: 'Psidium guajava', value: 12 },
   { common: 'Teak', scientific: 'Tectona grandis', value: 7 },
   { common: 'Eucalyptus', scientific: 'Eucalyptus spp.', value: 30 },
   { common: 'Banyan', scientific: 'Ficus benghalensis', value: 100 },
@@ -286,9 +288,29 @@ export const SPECIES_DEFAULTS: SpeciesDefault[] = [
 export const TREE_SPECIES = SPECIES_DEFAULTS.map((item) => item.common);
 
 export function getSpeciesDefault(commonName?: string | null): SpeciesDefault | undefined {
-  const key = commonName?.trim().toLowerCase();
+  const key = commonName
+    ?.trim()
+    .toLowerCase()
+    .replace(/[()]/g, ' ')
+    .replace(/\btree\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (!key) return undefined;
-  return SPECIES_DEFAULTS.find((item) => item.common.toLowerCase() === key);
+  const exact = SPECIES_DEFAULTS.find((item) => item.common.toLowerCase() === key);
+  if (exact) return exact;
+  const aliases = SPECIES_DEFAULTS.flatMap((item) =>
+    item.common
+      .toLowerCase()
+      .split('/')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((alias) => ({ alias, item }))
+  );
+  const aliasHit = aliases.find((entry) => entry.alias === key);
+  if (aliasHit) return aliasHit.item;
+  return aliases
+    .filter((entry) => entry.alias.length >= 4 && (key.includes(entry.alias) || entry.alias.includes(key)))
+    .sort((a, b) => b.alias.length - a.alias.length)[0]?.item;
 }
 
 export const HEALTH_STATUS_OPTIONS: { label: string; value: HealthStatus; color: string }[] = [

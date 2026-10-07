@@ -22,6 +22,7 @@ import {
   CaptureStackParamList,
   LAND_TYPE_OPTIONS,
   TreeFormData,
+  getSpeciesDefault,
 } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
@@ -89,10 +90,18 @@ export default function TreeFormScreen() {
       : tasks.find((task) => task.status === 'assigned' && !task.tree_id);
     const assignedName = assignedTask?.name || assignedTask?.title || '';
     const parsed = splitAssignedTreeName(assignedName);
+    const speciesName = parsed.name;
+    const storedScientific = String(assignedTask?.scientific_name || '').trim();
+    const scientific =
+      storedScientific ||
+      getSpeciesDefault(speciesName)?.scientific ||
+      getSpeciesDefault(assignedName)?.scientific ||
+      '';
     setForm((f) => ({
       ...f,
       tree_id: parsed.code || identity.code,
-      species: f.species || parsed.name,
+      species: f.species || speciesName,
+      scientific_name: scientific,
     }));
   }, []);
 
@@ -163,6 +172,13 @@ export default function TreeFormScreen() {
         latitude: coords.latitude,
         longitude: coords.longitude,
         species: form.species.trim() || matchingTask?.name || matchingTask?.title || 'Planted tree',
+        scientific_name:
+          form.scientific_name.trim() ||
+          String(matchingTask?.scientific_name || '').trim() ||
+          getSpeciesDefault(form.species)?.scientific ||
+          getSpeciesDefault(matchingTask?.name)?.scientific ||
+          getSpeciesDefault(matchingTask?.title)?.scientific ||
+          undefined,
         health_status: 'healthy',
         notes: matchingTask?.name || matchingTask?.title || undefined,
         synced: true,
@@ -308,6 +324,15 @@ export default function TreeFormScreen() {
             <Text style={styles.fieldLabel}>TREE NAME <Text style={styles.optional}>· assigned task</Text></Text>
             <View style={styles.readOnlyField}>
               <Text style={styles.readOnlyText}>{form.species || '—'}</Text>
+            </View>
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>SCIENTIFIC NAME</Text>
+            <View style={styles.readOnlyField}>
+              <Text style={[styles.readOnlyText, styles.scientificText]}>
+              {form.scientific_name || getSpeciesDefault(form.species)?.scientific || '—'}
+            </Text>
             </View>
           </View>
 
@@ -561,6 +586,10 @@ const styles = StyleSheet.create({
     color: '#333',
     fontWeight: '500',
     flex: 1,
+  },
+  scientificText: {
+    fontStyle: 'italic',
+    color: '#3f6212',
   },
   speciesValueText: {
     fontSize: 14,

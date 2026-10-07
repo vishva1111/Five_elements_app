@@ -17,7 +17,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { HistoryStackParamList, TreeRecord, getMonitoringRoundInfo, Task } from '../../types';
+import { HistoryStackParamList, TreeRecord, getMonitoringRoundInfo, getSpeciesDefault, Task } from '../../types';
 import { fetchTreeById, ensureProjectTreeId, fetchTreeMonitoringRecords } from '../../services/treeService';
 import { supabase } from '../../services/supabase';
 import {
@@ -322,7 +322,13 @@ export default function TreeDetailScreen() {
   const meta = parseTreeMeta(tree.notes);
   const cleanNotes = stripTreeMeta(tree.notes);
 
-  const scientificName = tree.scientific_name || meta.scientific_name || '';
+  const speciesTitle =
+    (tree.species || '').replace(/\s*\([A-Za-z0-9-]{1,40}\)\s*$/, '').trim() || tree.species || '';
+  const scientificName =
+    tree.scientific_name ||
+    meta.scientific_name ||
+    getSpeciesDefault(speciesTitle)?.scientific ||
+    '';
   const dbhCm = tree.dbh_cm || meta.dbh_cm;
   const heightM = tree.height_m || meta.height_m;
   const woodDensity = tree.wood_density || meta.wood_density;
@@ -599,7 +605,7 @@ export default function TreeDetailScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.identityKicker}>TREE IDENTITY</Text>
               <Text style={styles.speciesTitle}>
-                {(tree.species || '').replace(/\s*\([A-Fa-f0-9]{4,36}\)\s*$/, '').trim() || tree.species}
+                {speciesTitle || tree.species}
               </Text>
               {scientificName ? <Text style={styles.speciesScientific}>{scientificName}</Text> : null}
             </View>
@@ -1184,7 +1190,8 @@ export default function TreeDetailScreen() {
           onPress={() =>
             navigation.navigate('EditTree', {
               treeId: tree.id,
-              auditRound: auditStatus.currentRound,
+              taskId: task?.id || null,
+              auditRound: Number(task?.audit_round) || auditStatus.currentRound || 1,
             })
           }
         >

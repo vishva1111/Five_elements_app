@@ -392,6 +392,11 @@ export default function HistoryScreen() {
         .map((key) => auditsByTree[key as string])
         .find((rows) => rows && rows.length > 0) || [];
     const isRejected = item.status === 'rejected';
+    const isAuditCard =
+      item.raw_task?.task_type === 'audit' ||
+      Number(item.raw_task?.audit_round) > 0 ||
+      Number(item.audit_round) > 0 ||
+      treeAudits.length > 0;
 
     return (
       <TreeCard
@@ -438,7 +443,7 @@ export default function HistoryScreen() {
             : undefined
         }
         actionLabel={isRejected ? 'Edit' : undefined}
-        actionVariant={isRejected ? 'update' : undefined}
+        actionVariant={isRejected ? 'update' : isAuditCard ? 'audit' : undefined}
       />
     );
   };

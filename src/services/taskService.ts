@@ -64,7 +64,11 @@ async function assigneeIdentity(userId: string): Promise<{ ids: string[]; names:
 }
 
 function taskStatusFromTree(row: Record<string, any>): Task['status'] {
-  if (row.locked === true) return 'approved';
+  // locked = true means the planting was approved by admin.
+  // Audit tasks must only be approved via the tasks table row — never auto-approved
+  // from the tree record's locked flag, because that would bypass admin review.
+  const isAudit = row.task_type === 'audit' || Number(row.audit_round) > 0;
+  if (row.locked === true && !isAudit) return 'approved';
   const raw = String(row.status ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
   if (raw === 'approved' || raw === 'rejected' || raw === 'completed') {
     return normalizeTaskStatus(row.status, row);
@@ -110,6 +114,7 @@ function taskFromTreeRecord(row: Record<string, any>, userId: string): Task {
     tree_record_id: row.id,
     notes: row.notes || undefined,
     photo_url: row.photo_url || photos[0],
+    scientific_name: row.scientific_name || undefined,
     latitude,
     longitude,
     tree_condition: row.tree_condition || undefined,
@@ -256,6 +261,7 @@ export async function fetchAgentTasks(userId: string) {
         status: normalizeTaskStatus(row.status, row),
         task_type: row.task_type || (isPlantingTask(row) ? 'planting' : row.task_type),
         name: row.name || row.title || 'Planting',
+        scientific_name: row.scientific_name || row.scientific || null,
       } as Task;
       byId.set(row.id, task);
     });

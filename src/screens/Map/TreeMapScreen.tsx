@@ -1946,15 +1946,20 @@ export default function TreeMapScreen() {
           </Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          {isAdmin && pendingRequestsCount > 0 && (
+          {isAdmin && pendingRequestsCount > 0 ? (
             <TouchableOpacity
               style={styles.adminReqBadge}
               onPress={() => setShowAdminRequestsModal(true)}
             >
               <Text style={styles.adminReqBadgeText}>Req ({pendingRequestsCount})</Text>
             </TouchableOpacity>
-          )}
-          <TouchableOpacity onPress={loadData} style={styles.refreshBtn}>
+          ) : null}
+          <TouchableOpacity
+            onPress={loadData}
+            style={styles.refreshBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Refresh map"
+          >
             <Ionicons name="refresh" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -2038,6 +2043,44 @@ export default function TreeMapScreen() {
         </View>
       )}
 
+      {userCoords && !geofenceWalkMode ? (
+        <View style={styles.gpsTelemetryPill} pointerEvents="none">
+          <View style={styles.gpsSignalRow}>
+            <View
+              style={[
+                styles.gpsStatusBeacon,
+                {
+                  backgroundColor:
+                    gpsAccuracy && gpsAccuracy <= 5
+                      ? '#10b981'
+                      : gpsAccuracy && gpsAccuracy <= 20
+                        ? '#f59e0b'
+                        : '#ef4444',
+                },
+              ]}
+            />
+            <Ionicons
+              name="navigate-circle-outline"
+              size={12}
+              color={
+                gpsAccuracy && gpsAccuracy <= 5
+                  ? '#34d399'
+                  : gpsAccuracy && gpsAccuracy <= 20
+                    ? '#fbbf24'
+                    : '#f87171'
+              }
+            />
+            <Text style={styles.gpsAccuracyVal}>
+              ±{gpsAccuracy ? Math.round(gpsAccuracy) : '--'}m
+            </Text>
+          </View>
+          <View style={styles.gpsLiveMicroBadge}>
+            <View style={styles.gpsLiveMicroDot} />
+            <Text style={styles.gpsLiveMicroText}>LIVE</Text>
+          </View>
+        </View>
+      ) : null}
+
       {/* Map WebView */}
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -2055,7 +2098,7 @@ export default function TreeMapScreen() {
       )}
 
       {/* ─── Explorer HUD: nearest-tree radar + live GPS + locate FAB + land fence ─── */}
-      {!geofenceWalkMode && (
+      {!geofenceWalkMode && !showDetails && (
         <View pointerEvents="box-none" style={[styles.hudCluster, { bottom: hudBottom }]}>
           {/* Nearest tree radar telemetry card */}
           {nearTree || !vibrateEnabled ? (
@@ -2228,6 +2271,8 @@ export default function TreeMapScreen() {
                 style={styles.nearHapticBtn}
                 onPress={toggleProximityVibration}
                 activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={vibrateEnabled ? 'Mute vibration' : 'Resume vibration'}
               >
                 <LinearGradient
                   colors={
@@ -2242,62 +2287,15 @@ export default function TreeMapScreen() {
                   style={styles.nearHapticBtnGradient}
                 >
                   <Ionicons
-                    name={
-                      !vibrateEnabled
-                        ? 'play'
-                        : nearTree?.vibrating
-                          ? 'volume-mute'
-                          : 'notifications-off'
-                    }
+                    name={!vibrateEnabled ? 'play' : nearTree?.vibrating ? 'volume-mute' : 'notifications-off'}
                     size={13}
                     color="#fff"
                   />
-                  <Text style={styles.nearHapticBtnText}>
-                    {!vibrateEnabled ? 'Resume' : 'Mute'}
-                  </Text>
+                  <Text style={styles.nearHapticBtnText}>{!vibrateEnabled ? 'Resume' : 'Mute'}</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
           ) : null}
-
-          {/* Live GPS Telemetry Pill */}
-          {userCoords && (
-            <View style={styles.gpsTelemetryPill}>
-              <View style={styles.gpsSignalRow}>
-                <View
-                  style={[
-                    styles.gpsStatusBeacon,
-                    {
-                      backgroundColor:
-                        gpsAccuracy && gpsAccuracy <= 5
-                          ? '#10b981'
-                          : gpsAccuracy && gpsAccuracy <= 20
-                            ? '#f59e0b'
-                            : '#ef4444',
-                    },
-                  ]}
-                />
-                <Ionicons
-                  name="navigate-circle-outline"
-                  size={12}
-                  color={
-                    gpsAccuracy && gpsAccuracy <= 5
-                      ? '#34d399'
-                      : gpsAccuracy && gpsAccuracy <= 20
-                        ? '#fbbf24'
-                        : '#f87171'
-                  }
-                />
-                <Text style={styles.gpsAccuracyVal}>
-                  ±{gpsAccuracy ? Math.round(gpsAccuracy) : '--'}m
-                </Text>
-              </View>
-              <View style={styles.gpsLiveMicroBadge}>
-                <View style={styles.gpsLiveMicroDot} />
-                <Text style={styles.gpsLiveMicroText}>LIVE</Text>
-              </View>
-            </View>
-          )}
 
           {/* Action Dock Row: Auto-Zoom Land Fence + Locate FAB */}
           <View style={styles.actionDockRow}>
@@ -3442,6 +3440,10 @@ const styles = StyleSheet.create({
 
   // Live GPS Telemetry Capsule
   gpsTelemetryPill: {
+    position: 'absolute',
+    top: 112,
+    left: 14,
+    zIndex: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,

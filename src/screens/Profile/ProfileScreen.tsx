@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,40 +6,29 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  Dimensions,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/authStore';
-import { useTreeStore } from '../../store/treeStore';
-import { fetchUserProjects } from '../../services/treeService';
+import { fetchAllProjects } from '../../services/treeService';
 import { Project } from '../../types';
 import { LinearGradient } from 'expo-linear-gradient';
 
-const { width: SCREEN_W } = Dimensions.get('window');
-
 export default function ProfileScreen() {
-  const { user, activeProjectId, signOut, assignedProjects } = useAuthStore();
-  const trees = useTreeStore((s) => s.trees) ?? [];
+  const { user, signOut, assignedProjects, activeProjectId } = useAuthStore();
   const [allProjects, setAllProjects] = useState<Project[]>([]);
+  const [projectsOpen, setProjectsOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
     (async () => {
       if (!user?.id) return;
-      const { data } = await fetchUserProjects(user.id);
-      if (active && data) setAllProjects(data);
+      const { data } = await fetchAllProjects();
+      if (active && data && data.length > 0) setAllProjects(data);
     })();
     return () => { active = false; };
-  }, []);
-
-  const activeTrees = trees.filter((t) => activeProjectId ? t.project_id === activeProjectId : true);
-  const stats = {
-    total: activeTrees.length,
-    healthy: activeTrees.filter((t) => t.health_status === 'healthy').length,
-    sick: activeTrees.filter((t) => t.health_status === 'sick').length,
-    dead: activeTrees.filter((t) => t.health_status === 'dead').length,
-  };
-  const healthPct = stats.total > 0 ? Math.round((stats.healthy / stats.total) * 100) : 0;
+  }, [user?.id]);
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -50,7 +39,12 @@ export default function ProfileScreen() {
 
   const initials = (user?.full_name?.trim() || '?')
     .split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
-  const projectName = allProjects.find((p) => p.id === activeProjectId)?.name ?? 'All Projects';
+  const projects = allProjects.length > 0 ? allProjects : assignedProjects;
+  const activeProject = projects.find((p) => p.id === activeProjectId) ?? projects[0];
+  const orderedProjects = activeProject
+    ? [activeProject, ...projects.filter((p) => p.id !== activeProject.id)]
+    : projects;
+  const projectSummary = activeProject?.name ?? 'No projects assigned';
   const memberSince = user?.created_at
     ? new Date(user.created_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
     : '—';
@@ -61,20 +55,17 @@ export default function ProfileScreen() {
       contentContainerStyle={{ paddingBottom: 16 }}
       showsVerticalScrollIndicator={false}
     >
-      {/* ═══ Hero header with wave bottom ═══ */}
       <LinearGradient
         colors={['#123f24', '#1a5c2a', '#2e7d43']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.hero}
       >
-        {/* Decorative circles */}
         <View style={[styles.decoCircle, { top: -40, right: -30, width: 140, height: 140, backgroundColor: 'rgba(255,255,255,0.04)' }]} />
         <View style={[styles.decoCircle, { top: 60, left: -50, width: 100, height: 100, backgroundColor: 'rgba(255,255,255,0.03)' }]} />
         <View style={[styles.decoCircle, { bottom: 20, right: 40, width: 60, height: 60, backgroundColor: 'rgba(255,255,255,0.05)' }]} />
 
         <View style={styles.heroContent}>
-          {/* Avatar with ring */}
           <View style={styles.avatarOuterRing}>
             <View style={styles.avatarInnerRing}>
               <LinearGradient
@@ -89,71 +80,71 @@ export default function ProfileScreen() {
           <Text style={styles.name}>{user?.full_name ?? 'Field User'}</Text>
           <Text style={styles.email}>{user?.email}</Text>
 
-          {/* Role pill */}
           <View style={styles.rolePill}>
             <Ionicons name="shield-checkmark" size={13} color="#1a5c2a" />
             <Text style={styles.rolePillText}>{(user?.role ?? 'field_user').replace('_', ' ')}</Text>
           </View>
         </View>
-
       </LinearGradient>
 
-      {/* ═══ Quick stats row ═══ */}
-      <View style={styles.statsRow}>
-        <QuickStat
-          icon="leaf"
-          value={stats.total}
-          label="Trees"
-          gradient={['#1a5c2a', '#2e8b4a']}
-        />
-        <QuickStat
-          icon="heart"
-          value={`${healthPct}%`}
-          label="Healthy"
-          gradient={['#16a34a', '#22c55e']}
-        />
-        <QuickStat
-          icon="warning"
-          value={stats.sick}
-          label="Sick"
-          gradient={['#d97706', '#f59e0b']}
-        />
-        <QuickStat
-          icon="skull"
-          value={stats.dead}
-          label="Dead"
-          gradient={['#b91c1c', '#ef4444']}
-        />
-      </View>
-
-      {/* ═══ User projects ═══ */}
       <View style={styles.section}>
         <Text style={styles.sectionHead}>My Projects</Text>
-        <View style={styles.detailsCard}>
-          {(allProjects.length > 0 ? allProjects : assignedProjects).map((project, index, list) => (
-            <View key={project.id} style={[styles.detailRow, index === list.length - 1 && { borderBottomWidth: 0 }]}>
-              <View style={styles.detailIconWrap}>
-                <Ionicons name="folder-open-outline" size={16} color="#1a5c2a" />
-              </View>
-              <View style={styles.detailBody}>
-                <Text style={styles.detailValue}>{project.name}</Text>
-                {project.id === activeProjectId ? (
-                  <Text style={styles.detailLabel}>Active</Text>
-                ) : null}
-              </View>
-            </View>
-          ))}
-          {allProjects.length === 0 && assignedProjects.length === 0 ? (
-            <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
-              <View style={styles.detailBody}>
-                <Text style={styles.detailValue}>{projectName}</Text>
-              </View>
-            </View>
-          ) : null}
-        </View>
+        <TouchableOpacity
+          style={styles.dropdownBtn}
+          activeOpacity={0.8}
+          onPress={() => setProjectsOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Projects"
+        >
+          <View style={styles.detailIconWrap}>
+            <Ionicons name="folder-open-outline" size={16} color="#1a5c2a" />
+          </View>
+          <View style={styles.detailBody}>
+            <Text style={styles.detailLabel}>Active project</Text>
+            <Text style={styles.dropdownValue} numberOfLines={1}>{projectSummary}</Text>
+          </View>
+          <Ionicons name="chevron-down" size={18} color="#1a5c2a" />
+        </TouchableOpacity>
       </View>
 
-      {/* ═══ Account details ═══ */}
+      <Modal
+        visible={projectsOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setProjectsOpen(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setProjectsOpen(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>All projects</Text>
+            <ScrollView style={styles.modalList} bounces={false}>
+              {orderedProjects.length === 0 ? (
+                <Text style={styles.emptyProjects}>No projects assigned</Text>
+              ) : (
+                orderedProjects.map((project, index) => {
+                  const isActive = project.id === activeProject?.id;
+                  return (
+                    <View
+                      key={project.id}
+                      style={[styles.projectOption, index === orderedProjects.length - 1 && styles.projectOptionLast]}
+                    >
+                      <Ionicons
+                        name={isActive ? 'checkmark-circle' : 'folder-outline'}
+                        size={18}
+                        color="#1a5c2a"
+                      />
+                      <Text style={[styles.projectOptionText, isActive && styles.projectOptionTextActive]}>
+                        {project.name}
+                      </Text>
+                      {isActive ? <Text style={styles.activeTag}>Active</Text> : null}
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <View style={styles.section}>
         <Text style={styles.sectionHead}>Account Details</Text>
         <View style={styles.detailsCard}>
@@ -164,37 +155,19 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      {/* ═══ App info ═══ */}
       <View style={styles.section}>
         <Text style={styles.sectionHead}>App Info</Text>
         <View style={styles.detailsCard}>
           <DetailItem icon="phone-portrait-outline" label="Version" value="Five Elements v1.0.0" />
-          <DetailItem icon="server-outline" label="Backend" value="Supabase" />
-          <DetailItem icon="map-outline" label="Maps" value="OpenStreetMap / Mapbox" />
           <DetailItem icon="location-outline" label="GPS" value="Device GNSS" last />
         </View>
       </View>
 
-      {/* ═══ Sign out ═══ */}
       <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut} activeOpacity={0.7}>
         <Ionicons name="log-out-outline" size={20} color="#ef4444" />
         <Text style={styles.signOutText}>Sign Out</Text>
       </TouchableOpacity>
     </ScrollView>
-  );
-}
-
-/* ─── Sub-components ─────────────────────────────────────────────────────────── */
-
-function QuickStat({ icon, value, label, gradient }: {
-  icon: string; value: number | string; label: string; gradient: [string, string];
-}) {
-  return (
-    <LinearGradient colors={gradient} style={styles.qStat} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-      <Ionicons name={icon as any} size={16} color="#fff" />
-      <Text style={styles.qStatValue}>{value}</Text>
-      <Text style={styles.qStatLabel}>{label}</Text>
-    </LinearGradient>
   );
 }
 
@@ -214,12 +187,9 @@ function DetailItem({ icon, label, value, last }: {
   );
 }
 
-/* ─── Styles ─────────────────────────────────────────────────────────────────── */
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f4f1' },
 
-  /* Hero */
   hero: {
     paddingBottom: 28,
     borderBottomLeftRadius: 20,
@@ -227,9 +197,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   decoCircle: { position: 'absolute', borderRadius: 999 },
-  heroContent: { alignItems: 'center', paddingTop: 48, paddingBottom: 30, paddingHorizontal: 24 },
+  heroContent: { alignItems: 'center', paddingTop: 48, paddingBottom: 24, paddingHorizontal: 24 },
 
-  /* Avatar */
   avatarOuterRing: {
     width: 108, height: 108, borderRadius: 54,
     borderWidth: 3, borderColor: 'rgba(255,255,255,0.25)',
@@ -255,51 +224,61 @@ const styles = StyleSheet.create({
   },
   rolePillText: { color: '#1a5c2a', fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
 
-  /* Wave */
-  waveContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 40 },
-  wave1: {
-    position: 'absolute', bottom: 0, left: 0, right: 0, height: 40,
-    backgroundColor: '#f0f4f1',
-    borderTopLeftRadius: 28, borderTopRightRadius: 28,
-  },
-  wave2: {
-    position: 'absolute', bottom: 0, left: -20, right: -20, height: 24,
-    backgroundColor: '#f0f4f1',
-    borderTopLeftRadius: 40, borderTopRightRadius: 40,
-  },
-
-  /* Stats */
-  statsRow: {
-    flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginTop: -24, marginBottom: 8,
-  },
-  qStat: {
-    flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 14,
-    elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12, shadowRadius: 6,
-  },
-  qStatValue: { fontSize: 18, fontWeight: '800', color: '#fff', marginTop: 6 },
-  qStatLabel: { fontSize: 10, fontWeight: '600', color: 'rgba(255,255,255,0.8)', marginTop: 2 },
-
-  /* Section */
-  section: { paddingHorizontal: 16, marginBottom: 8 },
+  section: { paddingHorizontal: 16, marginTop: 16, marginBottom: 4 },
   sectionHead: { fontSize: 13, fontWeight: '800', color: '#555', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.8 },
 
-  /* Project card */
-  projectCard: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff',
-    borderRadius: 14, padding: 14, gap: 12,
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 4,
+  dropdownBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 14,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
   },
-  projectIconWrap: {
-    width: 40, height: 40, borderRadius: 12, backgroundColor: '#1a5c2a',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  projectBody: { flex: 1 },
-  projectLabel: { fontSize: 11, color: '#888', marginBottom: 2 },
-  projectName: { fontSize: 15, fontWeight: '700', color: '#222' },
+  dropdownValue: { fontSize: 14, fontWeight: '700', color: '#222' },
 
-  /* Details card */
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(18, 63, 36, 0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+    maxHeight: '70%',
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#123f24',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  modalList: { flexGrow: 0 },
+  emptyProjects: { fontSize: 14, color: '#6b7280', paddingHorizontal: 16, paddingVertical: 16 },
+  projectOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f3f3',
+  },
+  projectOptionLast: { borderBottomWidth: 0 },
+  projectOptionText: { flex: 1, fontSize: 15, fontWeight: '600', color: '#222' },
+  projectOptionTextActive: { color: '#1a5c2a' },
+  activeTag: { fontSize: 11, fontWeight: '700', color: '#1a5c2a' },
+
   detailsCard: {
     backgroundColor: '#fff', borderRadius: 14, paddingVertical: 4, paddingHorizontal: 16,
     elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
@@ -317,7 +296,6 @@ const styles = StyleSheet.create({
   detailLabel: { fontSize: 11, color: '#999', marginBottom: 2 },
   detailValue: { fontSize: 14, fontWeight: '600', color: '#222', textTransform: 'capitalize' },
 
-  /* Sign out */
   signOutBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     marginHorizontal: 16, marginTop: 16, paddingVertical: 14, borderRadius: 14,

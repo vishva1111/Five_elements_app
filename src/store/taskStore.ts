@@ -8,5 +8,5 @@ export const useTaskStore = create<TaskState>((set) => ({
   setActiveTaskId: (taskId: string | null) => set({ activeTaskId: taskId }),
   pendingTaskTab: null,
   pendingTaskTabAt: 0,
-  openTaskTab: (tab) => set({ pendingTaskTab: tab, pendingTaskTabAt: Date.now() }),
+  openTaskTab: (tab) => set({ pendingTaskTab: tab, pendingTaskTabAt: tab ? Date.now() : 0 }),
 }));

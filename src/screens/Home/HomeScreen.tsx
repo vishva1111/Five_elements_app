@@ -165,7 +165,7 @@ export default function HomeScreen() {
   const setTrees = useTreeStore((s) => s.setTrees);
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({ total: 0, healthy: 0, sick: 0, dead: 0 });
-  const [taskStats, setTaskStats] = useState({ total: 0, assigned: 0, rejected: 0, completed: 0 });
+  const [taskStats, setTaskStats] = useState({ total: 0, assigned: 0, rejected: 0, completed: 0, approved: 0 });
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [projectGeofence, setProjectGeofence] = useState<ProjectGeofence | null>(null);
   const [showGeofencePromptModal, setShowGeofencePromptModal] = useState(false);
@@ -337,10 +337,12 @@ export default function HomeScreen() {
       let assigned = 0;
       let completed = 0;
       let rejected = 0;
+      let approved = 0;
       statusByTree.forEach((status) => {
         if (status === 'assigned') assigned += 1;
         else if (status === 'completed') completed += 1;
         else if (status === 'rejected') rejected += 1;
+        else if (status === 'approved') approved += 1;
       });
 
       const pendingAuditKeys = new Set<string>();
@@ -352,11 +354,13 @@ export default function HomeScreen() {
       });
       assigned += pendingAuditKeys.size;
 
+      const taskTotal = assigned + completed + rejected + approved;
       setTaskStats({
-        total: assigned,
+        total: taskTotal,
         assigned,
         rejected,
         completed,
+        approved,
       });
     } catch (e) {
       console.warn('[HomeScreen] Error loading tasks:', e);
@@ -530,66 +534,53 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Land Area Geofencing Card (Mandatory Setup & Status) */}
-        {activeProjectId ? (
-          !projectGeofence?.locked || !projectGeofence.coordinates || projectGeofence.coordinates.length < 3 ? (
-            <TouchableOpacity
-              style={styles.geofenceNoticeCard}
-              onPress={() => navigation.navigate('Map', { startGeofenceWalk: true })}
-              activeOpacity={0.85}
-            >
-              <View style={styles.geofenceNoticeIconWrap}>
-                <Ionicons name="map" size={24} color="#b45309" />
+        {/* Land geofencing stays visible only until the boundary is locked. */}
+        {activeProjectId &&
+        (!projectGeofence?.locked || !projectGeofence.coordinates || projectGeofence.coordinates.length < 3) ? (
+          <TouchableOpacity
+            style={styles.geofenceNoticeCard}
+            onPress={() => navigation.navigate('Map', { startGeofenceWalk: true })}
+            activeOpacity={0.85}
+          >
+            <View style={styles.geofenceNoticeIconWrap}>
+              <Ionicons name="map" size={24} color="#b45309" />
+            </View>
+            <View style={styles.geofenceNoticeInfo}>
+              <View style={styles.geofenceNoticeBadgeRow}>
+                <Text style={styles.geofenceNoticeBadgeText}>1-TIME SETUP REQUIRED</Text>
               </View>
-              <View style={styles.geofenceNoticeInfo}>
-                <View style={styles.geofenceNoticeBadgeRow}>
-                  <Text style={styles.geofenceNoticeBadgeText}>1-TIME SETUP REQUIRED</Text>
-                </View>
-                <Text style={styles.geofenceNoticeTitle}>Land Geofencing Pending</Text>
-                <Text style={styles.geofenceNoticeSub}>Walk land perimeter with phone & save corners to lock</Text>
-              </View>
-              <View style={styles.geofenceNoticeActionBtn}>
-                <Text style={styles.geofenceNoticeActionText}>Walk & Lock</Text>
-                <Ionicons name="arrow-forward" size={13} color="#fff" />
-              </View>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={styles.geofenceSuccessCard}
-              onPress={() => navigation.navigate('Map')}
-              activeOpacity={0.85}
-            >
-              <View style={styles.geofenceSuccessIconWrap}>
-                <Ionicons name="shield-checkmark" size={22} color="#15803d" />
-              </View>
-              <View style={styles.geofenceSuccessInfo}>
-                <Text style={styles.geofenceSuccessTitle}>Land Boundary Locked 🔒</Text>
-                <Text style={styles.geofenceSuccessSub}>
-                  {projectGeofence.area_hectares || sqMetersToHectares(projectGeofence.area_sq_m)} ha · {(projectGeofence.perimeter_m || 0).toLocaleString()}m perimeter ({projectGeofence.coordinates.length} corners)
-                </Text>
-              </View>
-              <View style={styles.geofenceViewMapBtn}>
-                <Text style={styles.geofenceViewMapBtnText}>View Map</Text>
-                <Ionicons name="chevron-forward" size={14} color="#15803d" />
-              </View>
-            </TouchableOpacity>
-          )
+              <Text style={styles.geofenceNoticeTitle}>Land Geofencing Pending</Text>
+              <Text style={styles.geofenceNoticeSub}>Walk land perimeter with phone & save corners to lock</Text>
+            </View>
+            <View style={styles.geofenceNoticeActionBtn}>
+              <Text style={styles.geofenceNoticeActionText}>Walk & Lock</Text>
+              <Ionicons name="arrow-forward" size={13} color="#fff" />
+            </View>
+          </TouchableOpacity>
         ) : null}
 
-        {/* Capture a Tree Card */}
+        {/* Capture a Tree Card — opens the Assigned tab. Text stays fixed. */}
         <TouchableOpacity
           style={styles.captureCard}
-          onPress={() => navigation.navigate('Capture')}
-          activeOpacity={0.85}
+          onPress={() => navigation.navigate('Task', { tab: 'assigned', at: Date.now() })}
+          activeOpacity={0.88}
         >
-          <View style={styles.captureIconWrap}>
-            <Text style={styles.captureIconEmoji}>📷</Text>
+          <View style={styles.captureLens}>
+            <Ionicons name="leaf" size={22} color="#1a5c2a" />
           </View>
           <View style={styles.captureInfo}>
             <Text style={styles.captureTitle}>Capture a Tree</Text>
             <Text style={styles.captureSub}>Take photo + tag GPS location</Text>
           </View>
-
+          <GradientProgress
+            size={52}
+            progress={taskStats.total > 0 ? (taskStats.assigned / taskStats.total) * 100 : 0}
+            strokeWidth={4}
+            colors={['#86efac', '#22c55e', '#1a5c2a']}
+            trackColor="#e5efe7"
+          >
+            <Text style={styles.captureProgressValue}>{taskStats.assigned}</Text>
+          </GradientProgress>
         </TouchableOpacity>
 
         {/* Task Stats - 2x2 Grid with GradientProgress */}
@@ -619,19 +610,19 @@ export default function HomeScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.taskStatCard}
-              onPress={() => navigation.navigate('Task', { tab: 'assigned' })}
+              onPress={() => navigation.navigate('Task', { tab: 'approved', at: Date.now() })}
               activeOpacity={0.7}
             >
               <GradientProgress
                 size={64}
-                progress={100}
+                progress={taskStats.total > 0 ? (taskStats.approved / taskStats.total) * 100 : 0}
                 strokeWidth={5}
-                colors={buildProgressPalette(['#f97316', '#f59e0b', '#fbbf24', '#fde047'], allProjects.length)}
-                trackColor="#FFF3E0"
+                colors={buildProgressPalette(['#c4b5fd', '#8b5cf6', '#7c3aed', '#5b21b6'], allProjects.length)}
+                trackColor="#EDE9FE"
               >
-                <Text style={styles.taskStatNumber}>{taskStats.total}</Text>
+                <Text style={styles.taskStatNumber}>{taskStats.approved}</Text>
               </GradientProgress>
-              <Text style={styles.taskStatLabel}>Total Tasks</Text>
+              <Text style={styles.taskStatLabel}>Approved Trees</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.taskStatsRow}>
@@ -778,30 +769,33 @@ const styles = StyleSheet.create({
   captureCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a5c2a',
     marginHorizontal: 16,
-    marginTop: 8,
+    marginTop: 14,
     borderRadius: 14,
-    padding: 16,
+    backgroundColor: '#fff',
+    paddingVertical: 14,
+    paddingHorizontal: 14,
     gap: 12,
-    elevation: 4,
-    shadowColor: '#1a5c2a',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    borderTopWidth: 3,
+    borderTopColor: '#1a5c2a',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
   },
-  captureIconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+  captureLens: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#e8f5e9',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  captureIconEmoji: { fontSize: 26 },
   captureInfo: { flex: 1 },
-  captureTitle: { fontSize: 17, fontWeight: '800', color: '#fff' },
-  captureSub: { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  captureTitle: { fontSize: 16, fontWeight: '800', color: '#1a1a1a' },
+  captureSub: { fontSize: 12, color: '#888', marginTop: 2 },
+  captureProgressValue: { fontSize: 15, fontWeight: '800', color: '#1a5c2a' },
   captureBadge: {
     backgroundColor: 'rgba(255,255,255,0.15)',
     paddingHorizontal: 12,

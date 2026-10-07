@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { AppNotice, useAppNotices } from '../../services/appDialog';
+import { AppNotice, markNoticesSeen, useAppNotices } from '../../services/appDialog';
 
 const TONE_COLOR = {
   warning: '#b45309',
@@ -26,6 +26,14 @@ export default function NotificationHistoryScreen() {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const notices = useAppNotices().notices;
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        markNoticesSeen();
+      };
+    }, [])
+  );
 
   return (
     <View style={styles.container}>
