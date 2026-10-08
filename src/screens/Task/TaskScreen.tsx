@@ -459,25 +459,67 @@ export default function TaskScreen() {
   // A rejected audit stays on Rejected and is never copied here.
   // An approved planting that an admin has assigned as an audit follows that
   // open audit row. It leaves Approved so the tree is not on both tabs.
+  const treeForTask = useCallback((task: Task) => {
+    const direct = projectTrees.find(
+      (tree) => tree.id === task.id || tree.id === task.tree_id || tree.id === task.tree_record_id
+    );
+    if (direct) return direct;
+    const token = splitLabeledTreeName(task.name).code.toLowerCase();
+    if (!token) return undefined;
+    return projectTrees.find((tree) => {
+      const labeled = splitLabeledTreeName(tree.species);
+      return (
+        resolveTreeId(tree).toLowerCase() === token ||
+        labeled.code.toLowerCase() === token ||
+        String(tree.tree_id || '').toLowerCase() === token
+      );
+    });
+  }, [projectTrees]);
+  const treeKeysForTask = useCallback((task: Task) => {
+    const tree = treeForTask(task);
+    const publicId = tree
+      ? splitLabeledTreeName(tree.species).code || resolveTreeId(tree) || tree.tree_id
+      : splitLabeledTreeName(task.name).code;
+    return [task.tree_id, task.tree_record_id, tree?.id, publicId, task.task_code]
+      .map((value) => String(value ?? '').trim().toLowerCase())
+      .filter(Boolean);
+  }, [treeForTask]);
   const openAuditTreeIds = useMemo(() => {
     const ids = new Set<string>();
     currentTasks.forEach((task) => {
       if (task.status !== 'assigned' && task.status !== 'in_progress') return;
       if (task.task_type !== 'audit' && !task.audit_round) return;
-      [task.tree_record_id, task.tree_id].forEach((id) => {
-        if (id) ids.add(id);
-      });
+      treeKeysForTask(task).forEach((id) => ids.add(id));
     });
     return ids;
-  }, [currentTasks]);
+  }, [currentTasks, treeKeysForTask]);
 
   const approvedItems = useMemo(() => {
-    const list = currentTasks
+    const isApprovedAudit = (task: Task) =>
+      task.task_type === 'audit' || Number(task.audit_round) > 0;
+    const linkKeys = treeKeysForTask;
+    const approved = currentTasks
       .filter((t) => t.status === 'approved')
-      .filter((t) => {
-        const linkedId = t.tree_record_id || t.tree_id;
-        return !linkedId || !openAuditTreeIds.has(linkedId);
-      })
+      .filter((t) => !linkKeys(t).some((key) => openAuditTreeIds.has(key)));
+    // Once an audit of a tree is approved, the old planting card leaves this tab.
+    // The approved audit is the only card that stays.
+    const groups: Task[][] = [];
+    approved.forEach((task) => {
+      const keys = new Set(linkKeys(task));
+      const group = groups.find((rows) =>
+        rows.some((row) => linkKeys(row).some((key) => keys.has(key)))
+      );
+      if (group) group.push(task);
+      else groups.push([task]);
+    });
+    const kept = groups.map((rows) => {
+      const audits = rows.filter(isApprovedAudit);
+      const pool = audits.length > 0 ? audits : rows;
+      return [...pool].sort(
+        (a, b) => (Number(b.audit_round) || 0) - (Number(a.audit_round) || 0)
+      )[0];
+    });
+    const list = kept
       .map((t) => {
         // Monitoring rows can be keyed by the tree record id, the task's
         // tree_record_id, or its tree_id — accept any so the audit is never missed.
@@ -498,7 +540,7 @@ export default function TaskScreen() {
     return list.sort(
       (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
     );
-  }, [currentTasks, auditsByTree, openAuditTreeIds]);
+  }, [currentTasks, auditsByTree, openAuditTreeIds, treeKeysForTask]);
 
   // A completed task stays here until an admin approves or rejects that card.
   const completedItems = useMemo(() => {
