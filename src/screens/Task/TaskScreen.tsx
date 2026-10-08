@@ -519,22 +519,24 @@ export default function TaskScreen() {
         (a, b) => (Number(b.audit_round) || 0) - (Number(a.audit_round) || 0)
       )[0];
     });
+    const auditsFor = (task: Task) =>
+      [task.tree_record_id, task.tree_id, task.id]
+        .filter(Boolean)
+        .map((key) => auditsByTree[key as string])
+        .find((rows) => rows && rows.length > 0);
     const list = kept
+      // A saved audit is not approved until its own task status is approved.
+      // The planting card must not stand in for that audit on this tab.
+      .filter((t) => isApprovedAudit(t) || !(auditsFor(t) || []).length)
       .map((t) => {
-        // Monitoring rows can be keyed by the tree record id, the task's
-        // tree_record_id, or its tree_id — accept any so the audit is never missed.
-        const auditRows = [t.tree_record_id, t.tree_id, t.id]
-          .filter(Boolean)
-          .map((key) => auditsByTree[key as string])
-          .find((rows) => rows && rows.length > 0);
-        const latestAudit = getLatestAudit(auditRows || []);
+        if (!isApprovedAudit(t)) return t;
+        const latestAudit = getLatestAudit(auditsFor(t) || []);
         if (!latestAudit) return t;
         return {
           ...t,
           photo_url: latestAudit.photo_url || t.photo_url,
           tree_condition: latestAudit.tree_condition || t.tree_condition,
           audit_round: latestAudit.monitoring_round || t.audit_round || null,
-          task_type: 'audit',
         };
       });
     return list.sort(
