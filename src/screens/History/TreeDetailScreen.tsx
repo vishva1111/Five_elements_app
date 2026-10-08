@@ -27,7 +27,19 @@ import {
   getLatestAudit,
 } from '../../services/auditService';
 import { displayTreeId, parseTreeMeta, stripTreeMeta, resolveTreeId } from '../../utils/treeId';
+import { useTaskStore } from '../../store/taskStore';
 import MapPreview from '../../components/MapPreview';
+
+/** The live API may store "Assigned" or "inprogress". The profile only checks the app values. */
+function appTaskStatus(status: unknown): Task['status'] | null {
+  const value = String(status ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (value === 'assigned' || value === 'assign' || value === 'pending' || value === 'open' || value === 'new') return 'assigned';
+  if (value === 'in_progress' || value === 'inprogress' || value === 'started' || value === 'ongoing') return 'in_progress';
+  if (value === 'completed' || value === 'complete' || value === 'done' || value === 'submitted') return 'completed';
+  if (value === 'approved' || value === 'approve') return 'approved';
+  if (value === 'rejected' || value === 'reject') return 'rejected';
+  return null;
+}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PHOTO_PAGE_W = SCREEN_WIDTH - 28; // 14px padding on each side
@@ -44,7 +56,8 @@ export default function TreeDetailScreen() {
   const route = useRoute<Route>();
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const { treeId, asAuditProfile, rejectionNotes } = route.params;
+  const { treeId, taskId, asAuditProfile, rejectionNotes, showSaveAudit } = route.params;
+  const storedTasks = useTaskStore((s) => s.tasks);
 
   const [tree, setTree] = useState<TreeRecord | null>(null);
   const [task, setTask] = useState<Task | null>(null);
@@ -204,6 +217,16 @@ export default function TreeDetailScreen() {
             break;
           }
         }
+        const openedTask = taskId
+          ? storedTasks.find((row) => row.id === taskId)
+          : null;
+        if (openedTask && !taskRows.some((row) => row?.id === openedTask.id)) {
+          taskRows = [openedTask, ...taskRows];
+        }
+        taskRows = taskRows.map((row) => {
+          const status = appTaskStatus(row?.status);
+          return status ? { ...row, status } : row;
+        });
         const isAuditRow = (row: any) =>
           row?.task_type === 'audit' || Number(row?.audit_round) > 0;
         const isOpen = (row: any) =>
@@ -214,10 +237,14 @@ export default function TreeDetailScreen() {
         const openAuditTask = taskRows
           .filter((row) => isOpen(row) && isAuditRow(row))
           .sort((a, b) => Number(b?.audit_round || 0) - Number(a?.audit_round || 0))[0];
-        // An open or rejected audit task must win over an older planting task,
-        // or Start Audit opens the wrong form and the assigned card never moves.
+        // The Assigned card names its open audit. That row wins, so a rejected
+        // audit of the same tree cannot turn Save Audit into Edit Audit.
+        const requestedTask = taskId
+          ? taskRows.find((row) => row?.id === taskId)
+          : null;
         const linkedTask =
-          (asAuditProfile ? rejectedAuditTask || openAuditTask : null) ||
+          (showSaveAudit ? requestedTask || openAuditTask : null) ||
+          (asAuditProfile ? requestedTask || openAuditTask || rejectedAuditTask : null) ||
           rejectedAuditTask ||
           openAuditTask ||
           taskRows.find((row) => row?.status === 'rejected') ||
@@ -231,7 +258,7 @@ export default function TreeDetailScreen() {
       console.warn('[TreeApp] fetchTreeById failed:', err);
       setLoading(false);
     }
-  }, [treeId, selectedAuditRound]);
+  }, [treeId, selectedAuditRound, taskId, storedTasks]);
 
   useFocusEffect(
     useCallback(() => {
@@ -370,8 +397,12 @@ export default function TreeDetailScreen() {
   const completedRoundsSet = new Set(audits.map((a) => Number(a.monitoring_round)).filter(Boolean));
   const liveTreeId = resolveTreeId(tree) || treeId;
 
-  // Approval status & modes
-  const isApproved = Boolean(tree.locked || task?.status === 'approved');
+  // Approval status & modes. An open audit of an approved planting is that
+  // audit, not the old approved planting, so the profile shows Save Audit.
+  const isOpenAssignedAudit =
+    (task?.status === 'assigned' || task?.status === 'in_progress') &&
+    (task?.task_type === 'audit' || Number(task?.audit_round) > 0);
+  const isApproved = !isOpenAssignedAudit && Boolean(tree.locked || task?.status === 'approved');
   const isRejected = task?.status === 'rejected';
   const hasAudits = audits.length > 0;
   const showAuditProfile = hasAudits || Boolean(asAuditProfile);
@@ -389,9 +420,9 @@ export default function TreeDetailScreen() {
   const isUpdated = task?.status === 'completed' && Boolean(task?.review_notes);
   const isPending = !isApproved && !isRejected;
   const canStartAudit =
-    Boolean(asAuditProfile) ||
-    ((task?.status === 'assigned' || task?.status === 'in_progress') &&
-      (task?.task_type === 'audit' || Number(task?.audit_round) > 0));
+    Boolean(showSaveAudit) &&
+    (task?.status === 'assigned' || task?.status === 'in_progress') &&
+    (task?.task_type === 'audit' || Number(task?.audit_round) > 0);
   const hasBottomAction =
     (!showAuditProfile && ((!isApproved && isRejected) || (isApproved && canStartAudit))) ||
     (showAuditProfile && (auditStatus.allCompleted || isRejectedAudit || canStartAudit));
@@ -420,6 +451,11 @@ export default function TreeDetailScreen() {
           <View style={styles.completedPill}>
             <Ionicons name="checkmark-done" size={12} color="#fff" />
             <Text style={styles.completedPillText}>4/4 DONE</Text>
+          </View>
+        ) : isOpenAssignedAudit ? (
+          <View style={styles.pendingPill}>
+            <Ionicons name="clipboard" size={12} color="#fff" />
+            <Text style={styles.pendingPillText}>ASSIGNED</Text>
           </View>
         ) : isRejected ? (
           <View style={styles.rejectedPill}>
@@ -1132,19 +1168,40 @@ export default function TreeDetailScreen() {
             }
           >
             <LinearGradient
-              colors={['#16a34a', '#15803d']}
+              colors={['#2e7d32', '#1a5c2a']}
               style={styles.fabGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
             >
               <Ionicons name="clipboard" size={18} color="#fff" />
-              <Text style={styles.fabText}>Start Audit 1</Text>
-              <View style={[styles.duePill, { backgroundColor: '#fff' }]}>
-                <Text style={[styles.duePillText, { color: '#16a34a', fontWeight: '800' }]}>AUDIT NOW</Text>
-              </View>
+              <Text style={styles.fabText}>Save Audit</Text>
+              <Ionicons name="arrow-forward" size={16} color="#fff" />
             </LinearGradient>
           </TouchableOpacity>
         ) : null
+      ) : canStartAudit ? (
+        <TouchableOpacity
+          style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}
+          activeOpacity={0.85}
+          onPress={() =>
+            navigation.navigate('EditTree', {
+              treeId: tree.id,
+              taskId: task?.id || null,
+              auditRound: Number(task?.audit_round) || auditStatus.currentRound || 1,
+            })
+          }
+        >
+          <LinearGradient
+            colors={['#2e7d32', '#1a5c2a']}
+            style={styles.fabGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+          >
+            <Ionicons name="clipboard" size={18} color="#fff" />
+            <Text style={styles.fabText}>Save Audit</Text>
+            <Ionicons name="arrow-forward" size={16} color="#fff" />
+          </LinearGradient>
+        </TouchableOpacity>
       ) : auditStatus.allCompleted ? (
         <View style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}>
           <View style={styles.allCompletedBar}>
@@ -1180,32 +1237,6 @@ export default function TreeDetailScreen() {
           >
             <Ionicons name="create-outline" size={18} color="#fff" />
             <Text style={styles.fabText}>Edit Audit {rejectedAuditRound}</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      ) : canStartAudit ? (
-        // Start Audit is only shown for a card opened from the Assigned tab.
-        <TouchableOpacity
-          style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 4 }]}
-          activeOpacity={0.85}
-          onPress={() =>
-            navigation.navigate('EditTree', {
-              treeId: tree.id,
-              taskId: task?.id || null,
-              auditRound: Number(task?.audit_round) || auditStatus.currentRound || 1,
-            })
-          }
-        >
-          <LinearGradient
-            colors={['#16a34a', '#15803d']}
-            style={styles.fabGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-          >
-            <Ionicons name="clipboard" size={18} color="#fff" />
-            <Text style={styles.fabText}>Start Audit {auditStatus.currentRound}</Text>
-            <View style={[styles.duePill, { backgroundColor: '#fff' }]}>
-              <Text style={[styles.duePillText, { color: '#16a34a', fontWeight: '800' }]}>AUDIT NOW</Text>
-            </View>
           </LinearGradient>
         </TouchableOpacity>
       ) : null}

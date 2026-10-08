@@ -288,6 +288,7 @@ export default function EditTreeScreen() {
         // 1. Find by explicit taskId first (most reliable)
         // 2. Fall back to any assigned/in_progress/rejected audit task for this tree+round
         // 3. Fall back to any assigned/in_progress audit task for this tree (any round)
+        // Close this round only. A later assigned audit of the same tree stays open.
         const matched =
           tasks.find((task) => task.id === taskId) ||
           tasks.find(
@@ -296,12 +297,6 @@ export default function EditTreeScreen() {
               (task.task_type === 'audit' || !!task.audit_round) &&
               (task.tree_record_id === tree.id || task.tree_id === tree.id) &&
               (Number(task.audit_round) === round || !task.audit_round)
-          ) ||
-          tasks.find(
-            (task) =>
-              (task.status === 'assigned' || task.status === 'in_progress') &&
-              (task.task_type === 'audit' || !!task.audit_round) &&
-              (task.tree_record_id === tree.id || task.tree_id === tree.id)
           );
 
         if (matched) {
@@ -327,6 +322,22 @@ export default function EditTreeScreen() {
             Alert.alert('Save Failed', closed.error);
             return;
           }
+        }
+        const closedId = matched?.id || taskId;
+        if (closedId) {
+          useTaskStore.getState().setTasks(
+            tasks.map((task) =>
+              task.id === closedId
+                ? {
+                    ...task,
+                    status: 'completed' as const,
+                    completed_at: new Date().toISOString(),
+                    task_type: 'audit' as const,
+                    audit_round: round,
+                  }
+                : task
+            )
+          );
         }
         useTreeStore.getState().updateTree(tree.id, { survey_date: actionDate });
         useProjectRefreshStore.getState().triggerProjectRefresh();

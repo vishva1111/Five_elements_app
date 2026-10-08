@@ -450,6 +450,7 @@ export async function submitAudit(params: SubmitAuditParams): Promise<SubmitAudi
       .flatMap((id) => [`tree_record_id.eq.${id}`, `tree_id.eq.${id}`])
       .join(',');
     const selectColumns = [
+      'id, status, audit_round, task_type, tree_id, tree_record_id',
       'id, status, audit_round, tree_id, tree_record_id',
       'id, status, audit_round, tree_id',
       'id, status, tree_id',
@@ -469,8 +470,11 @@ export async function submitAudit(params: SubmitAuditParams): Promise<SubmitAudi
     }
 
     const matching = openTasks.filter((task: any) => {
-      // Skip the task already closed by taskId above
+      // Skip the task already closed by taskId above. A planting row for this
+      // tree is not this audit and must stay where it is.
       if (taskId && task.id === taskId) return false;
+      const isAuditTask = task.task_type === 'audit' || Number(task.audit_round) > 0;
+      if (!isAuditTask) return false;
       const taskRound = Number(task.audit_round);
       return !taskRound || taskRound === clampedRound;
     });
@@ -497,9 +501,9 @@ export async function submitAudit(params: SubmitAuditParams): Promise<SubmitAudi
       if (closed.error) console.warn('[auditService] close task:', closed.error);
     }
 
-    // A later save used to insert the next round as a new Assigned task. That
-    // row is not this audit. Delete every later open audit for this tree in
-    // the database, even when this save's first lookup missed it.
+    // A later save used to leave this finished round on Assigned beside the
+    // next audit an admin already assigned. Close this round only. Do not
+    // delete that next assigned audit.
     const laterColumns = [
       'id, status, audit_round, tree_id, tree_record_id, task_type',
       'id, status, audit_round, tree_id, tree_record_id',
@@ -518,17 +522,21 @@ export async function submitAudit(params: SubmitAuditParams): Promise<SubmitAudi
         break;
       }
     }
-    const nextRoundIds = laterTasks
+    const staleSameRoundIds = laterTasks
       .filter((task: any) => {
         if (taskId && task.id === taskId) return false;
         const isAuditTask =
           task.task_type === 'audit' || Number(task.audit_round) > 0;
-        return isAuditTask && Number(task.audit_round) > clampedRound;
+        const taskRound = Number(task.audit_round);
+        return isAuditTask && (!taskRound || taskRound === clampedRound);
       })
       .map((task: any) => task.id);
-    if (nextRoundIds.length > 0) {
-      const removed = await supabase.from('tasks').delete().in('id', nextRoundIds);
-      if (removed.error) console.warn('[auditService] remove next audit task:', removed.error.message);
+    for (const id of staleSameRoundIds) {
+      const closed = await completeTask(id, tree.id, undefined, {
+        asAudit: true,
+        auditRound: clampedRound,
+      });
+      if (closed.error) console.warn('[auditService] close leftover audit task:', closed.error);
     }
   } catch (closeErr) {
     console.warn('[auditService] close current audit task failed:', closeErr);

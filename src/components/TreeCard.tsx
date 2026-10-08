@@ -496,7 +496,7 @@ export default function TreeCard({
       </View>
 
       {/* ─── OPTIONAL BOTTOM ACTION BUTTON ─── */}
-      {!isAssigned && !isRejected && onAction && actionLabel ? (
+      {!isAssigned && !isRejected && !isApproved && onAction && actionLabel ? (
         <TouchableOpacity
           style={styles.actionBtnTouch}
           onPress={(e) => {

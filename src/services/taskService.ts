@@ -26,10 +26,21 @@ function quoteFilterValue(value: string) {
   return `"${value.replace(/"/g, '')}"`;
 }
 
-/** Auth id, profile id, and the names the new tree assignment column stores. */
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+/** Auth UUID plus the names stored on a tree assignment. Profile ids are text, not UUIDs. */
 async function assigneeIdentity(userId: string): Promise<{ ids: string[]; names: string[] }> {
-  const ids = new Set<string>([userId]);
+  const ids = new Set<string>();
   const names = new Set<string>();
+  const addId = (value?: string | null) => {
+    const text = String(value ?? '').trim();
+    // tasks.assignee_id and tree_records.team_member_id are UUIDs.
+    // A text profile id such as "partner-…" makes Postgres reject the whole read.
+    if (text && isUuid(text)) ids.add(text);
+  };
+  addId(userId);
   const addRow = (row: {
     id?: string | null;
     auth_id?: string | null;
@@ -37,8 +48,8 @@ async function assigneeIdentity(userId: string): Promise<{ ids: string[]; names:
     display_name?: string | null;
     full_name?: string | null;
   }) => {
-    if (row.id) ids.add(row.id);
-    if (row.auth_id) ids.add(row.auth_id);
+    addId(row.id);
+    addId(row.auth_id);
     [row.name, row.display_name, row.full_name].forEach((name) => {
       const value = String(name ?? '').trim();
       if (value) names.add(value);
@@ -129,7 +140,8 @@ function taskFromTreeRecord(row: Record<string, any>, userId: string): Task {
  */
 async function fetchAssignedTreeTasks(userId: string, ids: string[], names: string[]) {
   const filters = [
-    ...ids.flatMap((id) => [`team_member_id.eq.${id}`, `assigned_to.eq.${id}`]),
+    ...ids.filter((id) => isUuid(id)).map((id) => `team_member_id.eq.${id}`),
+    ...ids.filter((id) => !isUuid(id)).map((id) => `assigned_to.eq.${quoteFilterValue(id)}`),
     ...names.map((name) => `assigned_to.eq.${quoteFilterValue(name)}`),
   ];
   if (filters.length === 0) return [] as Task[];
@@ -140,6 +152,16 @@ async function fetchAssignedTreeTasks(userId: string, ids: string[], names: stri
       return (data ?? [])
         .filter((row: any) => row?.id && (row.assigned_to || row.team_member_id))
         .map((row: any) => taskFromTreeRecord(row, userId));
+    }
+    if (/invalid input syntax for type uuid/i.test(error.message)) {
+      let removed = false;
+      for (let index = filters.length - 1; index >= 0; index--) {
+        if (filters[index].startsWith('team_member_id.')) {
+          filters.splice(index, 1);
+          removed = true;
+        }
+      }
+      if (removed) continue;
     }
     const column = missingColumnName(error.message);
     if (!column) {
@@ -157,10 +179,6 @@ function taskLinkKeys(task: Partial<Task>) {
   return [task.id, task.tree_id, task.tree_record_id, task.task_code]
     .map((value) => String(value ?? '').trim().toLowerCase())
     .filter(Boolean);
-}
-
-function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
 /** The tasks table no longer stores the card photo, place, or condition. Copy them from the tree. */
@@ -238,22 +256,28 @@ export async function fetchAgentTasks(userId: string) {
   const byId = new Map<string, Task>();
   let lastError: string | null = null;
   let sawRows = false;
+  let readSucceeded = false;
+  const uuidIds = ids.filter((id) => isUuid(id));
 
   for (const column of columns) {
+    // Only UUIDs can be compared with assignee_id. A text profile id rejects the query.
+    if (uuidIds.length === 0) break;
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
-      .in(column, ids)
+      .in(column, uuidIds)
       .order('created_at', { ascending: false });
 
     if (error) {
       lastError = error.message;
       const missing = /column|schema cache|does not exist/i.test(error.message);
-      if (missing) continue;
+      const badUuid = /invalid input syntax for type uuid/i.test(error.message);
+      if (missing || badUuid) continue;
       // A failed assignee_id read must not hide rows stored on another user column.
       if (column === 'assignee_id') continue;
       break;
     }
+    readSucceeded = true;
 
     const rows = data ?? [];
     if (rows.length > 0) sawRows = true;
@@ -270,8 +294,8 @@ export async function fetchAgentTasks(userId: string) {
       } as Task;
       byId.set(row.id, task);
     });
-    // The live table uses assignee_id. Only stop when that read actually found rows.
-    if (column === 'assignee_id' && rows.length > 0) break;
+    // The live table uses assignee_id. An empty result is still a successful read.
+    if (column === 'assignee_id') break;
   }
 
   const tasks = [...byId.values()];
@@ -288,7 +312,7 @@ export async function fetchAgentTasks(userId: string) {
     keys.forEach((key) => linked.add(key));
   });
 
-  if (tasks.length === 0 && lastError) {
+  if (tasks.length === 0 && lastError && !readSucceeded) {
     console.error('[taskService] fetchAgentTasks error:', lastError);
     return { data: [] as Task[], error: lastError };
   }
@@ -388,10 +412,10 @@ export async function completeTask(
     completed_at: new Date().toISOString(),
   };
   // An audit must stay an audit in the tasks table. Writing only completed made
-  // the admin panel read the same row as a planting.
+  // the admin panel read the same row as a planting. The live tasks table has
+  // task_type and does not have event_type.
   if (options?.asAudit) {
     updates.task_type = 'audit';
-    updates.event_type = 'audit';
     if (options.auditRound) updates.audit_round = options.auditRound;
   }
   // Only a card edited after rejection is marked. A normal completion stays green.

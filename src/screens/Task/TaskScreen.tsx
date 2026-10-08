@@ -160,9 +160,31 @@ export default function TaskScreen() {
     // Only database tasks are shown. A failed read keeps the cards already loaded.
     const dbTasks = (tasksRes.data ?? []).filter((task) => task?.id && !String(task.id).startsWith('local_'));
     if (!tasksRes.error) {
-      // Assigned and Completed follow the tasks row. A local completed flag must
-      // not keep a card on Completed after the database still says assigned.
-      setTasks(dbTasks);
+      // Right after Save Audit, a slow read can still say assigned. Keep the
+      // saved audit on Completed until that hold ends, and leave the next audit.
+      const isHolding =
+        Date.now() < holdCompletedUntil.current ||
+        useTaskStore.getState().pendingTaskTab === 'completed';
+      const current = useTaskStore.getState().tasks ?? [];
+      const merged = dbTasks.map((task) => {
+        if (!isHolding) return task;
+        const local = current.find((row) => row.id === task.id);
+        if (
+          local?.status === 'completed' &&
+          (local.task_type === 'audit' || !!local.audit_round) &&
+          (task.status === 'assigned' || task.status === 'in_progress')
+        ) {
+          return {
+            ...task,
+            status: 'completed' as const,
+            completed_at: local.completed_at,
+            task_type: 'audit' as const,
+            audit_round: local.audit_round || task.audit_round,
+          };
+        }
+        return task;
+      });
+      setTasks(merged);
     }
 
     // Check if active project has remaining geofencing setup
@@ -409,8 +431,17 @@ export default function TaskScreen() {
     });
   }, [projectTasks]);
 
-  // assigned + in_progress both show in the Assigned tab
-  const assignedTasks = currentTasks.filter((t) => t.status === 'assigned' || t.status === 'in_progress');
+  // The card's right-side badge is ASSIGNED only while the audit is open.
+  // Completed, approved, rejected, and edited audits are removed from this tab.
+  // Planting cards are unchanged.
+  const assignedAuditBadge = (task: Task) =>
+    (task.task_type === 'audit' || Number(task.audit_round) > 0) &&
+    (task.status === 'assigned' || task.status === 'in_progress');
+  const assignedTasks = currentTasks.filter((t) => {
+    const isAudit = t.task_type === 'audit' || Number(t.audit_round) > 0;
+    if (isAudit) return assignedAuditBadge(t);
+    return t.status === 'assigned' || t.status === 'in_progress';
+  });
   const rejectedTasks = currentTasks
     .filter((t) => t.status === 'rejected')
     .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
@@ -426,9 +457,27 @@ export default function TaskScreen() {
 
   // Admin approval moves the same task card onto the Approved tab only.
   // A rejected audit stays on Rejected and is never copied here.
+  // An approved planting that an admin has assigned as an audit follows that
+  // open audit row. It leaves Approved so the tree is not on both tabs.
+  const openAuditTreeIds = useMemo(() => {
+    const ids = new Set<string>();
+    currentTasks.forEach((task) => {
+      if (task.status !== 'assigned' && task.status !== 'in_progress') return;
+      if (task.task_type !== 'audit' && !task.audit_round) return;
+      [task.tree_record_id, task.tree_id].forEach((id) => {
+        if (id) ids.add(id);
+      });
+    });
+    return ids;
+  }, [currentTasks]);
+
   const approvedItems = useMemo(() => {
     const list = currentTasks
       .filter((t) => t.status === 'approved')
+      .filter((t) => {
+        const linkedId = t.tree_record_id || t.tree_id;
+        return !linkedId || !openAuditTreeIds.has(linkedId);
+      })
       .map((t) => {
         // Monitoring rows can be keyed by the tree record id, the task's
         // tree_record_id, or its tree_id — accept any so the audit is never missed.
@@ -449,7 +498,7 @@ export default function TaskScreen() {
     return list.sort(
       (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
     );
-  }, [currentTasks, auditsByTree]);
+  }, [currentTasks, auditsByTree, openAuditTreeIds]);
 
   // A completed task stays here until an admin approves or rejects that card.
   const completedItems = useMemo(() => {
@@ -641,7 +690,9 @@ export default function TaskScreen() {
       // A completed or approved audit card also opens the audit profile view.
       navigation.navigate('TreeDetail', {
         treeId: targetId,
+        taskId: task.id,
         asAuditProfile: isAuditTask || isCompletedAudit || (isApproved && treeAudits.length > 0),
+        showSaveAudit: isAuditTask,
       });
     };
 
