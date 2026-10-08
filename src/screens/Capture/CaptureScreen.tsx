@@ -19,7 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CaptureStackParamList, Project } from '../../types';
 import { useAuthStore } from '../../store/authStore';
-import { fetchAllProjects } from '../../services/treeService';
+import { fetchUserProjects } from '../../services/treeService';
 
 type Nav = NativeStackNavigationProp<CaptureStackParamList, 'CaptureCamera'>;
 
@@ -64,7 +64,8 @@ export default function CaptureScreen() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const { data } = await fetchAllProjects();
+      if (!user?.id) return;
+      const { data } = await fetchUserProjects(user.id);
       if (active && data) setAllProjects(data);
     })();
     return () => {

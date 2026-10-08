@@ -22,7 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTreeStore } from '../../store/treeStore';
-import { fetchTreesByProject, fetchAllProjects, lockTree, fetchTreeById } from '../../services/treeService';
+import { fetchTreesByProject, fetchUserProjects, lockTree, fetchTreeById } from '../../services/treeService';
 import { fetchAuditsForTrees, getLatestAudit } from '../../services/auditService';
 import { useAuthStore } from '../../store/authStore';
 import { useGeofencing } from '../../hooks/useGeofencing';
@@ -1007,7 +1007,9 @@ export default function TreeMapScreen() {
     setLoading(true);
 
     if (activeProjectId) {
-      const { data: projects } = await fetchAllProjects();
+      const { data: projects } = user?.id
+        ? await fetchUserProjects(user.id)
+        : { data: [] as Project[] };
       const proj = projects?.find((p: Project) => p.id === activeProjectId);
       setProjectName(proj?.name ?? '');
 
@@ -1074,7 +1076,7 @@ export default function TreeMapScreen() {
     }
 
     setLoading(false);
-  }, [activeProjectId, isAdmin, setTrees, focusTreeId]);
+  }, [activeProjectId, isAdmin, setTrees, focusTreeId, user?.id]);
 
   useEffect(() => {
     loadData();

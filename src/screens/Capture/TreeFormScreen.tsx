@@ -26,7 +26,7 @@ import {
 } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
-import { insertTreeRecord, fetchAllProjects, fetchTreeById } from '../../services/treeService';
+import { insertTreeRecord, fetchUserProjects, fetchTreeById } from '../../services/treeService';
 import { Project } from '../../types';
 import { uploadTreePhoto } from '../../services/storageService';
 import { completeTask } from '../../services/taskService';
@@ -135,17 +135,18 @@ export default function TreeFormScreen() {
 
   const scrollRef = useRef<ScrollView>(null);
 
-  // ─── Load ALL projects so the picker matches the dashboard (not just login) ──
+  // ─── PROJECT dropdown shows only this user's assigned projects ──────────────
   useEffect(() => {
     let active = true;
     (async () => {
-      const { data } = await fetchAllProjects();
+      if (!user?.id) return;
+      const { data } = await fetchUserProjects(user.id);
       if (active && data) setAllProjects(data);
     })();
     return () => {
       active = false;
     };
-  }, []);
+  }, [user?.id]);
 
   // Keep the form's project in step with the ACTIVE project: whenever the user
   // switches the active project, the capture is pre-assigned to it.
@@ -156,7 +157,7 @@ export default function TreeFormScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProjectId]);
 
-  // ─── PROJECT dropdown shows ALL projects, defaults to the active one ───────
+  // ─── PROJECT dropdown shows assigned projects, defaults to the active one ───
   const projects = allProjects;
   const selectedProject = projects.find((p) => p.id === form.project_id);
 

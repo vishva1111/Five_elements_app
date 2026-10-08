@@ -14,7 +14,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useTaskStore } from '../../store/taskStore';
 import { useProjectRefreshStore } from '../../store/projectRefreshStore';
-import { fetchMyTrees, fetchTreesByProject, fetchAllTrees, fetchAllProjects, backfillProjectTreeIds } from '../../services/treeService';
+import { fetchMyTrees, fetchTreesByProject, fetchAllTrees, fetchUserProjects, backfillProjectTreeIds } from '../../services/treeService';
 import { fetchAgentTasks, startTask } from '../../services/taskService';
 import { supabase } from '../../services/supabase';
 import {
@@ -126,7 +126,8 @@ export default function TaskScreen() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data } = await fetchAllProjects();
+      if (!userId) return;
+      const { data } = await fetchUserProjects(userId);
       if (!cancelled && data) setAllProjects(data);
     })();
     return () => { cancelled = true; };
@@ -431,16 +432,16 @@ export default function TaskScreen() {
     });
   }, [projectTasks]);
 
-  // The card's right-side badge is ASSIGNED only while the audit is open.
-  // Completed, approved, rejected, and edited audits are removed from this tab.
-  // Planting cards are unchanged.
-  const assignedAuditBadge = (task: Task) =>
-    (task.task_type === 'audit' || Number(task.audit_round) > 0) &&
-    (task.status === 'assigned' || task.status === 'in_progress');
+  // Assigned tab: assigned planting cards that have a task id, plus assigned
+  // audit tasks. A planting assigned only on the tree (TREE-…) stays off.
   const assignedTasks = currentTasks.filter((t) => {
     const isAudit = t.task_type === 'audit' || Number(t.audit_round) > 0;
-    if (isAudit) return assignedAuditBadge(t);
-    return t.status === 'assigned' || t.status === 'in_progress';
+    if (isAudit) return t.status === 'assigned' || t.status === 'in_progress';
+    if (t.status !== 'assigned') return false;
+    const code = String(t.task_code ?? '').trim();
+    const fromTree = Boolean(t.id && t.tree_record_id && t.id === t.tree_record_id);
+    if (fromTree || !code || /^TREE-/i.test(code)) return false;
+    return true;
   });
   const rejectedTasks = currentTasks
     .filter((t) => t.status === 'rejected')

@@ -308,6 +308,10 @@ export async function fetchAgentTasks(userId: string) {
     // also appear on Completed.
     if (keys.some((key) => linked.has(key))) return;
     if (card.status !== 'assigned' && card.status !== 'in_progress') return;
+    // Assigned planting comes from a tasks row. A tree_records assignment
+    // (TREE-…) is not a task id and must not become an Assigned planting card.
+    const plantingFromTree = card.task_type !== 'audit' && !(Number(card.audit_round) > 0);
+    if (plantingFromTree) return;
     tasks.push(card);
     keys.forEach((key) => linked.add(key));
   });

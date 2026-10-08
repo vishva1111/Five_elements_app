@@ -220,7 +220,9 @@ export default function HistoryScreen() {
       .sort((a, b) => taskRank(b) - taskRank(a))[0];
     const rawCondition = latest?.tree_condition || currentTask?.tree_condition || t.tree_condition || meta.tree_condition || 'Healthy';
     const normalizedCondition = rawCondition.charAt(0).toUpperCase() + rawCondition.slice(1).toLowerCase();
-    const status = currentTask?.status || (t.locked ? 'approved' : 'completed');
+    // A planted tree with no task is not activity. History follows the task
+    // page: only a completed, approved, or rejected task card stays.
+    const status = currentTask?.status;
     if (status !== 'completed' && status !== 'approved' && status !== 'rejected') return;
 
     seenTreeIds.add(t.id);
@@ -274,11 +276,17 @@ export default function HistoryScreen() {
   // Filter
   const sourceItems =
     activeCategory === 'audit'
-      ? auditItems
+      ? auditItems.filter((item) =>
+          allItems.some(
+            (card) =>
+              card.id === item.tree_record_id ||
+              card.tree_record_id === item.tree_record_id ||
+              card.id === item.id
+          )
+        )
       : activeCategory === 'condition'
-      ? trees.map((t) => allItems.find((i) => i.id === t.id)).filter(Boolean) as HistoryItem[]
-      : // STATUS tab: show ALL tree cards (completed, approved, rejected)
-        allItems; // all statuses shown
+      ? allItems
+      : allItems;
 
   const filtered = sourceItems.filter((item) => {
     const projectMatch = activeProjectId ? item.project_id === activeProjectId : true;
