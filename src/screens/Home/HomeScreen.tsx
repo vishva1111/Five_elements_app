@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getCachedActiveProject, useAuthStore } from '../../store/authStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useProjectRefreshStore } from '../../store/projectRefreshStore';
-import { fetchMyTrees, fetchAllProjects, fetchTreesByProject, fetchAllTrees } from '../../services/treeService';
+import { fetchMyTrees, fetchTreesByProject, fetchAllTrees } from '../../services/treeService';
 import { fetchAgentTasks } from '../../services/taskService';
 import { fetchAuditsForTrees, getLatestAudit } from '../../services/auditService';
 import { supabase } from '../../services/supabase';
@@ -219,23 +219,22 @@ export default function HomeScreen() {
     };
   }, []);
 
-  // Fetch all projects on mount & ensure an active project is selected
+  // Only the projects assigned to this user. The home count and picker use this list.
   useEffect(() => {
     let active = true;
+    setAllProjects(assignedProjects);
     (async () => {
-      const { data } = await fetchAllProjects();
-      if (active && data && data.length > 0) {
-        setAllProjects(data);
-        const state = useAuthStore.getState();
-        if (!state.activeProjectId && active) {
-          const cachedId = await getCachedActiveProject(state.user?.id ?? state.session?.user?.id);
-          const restored = cachedId && data.some((project) => project.id === cachedId) ? cachedId : data[0].id;
-          setActiveProjectId(restored);
-        }
+      const state = useAuthStore.getState();
+      if (!state.activeProjectId && assignedProjects.length > 0 && active) {
+        const cachedId = await getCachedActiveProject(state.user?.id ?? state.session?.user?.id);
+        const restored = cachedId && assignedProjects.some((project) => project.id === cachedId)
+          ? cachedId
+          : assignedProjects[0].id;
+        setActiveProjectId(restored);
       }
     })();
     return () => { active = false; };
-  }, [setActiveProjectId]);
+  }, [assignedProjects, setActiveProjectId]);
 
   const loadTrees = useCallback(async () => {
     const seq = ++loadSeqRef.current;
@@ -500,7 +499,7 @@ export default function HomeScreen() {
             <View style={styles.activeProjectInfo}>
               <Text style={styles.activeProjectLabel}>ACTIVE PROJECT</Text>
               <Text style={styles.activeProjectName} numberOfLines={1}>
-                {allProjects.find((p) => p.id === activeProjectId)?.name ?? 'All Projects'}
+                {allProjects.find((p) => p.id === activeProjectId)?.name ?? 'No project'}
               </Text>
             </View>
 

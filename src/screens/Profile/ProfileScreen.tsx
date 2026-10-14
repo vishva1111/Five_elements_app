@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -11,24 +11,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/authStore';
-import { fetchAllProjects } from '../../services/treeService';
-import { Project } from '../../types';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export default function ProfileScreen() {
   const { user, signOut, assignedProjects, activeProjectId } = useAuthStore();
-  const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [projectsOpen, setProjectsOpen] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      if (!user?.id) return;
-      const { data } = await fetchAllProjects();
-      if (active && data && data.length > 0) setAllProjects(data);
-    })();
-    return () => { active = false; };
-  }, [user?.id]);
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -39,7 +26,7 @@ export default function ProfileScreen() {
 
   const initials = (user?.full_name?.trim() || '?')
     .split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
-  const projects = allProjects.length > 0 ? allProjects : assignedProjects;
+  const projects = assignedProjects;
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? projects[0];
   const orderedProjects = activeProject
     ? [activeProject, ...projects.filter((p) => p.id !== activeProject.id)]
@@ -115,7 +102,7 @@ export default function ProfileScreen() {
       >
         <Pressable style={styles.modalBackdrop} onPress={() => setProjectsOpen(false)}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
-            <Text style={styles.modalTitle}>All projects</Text>
+            <Text style={styles.modalTitle}>Assigned projects</Text>
             <ScrollView style={styles.modalList} bounces={false}>
               {orderedProjects.length === 0 ? (
                 <Text style={styles.emptyProjects}>No projects assigned</Text>

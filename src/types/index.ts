@@ -176,7 +176,7 @@ export type CaptureStackParamList = {
 
 export type HistoryStackParamList = {
   HistoryList: undefined;
-  TreeDetail: { treeId: string; taskId?: string | null; rejectionNotes?: string | null; asAuditProfile?: boolean };
+  TreeDetail: { treeId: string; taskId?: string | null; rejectionNotes?: string | null; asAuditProfile?: boolean; showSaveAudit?: boolean };
 };
 
 // ─── Store Types ───────────────────────────────────────────────────────────────

@@ -160,18 +160,19 @@ function MainTabs() {
 async function loadUserData(userId: string, email: string, metadata?: any) {
   const { data: profile, error: profileError } = await fetchUserProfile(userId);
 
-  // ALL projects — the active-project dropdown and restoration use this list,
-  // so the app shows every project and can restore any previously-used project.
-  let allProjects: any[] = [];
-  try {
-    const { data } = await fetchAllProjects();
-    allProjects = data ?? [];
-  } catch {
-    allProjects = [];
+  // Admins keep the full catalog. Every other signed-in user sees only the
+  // projects assigned to them.
+  const isAdmin = String(profile?.role ?? '').trim().toLowerCase() === 'admin';
+  let catalog: any[] = [];
+  if (isAdmin) {
+    try {
+      const { data } = await fetchAllProjects();
+      catalog = data ?? [];
+    } catch {
+      catalog = [];
+    }
   }
 
-  // Assigned projects are kept for backward compatibility (login assignment),
-  // but no longer gate what can be selected as the active project.
   let assignedProjects: any[] = [];
   try {
     const { data } = await fetchUserProjects(userId);
@@ -179,13 +180,14 @@ async function loadUserData(userId: string, email: string, metadata?: any) {
   } catch {
     assignedProjects = [];
   }
+  const visibleProjects = isAdmin && catalog.length > 0 ? catalog : assignedProjects;
 
   const cachedProjectId = await getCachedActiveProject(userId);
   const initialActiveProjectId =
-    (cachedProjectId && allProjects.some((project) => project.id === cachedProjectId)
+    (cachedProjectId && visibleProjects.some((project) => project.id === cachedProjectId)
       ? cachedProjectId
       : null) ??
-    allProjects[0]?.id ??
+    visibleProjects[0]?.id ??
     null;
 
   const user = buildUserFromProfile(
@@ -196,7 +198,7 @@ async function loadUserData(userId: string, email: string, metadata?: any) {
     metadata
   );
 
-  return { user, projects: assignedProjects, initialActiveProjectId };
+  return { user, projects: visibleProjects, initialActiveProjectId };
 }
 
 export default function App() {

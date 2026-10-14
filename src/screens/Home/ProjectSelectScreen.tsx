@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/authStore';
-import { fetchAllProjects, fetchAllTrees } from '../../services/treeService';
+import { fetchAllTrees } from '../../services/treeService';
 import { Project, TreeRecord } from '../../types';
 import { classifyTree, computeTreeStats } from './HomeScreen';
 
@@ -25,6 +25,7 @@ export default function ProjectSelectScreen() {
 
   const activeProjectId = useAuthStore((s) => s.activeProjectId);
   const setActiveProjectId = useAuthStore((s) => s.setActiveProjectId);
+  const assignedProjects = useAuthStore((s) => s.assignedProjects) ?? [];
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,14 +59,8 @@ export default function ProjectSelectScreen() {
     else setLoading(true);
 
     try {
-      const [projRes, treeRes] = await Promise.all([
-        fetchAllProjects(),
-        fetchAllTrees().catch(() => ({ data: null })),
-      ]);
-
-      if (projRes.data) {
-        setProjects(projRes.data);
-      }
+      const treeRes = await fetchAllTrees().catch(() => ({ data: null }));
+      setProjects(assignedProjects);
 
       if (treeRes.data && treeRes.data.length > 0) {
         setProjectStatsMap(buildStatsMap(treeRes.data));
@@ -76,7 +71,7 @@ export default function ProjectSelectScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [buildStatsMap]);
+  }, [assignedProjects, buildStatsMap]);
 
   useEffect(() => {
     loadData();

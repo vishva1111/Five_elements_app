@@ -629,21 +629,58 @@ export async function fetchAllProjects(): Promise<ApiResponse<Project[]>> {
 }
 
 // ─── Fetch user's assigned projects ────────────────────────────────────────────
+// A field user sees only these projects: user_projects, the project stored on
+// their team membership, and projects on tasks assigned to them. Never the
+// full projects table.
 export async function fetchUserProjects(
   userId: string
 ): Promise<ApiResponse<Project[]>> {
-  const { data, error } = await supabase
-    .from('user_projects')
-    .select('projects(id, name, status)')
-    .eq('user_id', userId);
+  const byId = new Map<string, Project>();
+  const add = (project: any) => {
+    const id = String(project?.id ?? '').trim();
+    if (!id || byId.has(id)) return;
+    byId.set(id, {
+      id,
+      name: String(project.name ?? id),
+      description: project.description ?? undefined,
+      status: String(project.status ?? ''),
+    });
+  };
 
-  if (error) {
-    // Table may not exist yet — return empty array so caller can fall back
-    return { data: [], error: null };
+  const assigned = await supabase
+    .from('user_projects')
+    .select('projects(id, name, description, status)')
+    .eq('user_id', userId);
+  if (!assigned.error) {
+    (assigned.data ?? []).forEach((row: any) => add(row?.projects));
   }
 
-  const projects = data?.map((up: any) => up.projects as Project).filter(Boolean) ?? [];
-  return { data: projects, error: null };
+  const membership = await supabase
+    .from('partner_team_members')
+    .select('project_id')
+    .eq('user_id', userId);
+  if (!membership.error) {
+    (membership.data ?? []).forEach((row: any) => {
+      const id = String(row?.project_id ?? '').trim();
+      if (id) byId.set(id, byId.get(id) ?? { id, name: id, status: '' });
+    });
+  }
+
+  const taskRows = await supabase.from('tasks').select('project_id').eq('assignee_id', userId);
+  if (!taskRows.error) {
+    (taskRows.data ?? []).forEach((row: any) => {
+      const id = String(row?.project_id ?? '').trim();
+      if (id) byId.set(id, byId.get(id) ?? { id, name: id, status: '' });
+    });
+  }
+
+  const missingNames = [...byId.values()].filter((project) => project.name === project.id).map((project) => project.id);
+  if (missingNames.length > 0) {
+    const named = await supabase.from('projects').select('id, name, description, status').in('id', missingNames);
+    if (!named.error) (named.data ?? []).forEach(add);
+  }
+
+  return { data: [...byId.values()], error: null };
 }
 
 // ─── Save the user's project selection (from the login-page dropdown) ──────────
